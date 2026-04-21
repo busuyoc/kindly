@@ -1,22 +1,21 @@
 // `kindly setup <subcommand>` — create and manage shareable Setups.
 //
-// v0.3 ships: export (this file). inspect / list / hash / import land in
-// later steps; the dispatcher here stays small so adding them is a
-// one-case-in-the-switch change.
-//
 // See docs/50-v0.3-setups.md for the data model and philosophy.
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
 import { parse as yamlParse } from "yaml";
 
 import { parseSettingsFile } from "../lua/reader.ts";
-import type { LuaValue } from "../lua/writer.ts";
+import { dumpSettingsFile, type LuaTable, type LuaValue } from "../lua/writer.ts";
 import { filterForYaml } from "../schema/classify.ts";
+import { mergeYamlIntoLua } from "../schema/yaml.ts";
+import { computeChanges } from "../schema/diff.ts";
+import { safeWrite } from "../fs/safeWrite.ts";
 import { ArgError, parseArgs, type FlagSpecs } from "../cli/args.ts";
 import { type CliEnv, resolveMount, resolveSetupsDir } from "../cli/env.ts";
-import { dim, heading, info, ok, warn } from "../cli/log.ts";
+import { dim, heading, info, ok, paint, warn } from "../cli/log.ts";
 import { canonicalizeManifest, hashBytes, manifestHash, shortId } from "../setup/canonical.ts";
 import { parseManifest, SetupSchemaError, type SetupManifest } from "../setup/schema.ts";
 
@@ -376,6 +375,159 @@ async function runSetupHash(argv: readonly string[], env: CliEnv): Promise<numbe
     return 0;
 }
 
+// ---- `kindly setup import <file>` ------------------------------------------
+
+const IMPORT_FLAGS = {
+    "dry-run": {
+        type: "boolean",
+        default: false,
+        description: "show what would change without writing",
+    },
+    "safety-snapshot": {
+        type: "boolean",
+        default: true,
+        description: "keep a pre-write copy of settings.reader.lua (invert with --no-safety-snapshot)",
+    },
+    mount: {
+        type: "string",
+        description: "path to a mounted Kindle (auto-detected by default)",
+    },
+} as const satisfies FlagSpecs;
+
+// Flatten a validated Setup manifest into a dict shaped like kindly.yaml's
+// top-level settings — ready to feed into mergeYamlIntoLua. Reverses the
+// `plugins_disabled` lift that export performed: the manifest's
+// plugins.disabled = ["SSH", "calibre"] becomes the on-device shape
+// plugins_disabled = { SSH = true, calibre = true }.
+function flattenManifestForApply(manifest: SetupManifest): Record<string, LuaValue> {
+    const out: Record<string, LuaValue> = {};
+    if (manifest.settings) {
+        for (const [k, v] of Object.entries(manifest.settings)) {
+            out[k] = v as LuaValue;
+        }
+    }
+    if (manifest.plugins?.disabled && manifest.plugins.disabled.length > 0) {
+        const pd: Record<string, LuaValue> = {};
+        for (const name of manifest.plugins.disabled) pd[name] = true;
+        out.plugins_disabled = pd;
+    }
+    return out;
+}
+
+function fmtValue(v: unknown): string {
+    if (typeof v === "string") return JSON.stringify(v);
+    if (v === null) return "nil";
+    if (typeof v === "object") return JSON.stringify(v);
+    return String(v);
+}
+
+async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<number> {
+    const { flags, positional } = parseArgs(argv, IMPORT_FLAGS);
+    const fileArg = positional[0];
+    if (!fileArg) throw new ArgError("usage: kindly setup import <file> [options]");
+    if (positional.length > 1) {
+        throw new ArgError(`unexpected extra argument: ${positional[1]}`);
+    }
+
+    const path = resolve(env.cwd, fileArg);
+    const { raw, manifest } = loadManifestFile(path);
+    const id = shortId(hashBytes(raw));
+
+    // Out-of-scope guards for lean-import in v0.3 step 5.
+    if (manifest.apply_mode === "replace") {
+        throw new Error(
+            `this manifest uses apply_mode 'replace', which lands in the next step. ` +
+            `Current import only supports 'additive'.`
+        );
+    }
+    if (manifest.plugins?.files?.length || manifest.patches?.length) {
+        throw new Error(
+            `this is a fat setup (ships plugin files or patches). ` +
+            `Current import only supports lean setups — plugin/patch unpacking lands in a later step.`
+        );
+    }
+
+    heading(env, `importing ${manifest.meta.name}  (${id})`);
+    info(env, dim(env, `  from:   ${path}`));
+    if (manifest.meta.author)      info(env, dim(env, `  author: ${manifest.meta.author}`));
+    if (manifest.meta.description) info(env, dim(env, `  ${manifest.meta.description}`));
+    if (manifest.compat) {
+        const pieces: string[] = [];
+        if (manifest.compat.koreader_version_min) pieces.push(`koreader >= ${manifest.compat.koreader_version_min}`);
+        if (manifest.compat.koreader_version_max) pieces.push(`koreader <= ${manifest.compat.koreader_version_max}`);
+        if (manifest.compat.device?.length)       pieces.push(`device: ${manifest.compat.device.join(", ")}`);
+        info(env, dim(env, `  requires: ${pieces.join("; ")}`));
+        info(env, dim(env, `  (compat is NOT verified in this release — manifest claims shown above)`));
+    }
+
+    if (flags.mount) env = { ...env, mountOverride: flags.mount };
+    const mount = resolveMount(env);
+
+    if (!existsSync(mount.settingsPath)) {
+        throw new Error(
+            `Kindle mount found at ${mount.root}, but ${mount.settingsPath} doesn't exist. ` +
+            `Is KOReader installed on this Kindle?`
+        );
+    }
+
+    // Flatten + re-apply the secret denylist at the import boundary. A
+    // valid-looking manifest could still try to write pinpadlock_pin_code;
+    // we refuse to let that through regardless of what the manifest says.
+    const manifestFlat = flattenManifestForApply(manifest);
+    const { kept: safeFlat, droppedSecrets } = filterForYaml(manifestFlat, "full");
+
+    const onDeviceSrc = readFileSync(mount.settingsPath, "utf8");
+    const onDevice = parseSettingsFile(onDeviceSrc) as Record<string, LuaValue>;
+
+    const changes = computeChanges(onDevice, safeFlat);
+
+    if (changes.length === 0) {
+        info(env, "no changes needed — device already matches this setup.");
+        if (droppedSecrets.length > 0) {
+            info(env, dim(env, `  (${droppedSecrets.length} secret-key(s) in manifest were refused by denylist)`));
+        }
+        return 0;
+    }
+
+    heading(env, `${changes.length} change(s) to apply:`);
+    for (const c of changes) {
+        const p = c.path.join(".");
+        if (c.kind === "added") {
+            info(env, paint(env, "green", `  + ${p}`) + `  = ${fmtValue(c.next)}`);
+        } else {
+            info(env, paint(env, "yellow", `  ~ ${p}`) + `  ${fmtValue(c.prev)} → ${fmtValue(c.next)}`);
+        }
+    }
+    if (droppedSecrets.length > 0) {
+        warn(env, `refused ${droppedSecrets.length} secret-named key(s) in manifest: ${droppedSecrets.join(", ")}`);
+    }
+
+    if (flags["dry-run"]) {
+        info(env, "");
+        info(env, dim(env, "(--dry-run — nothing written)"));
+        return 0;
+    }
+
+    const merged = mergeYamlIntoLua(onDevice, safeFlat) as LuaTable;
+    const newContent = dumpSettingsFile(merged, "./settings.reader.lua");
+
+    const backupDir = join(env.cwd, ".kindly", "pre-import");
+    const res = safeWrite(mount.settingsPath, newContent, {
+        backupDir,
+        verifyLua: true,
+        skipBackup: !flags["safety-snapshot"],
+    });
+
+    ok(env, `imported to ${mount.settingsPath}`);
+    if (res.backupPath) {
+        info(env, dim(env, `  safety backup: ${res.backupPath}`));
+    } else if (!flags["safety-snapshot"]) {
+        info(env, dim(env, `  (safety backup skipped by --no-safety-snapshot; .old sibling preserved)`));
+    }
+    warn(env, "restart KOReader (or your Kindle) for changes to take effect.");
+    return 0;
+}
+
 // ---- dispatcher ------------------------------------------------------------
 
 export async function runSetup(argv: readonly string[], env: CliEnv): Promise<number> {
@@ -394,6 +546,7 @@ export async function runSetup(argv: readonly string[], env: CliEnv): Promise<nu
             case "inspect": env.stdout.write(inspectHelp + "\n"); return 0;
             case "list":    env.stdout.write(listHelp + "\n");    return 0;
             case "hash":    env.stdout.write(hashHelp + "\n");    return 0;
+            case "import":  env.stdout.write(importHelp + "\n");  return 0;
             default: break; // fall through — unknown sub yields below
         }
     }
@@ -403,6 +556,7 @@ export async function runSetup(argv: readonly string[], env: CliEnv): Promise<nu
         case "inspect": return await runSetupInspect(rest, env);
         case "list":    return await runSetupList(rest, env);
         case "hash":    return await runSetupHash(rest, env);
+        case "import":  return await runSetupImport(rest, env);
         default:
             throw new ArgError(`unknown setup subcommand: ${sub}`);
     }
@@ -415,6 +569,7 @@ usage: kindly setup <subcommand> [options]
 
 Subcommands:
   export <name>   scan device → write a canonical Setup manifest
+  import <file>   apply a Setup manifest to the mounted Kindle
   inspect <file>  print a manifest's summary (no device touch)
   list            list Setups in ~/.kindly/setups/
   hash <file>     print a Setup file's content hash
@@ -454,6 +609,28 @@ usage: kindly setup hash <file>
 Hashes the raw bytes of the file — the bytes ARE the identity. If the
 file isn't in canonical form, a warning also shows what the canonical
 hash would be. Use for pinning or verifying shared Setups.
+`.trim();
+
+const importHelp = `
+kindly setup import <file> — merge a Setup manifest into the Kindle.
+
+usage: kindly setup import <file> [options]
+
+  --dry-run             show what would change without writing
+  --no-safety-snapshot  skip the pre-write copy of settings.reader.lua
+                        (the .old sibling is still kept for KOReader's
+                        own fallback; default: safety snapshot is ON)
+  --mount <path>        path to a mounted Kindle (auto-detect by default)
+
+Additive merge: keys in the manifest override; on-device keys not in the
+manifest are left alone (this is how secrets and reading state survive).
+
+Secret-named keys inside the manifest are ALWAYS filtered at the import
+boundary — a hostile manifest can't write your PIN.
+
+Replace mode (manifest.apply_mode: replace) and fat setups (shipped
+plugin files / patches) are not yet supported — they land in later
+steps. The compat block is printed but not verified in this release.
 `.trim();
 
 const exportHelp = `

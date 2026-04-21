@@ -34,6 +34,12 @@ export type SafeWriteOptions = {
      * Defaults to true. Only disable for non-Lua files.
      */
     verifyLua?: boolean;
+    /**
+     * If true, skip the timestamped pre-write copy into backupDir. The .old
+     * sibling is still created (KOReader's own fallback relies on it). Use
+     * when the caller has an explicit user opt-out for per-write archiving.
+     */
+    skipBackup?: boolean;
 };
 
 export type SafeWriteResult = {
@@ -60,8 +66,10 @@ export function safeWrite(
     const oldPath = path + ".old";
     let backupPath: string | null = null;
 
-    // 1. Archive snapshot of the pre-write file (if any).
-    if (existsSync(path)) {
+    // 1. Archive snapshot of the pre-write file (if any). Skipped when the
+    //    caller has explicitly opted out via skipBackup; the .old sibling
+    //    created below still exists so KOReader's own fallback path works.
+    if (existsSync(path) && !opts.skipBackup) {
         const stamp = new Date().toISOString().replace(/[:.]/g, "-");
         const archiveRoot = join(backupDir, stamp);
         mkdirSync(archiveRoot, { recursive: true });

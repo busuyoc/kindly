@@ -47,13 +47,52 @@ export const SettingValueSchema: z.ZodType<SettingValue> = z.lazy(() =>
 
 const SHA256_HEX = /^sha256:[a-f0-9]{64}$/;
 
+// Reject anything that could escape the extraction root or be interpreted as
+// a non-relative path on any platform. Setups come from strangers; "by
+// shape, not by trust" is the rule. The koreader/ layout is POSIX, so "/"
+// is the only valid separator — backslashes are rejected outright.
+export function isSafeRelativePath(p: string): boolean {
+    if (p.length === 0) return false;
+    if (p.includes("\0")) return false;              // null byte
+    if (p.startsWith("/")) return false;             // POSIX absolute
+    if (/^[a-zA-Z]:/.test(p)) return false;          // Windows drive letter
+    if (p.includes("\\")) return false;              // Windows separator
+    for (const seg of p.split("/")) {
+        if (seg === "..") return false;              // traversal
+    }
+    return true;
+}
+
+const SafeRelPathSchema = z
+    .string()
+    .min(1, "path must not be empty")
+    .refine(isSafeRelativePath, {
+        message: "path must be a relative POSIX path without '..' segments, absolute prefixes, or backslashes",
+    });
+
 export const EmbeddedFileSchema = z.object({
-    path: z.string().min(1, "path must not be empty"),
+    path: SafeRelPathSchema,
     hash: z.string().regex(SHA256_HEX, "hash must be 'sha256:' + 64 lowercase hex chars"),
     bytes: z.number().int().nonnegative(),
     description: z.string().optional(),
 }).strict();
 export type EmbeddedFile = z.infer<typeof EmbeddedFileSchema>;
+
+// Reject duplicate paths in a file list. On unpack, duplicates are
+// ambiguous — the last one would silently overwrite the first. Catching at
+// parse time means integrity checks (hash-per-file) can trust the list.
+function uniqueByPath(files: readonly { path: string }[]): boolean {
+    const seen = new Set<string>();
+    for (const f of files) {
+        if (seen.has(f.path)) return false;
+        seen.add(f.path);
+    }
+    return true;
+}
+
+const EmbeddedFileArraySchema = z
+    .array(EmbeddedFileSchema)
+    .refine(uniqueByPath, { message: "duplicate path in file list" });
 
 // ---- Top-level blocks ------------------------------------------------------
 
@@ -84,7 +123,7 @@ export const PluginsSchema = z.object({
     // "turn off coverbrowser for this setup" without shipping files.
     disabled: z.array(z.string()).optional(),
     // Optional shipped plugin directories. Only populated in fat Setups.
-    files: z.array(EmbeddedFileSchema).optional(),
+    files: EmbeddedFileArraySchema.optional(),
 }).strict();
 export type Plugins = z.infer<typeof PluginsSchema>;
 
@@ -97,7 +136,7 @@ export const SetupManifestSchema = z.object({
     apply_mode: z.enum(["additive", "replace"]),
     settings: z.record(z.string(), SettingValueSchema).optional(),
     plugins: PluginsSchema.optional(),
-    patches: z.array(EmbeddedFileSchema).optional(),
+    patches: EmbeddedFileArraySchema.optional(),
 }).strict();
 
 export type SetupManifest = z.infer<typeof SetupManifestSchema>;

@@ -216,6 +216,132 @@ describe("parseManifest — invalid manifests", () => {
     });
 });
 
+describe("path safety in embedded files", () => {
+    const hashA = "sha256:" + "a".repeat(64);
+
+    test("rejects absolute POSIX path", () => {
+        const raw = {
+            ...(minimal() as object),
+            patches: [{ path: "/etc/passwd", hash: hashA, bytes: 1 }],
+        };
+        expect(() => parseManifest(raw)).toThrow(/path/);
+    });
+
+    test("rejects traversal via ..", () => {
+        const raw = {
+            ...(minimal() as object),
+            patches: [{ path: "../escape.lua", hash: hashA, bytes: 1 }],
+        };
+        expect(() => parseManifest(raw)).toThrow(/path/);
+    });
+
+    test("rejects .. as a middle segment", () => {
+        const raw = {
+            ...(minimal() as object),
+            plugins: { files: [{ path: "plugins/x/../../../etc", hash: hashA, bytes: 1 }] },
+        };
+        expect(() => parseManifest(raw)).toThrow(/path/);
+    });
+
+    test("rejects Windows drive letter prefix", () => {
+        const raw = {
+            ...(minimal() as object),
+            patches: [{ path: "C:/Windows/system32", hash: hashA, bytes: 1 }],
+        };
+        expect(() => parseManifest(raw)).toThrow(/path/);
+    });
+
+    test("rejects backslash separators", () => {
+        const raw = {
+            ...(minimal() as object),
+            patches: [{ path: "patches\\2-autoflash.lua", hash: hashA, bytes: 1 }],
+        };
+        expect(() => parseManifest(raw)).toThrow(/path/);
+    });
+
+    test("rejects null byte in path", () => {
+        const raw = {
+            ...(minimal() as object),
+            patches: [{ path: "patches/ok.lua extra", hash: hashA, bytes: 1 }],
+        };
+        expect(() => parseManifest(raw)).toThrow(/path/);
+    });
+
+    test("accepts dotfile names (single leading dot, not traversal)", () => {
+        const raw = {
+            ...(minimal() as object),
+            patches: [{ path: "patches/.hidden.lua", hash: hashA, bytes: 1 }],
+        };
+        expect(() => parseManifest(raw)).not.toThrow();
+    });
+
+    test("accepts nested safe path", () => {
+        const raw = {
+            ...(minimal() as object),
+            plugins: {
+                files: [
+                    { path: "plugins/SSH.koplugin/main.lua", hash: hashA, bytes: 1 },
+                ],
+            },
+        };
+        expect(() => parseManifest(raw)).not.toThrow();
+    });
+});
+
+describe("duplicate paths in file lists", () => {
+    const hashA = "sha256:" + "a".repeat(64);
+    const hashB = "sha256:" + "b".repeat(64);
+
+    test("rejects duplicate paths in plugins.files", () => {
+        const raw = {
+            ...(minimal() as object),
+            plugins: {
+                files: [
+                    { path: "plugins/x/main.lua", hash: hashA, bytes: 1 },
+                    { path: "plugins/x/main.lua", hash: hashB, bytes: 2 },
+                ],
+            },
+        };
+        expect(() => parseManifest(raw)).toThrow(/duplicate/);
+    });
+
+    test("rejects duplicate paths in patches", () => {
+        const raw = {
+            ...(minimal() as object),
+            patches: [
+                { path: "patches/2-x.lua", hash: hashA, bytes: 1 },
+                { path: "patches/2-x.lua", hash: hashB, bytes: 2 },
+            ],
+        };
+        expect(() => parseManifest(raw)).toThrow(/duplicate/);
+    });
+
+    test("plugins.files and patches with identical paths is allowed (different namespaces)", () => {
+        // A path "x.lua" under plugins.files and patches isn't really a
+        // collision — they extract to different trees. Duplicates are only
+        // rejected within one list.
+        const raw = {
+            ...(minimal() as object),
+            plugins: { files: [{ path: "shared.lua", hash: hashA, bytes: 1 }] },
+            patches: [{ path: "shared.lua", hash: hashB, bytes: 2 }],
+        };
+        expect(() => parseManifest(raw)).not.toThrow();
+    });
+
+    test("distinct paths in same list are fine", () => {
+        const raw = {
+            ...(minimal() as object),
+            plugins: {
+                files: [
+                    { path: "plugins/a/main.lua", hash: hashA, bytes: 1 },
+                    { path: "plugins/b/main.lua", hash: hashB, bytes: 2 },
+                ],
+            },
+        };
+        expect(() => parseManifest(raw)).not.toThrow();
+    });
+});
+
 describe("tryParseManifest — non-throwing variant", () => {
     test("returns ok: true with manifest on success", () => {
         const r = tryParseManifest(minimal());

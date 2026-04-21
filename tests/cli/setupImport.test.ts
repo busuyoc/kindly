@@ -244,18 +244,6 @@ describe("setup import — compat is shown, not verified", () => {
 });
 
 describe("setup import — out-of-scope guards", () => {
-    test("refuses apply_mode: replace with a clear message", async () => {
-        writeManifestFile(manifestPath, makeManifest({
-            apply_mode: "replace",
-            settings: { refresh_rate: 2 },
-        }));
-        const before = readFileSync(kindle.settingsPath, "utf8");
-        const code = await main(["setup", "import", manifestPath], env);
-        expect(code).toBe(1);
-        expect(stderr.value).toMatch(/replace.*next step/i);
-        expect(readFileSync(kindle.settingsPath, "utf8")).toBe(before);
-    });
-
     test("refuses fat manifest (plugin files) with a clear message", async () => {
         writeManifestFile(manifestPath, makeManifest({
             plugins: {

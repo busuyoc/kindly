@@ -13,7 +13,10 @@
 
 import { parse as yamlParse, stringify as yamlStringify } from "yaml";
 import type { LuaTable, LuaValue } from "../lua/writer.ts";
-import { filterForYaml, type FilterMode, type FilterResult } from "./classify.ts";
+import {
+    classifyKey, filterForYaml, isSecretPath,
+    type FilterMode, type FilterResult,
+} from "./classify.ts";
 
 // Lua tables use Maps for sparse/mixed-key cases; YAML has no equivalent, so
 // we convert Maps to plain objects (numeric keys become string keys). This
@@ -120,5 +123,53 @@ export function mergeYamlIntoLua(
             out[k] = v;
         }
     }
+    return out;
+}
+
+// Replace-mode merge: used by `kindly setup import` when the manifest
+// declares apply_mode: replace.
+//
+// Rules:
+//   - SECRET + EPHEMERAL top-level keys on device are always preserved.
+//   - USER top-level keys on device are REMOVED unless declared in manifest.
+//   - Manifest-declared keys win. Nested maps are replaced wholesale,
+//     EXCEPT known secret sub-paths (kosync.userkey, kosync.username) are
+//     carried over from the prior on-device value. If the manifest didn't
+//     declare the nested map at all, the whole on-device map is removed —
+//     even a kosync.userkey goes with it, because kosync itself was a USER
+//     key that the manifest didn't declare. This is consistent: secrets
+//     inside a user-class parent only survive if the parent survives.
+export function replaceYamlIntoLua(
+    onDevice: Record<string, LuaValue>,
+    fromManifest: Record<string, LuaValue>
+): Record<string, LuaValue> {
+    const out: Record<string, LuaValue> = {};
+
+    // First: preserve SECRET + EPHEMERAL top-level keys unconditionally.
+    for (const [k, v] of Object.entries(onDevice)) {
+        const cls = classifyKey(k);
+        if (cls === "SECRET" || cls === "EPHEMERAL") out[k] = v;
+    }
+
+    // Then: lay down every manifest-declared key. For nested maps, overlay
+    // previously-known secret sub-paths from on-device.
+    for (const [k, v] of Object.entries(fromManifest)) {
+        const existing = onDevice[k];
+        if (
+            v !== null && typeof v === "object" && !Array.isArray(v) && !(v instanceof Map)
+            && existing !== null && typeof existing === "object"
+            && !Array.isArray(existing) && !(existing instanceof Map)
+        ) {
+            const nested: Record<string, LuaValue> = { ...(v as Record<string, LuaValue>) };
+            // Re-inject nested secret paths from the pre-import value.
+            for (const [ck, cv] of Object.entries(existing as Record<string, LuaValue>)) {
+                if (isSecretPath(k, ck)) nested[ck] = cv;
+            }
+            out[k] = nested;
+        } else {
+            out[k] = v;
+        }
+    }
+
     return out;
 }

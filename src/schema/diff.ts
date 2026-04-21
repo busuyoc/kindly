@@ -1,9 +1,17 @@
 // Compute a structured list of changes that `apply` would make to the device.
 //
-// Semantics match kindly's non-destructive apply:
+// Additive (default) semantics match kindly's non-destructive apply:
 //   - A key in YAML but not on device → "added"
 //   - A key present in both with different values → "changed"
 //   - A key on device but not in YAML → NOT a change (apply preserves it)
+//
+// Replace semantics (used by `kindly setup import` on manifests that
+// declare apply_mode: replace):
+//   - Same as above, plus:
+//   - A USER-class key on device not declared in the manifest → "removed"
+//   - SECRET/EPHEMERAL keys are ALWAYS preserved, regardless of the
+//     manifest. That protection is applied by the caller, which filters
+//     `onDevice` through classify before calling computeReplaceChanges.
 //
 // Nested tables are diffed key-by-key (shallow one level deep — KOReader
 // nests at most 2-3 levels, e.g. kosync.userkey, footer.align,
@@ -14,8 +22,9 @@
 import type { LuaValue } from "../lua/writer.ts";
 
 export type Change =
-    | { kind: "added"; path: string[]; next: LuaValue }
-    | { kind: "changed"; path: string[]; prev: LuaValue; next: LuaValue };
+    | { kind: "added";   path: string[]; next: LuaValue }
+    | { kind: "changed"; path: string[]; prev: LuaValue; next: LuaValue }
+    | { kind: "removed"; path: string[]; prev: LuaValue };
 
 export function computeChanges(
     onDevice: Record<string, LuaValue>,
@@ -25,6 +34,34 @@ export function computeChanges(
     // Iterate in sorted order so output is deterministic across runs.
     for (const k of Object.keys(fromYaml).sort()) {
         diffInto(changes, [k], onDevice[k], fromYaml[k]);
+    }
+    return changes;
+}
+
+// Diff for replace semantics. Caller must pre-scrub `onDevice` and
+// `fromManifest` — this function does not know about classify.ts; it
+// just reports structural differences under "every device key not in
+// manifest is removed."
+//
+// The `preservedKeys` set is the device keys that classify says must
+// survive regardless (secrets + ephemerals). Those are filtered OUT of
+// the "removed" emissions; the caller also keeps them in the final
+// merged value.
+export function computeReplaceChanges(
+    onDevice: Record<string, LuaValue>,
+    fromManifest: Record<string, LuaValue>,
+    preservedKeys: Set<string>
+): Change[] {
+    const changes: Change[] = [];
+    // Adds + changes first (sorted).
+    for (const k of Object.keys(fromManifest).sort()) {
+        diffInto(changes, [k], onDevice[k], fromManifest[k]);
+    }
+    // Removals: on-device USER keys not declared in the manifest.
+    for (const k of Object.keys(onDevice).sort()) {
+        if (k in fromManifest) continue;
+        if (preservedKeys.has(k)) continue;
+        changes.push({ kind: "removed", path: [k], prev: onDevice[k]! });
     }
     return changes;
 }

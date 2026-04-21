@@ -10,8 +10,9 @@ import { parse as yamlParse } from "yaml";
 import { parseSettingsFile } from "../lua/reader.ts";
 import { dumpSettingsFile, type LuaTable, type LuaValue } from "../lua/writer.ts";
 import { filterForYaml } from "../schema/classify.ts";
-import { mergeYamlIntoLua } from "../schema/yaml.ts";
-import { computeChanges } from "../schema/diff.ts";
+import { mergeYamlIntoLua, replaceYamlIntoLua } from "../schema/yaml.ts";
+import { classifyKey } from "../schema/classify.ts";
+import { computeChanges, computeReplaceChanges } from "../schema/diff.ts";
 import { safeWrite } from "../fs/safeWrite.ts";
 import { ArgError, parseArgs, type FlagSpecs } from "../cli/args.ts";
 import { type CliEnv, resolveMount, resolveSetupsDir } from "../cli/env.ts";
@@ -433,13 +434,8 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
     const { raw, manifest } = loadManifestFile(path);
     const id = shortId(hashBytes(raw));
 
-    // Out-of-scope guards for lean-import in v0.3 step 5.
-    if (manifest.apply_mode === "replace") {
-        throw new Error(
-            `this manifest uses apply_mode 'replace', which lands in the next step. ` +
-            `Current import only supports 'additive'.`
-        );
-    }
+    // Fat setups (plugin files / patches) still aren't supported at
+    // import time — that's step 8. Lean-only here, regardless of apply_mode.
     if (manifest.plugins?.files?.length || manifest.patches?.length) {
         throw new Error(
             `this is a fat setup (ships plugin files or patches). ` +
@@ -479,7 +475,22 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
     const onDeviceSrc = readFileSync(mount.settingsPath, "utf8");
     const onDevice = parseSettingsFile(onDeviceSrc) as Record<string, LuaValue>;
 
-    const changes = computeChanges(onDevice, safeFlat);
+    const isReplace = manifest.apply_mode === "replace";
+
+    // In replace mode, preservedKeys tells the diff + merge which
+    // top-level on-device keys survive regardless of the manifest.
+    // Additive mode doesn't need this — nothing gets removed.
+    const preservedKeys: Set<string> = new Set();
+    if (isReplace) {
+        for (const k of Object.keys(onDevice)) {
+            const cls = classifyKey(k);
+            if (cls === "SECRET" || cls === "EPHEMERAL") preservedKeys.add(k);
+        }
+    }
+
+    const changes = isReplace
+        ? computeReplaceChanges(onDevice, safeFlat, preservedKeys)
+        : computeChanges(onDevice, safeFlat);
 
     if (changes.length === 0) {
         info(env, "no changes needed — device already matches this setup.");
@@ -489,13 +500,21 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
         return 0;
     }
 
-    heading(env, `${changes.length} change(s) to apply:`);
+    if (isReplace) {
+        heading(env, `${changes.length} change(s) to apply (replace mode):`);
+        info(env, dim(env, `  replace mode: USER keys not declared in the manifest will be removed.`));
+        info(env, dim(env, `  secrets and ephemerals are preserved regardless.`));
+    } else {
+        heading(env, `${changes.length} change(s) to apply:`);
+    }
     for (const c of changes) {
         const p = c.path.join(".");
         if (c.kind === "added") {
             info(env, paint(env, "green", `  + ${p}`) + `  = ${fmtValue(c.next)}`);
-        } else {
+        } else if (c.kind === "changed") {
             info(env, paint(env, "yellow", `  ~ ${p}`) + `  ${fmtValue(c.prev)} → ${fmtValue(c.next)}`);
+        } else {
+            info(env, paint(env, "red", `  - ${p}`) + `  (was ${fmtValue(c.prev)})`);
         }
     }
     if (droppedSecrets.length > 0) {
@@ -508,7 +527,9 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
         return 0;
     }
 
-    const merged = mergeYamlIntoLua(onDevice, safeFlat) as LuaTable;
+    const merged = isReplace
+        ? replaceYamlIntoLua(onDevice, safeFlat) as LuaTable
+        : mergeYamlIntoLua(onDevice, safeFlat) as LuaTable;
     const newContent = dumpSettingsFile(merged, "./settings.reader.lua");
 
     const backupDir = join(env.cwd, ".kindly", "pre-import");
@@ -628,9 +649,17 @@ manifest are left alone (this is how secrets and reading state survive).
 Secret-named keys inside the manifest are ALWAYS filtered at the import
 boundary — a hostile manifest can't write your PIN.
 
-Replace mode (manifest.apply_mode: replace) and fat setups (shipped
-plugin files / patches) are not yet supported — they land in later
-steps. The compat block is printed but not verified in this release.
+The manifest's apply_mode decides the merge strategy:
+  additive  keys in the manifest override; on-device keys not in the
+            manifest are preserved.
+  replace   keys in the manifest override; on-device USER keys not in
+            the manifest are REMOVED. Secrets and ephemerals are
+            preserved regardless. Known nested secrets (kosync.userkey
+            etc.) are carried over.
+
+Fat setups (shipped plugin files / patches) are not yet supported —
+they land in a later step. The compat block is printed but not
+verified in this release.
 `.trim();
 
 const exportHelp = `

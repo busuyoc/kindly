@@ -15,6 +15,7 @@ import { runInit, initHelp } from "./commands/init.ts";
 import { runDoctor, doctorHelp } from "./commands/doctor.ts";
 import { runSnapshot, snapshotHelp } from "./commands/snapshot.ts";
 import { runRestore, restoreHelp } from "./commands/restore.ts";
+import { runSetup, setupHelp } from "./commands/setup.ts";
 
 type Command = {
     run: (argv: readonly string[], env: CliEnv) => Promise<number>;
@@ -29,6 +30,7 @@ const COMMANDS: Record<string, Command> = {
     doctor:   { run: runDoctor,   help: doctorHelp },
     snapshot: { run: runSnapshot, help: snapshotHelp },
     restore:  { run: runRestore,  help: restoreHelp },
+    setup:    { run: runSetup,    help: setupHelp },
 };
 
 const TOP_HELP = `
@@ -44,6 +46,7 @@ Commands:
   doctor     sanity-check the device
   snapshot   tarball user-state (plugins, patches, history) for factory-reset insurance
   restore    extract a snapshot back into the Kindle
+  setup      create and manage shareable Setups (kindly setup --help)
 
 Run \`kindly <command> --help\` for per-command options.
 `.trim();
@@ -63,8 +66,10 @@ export async function main(argv: readonly string[], env: CliEnv = defaultEnv()):
         return 2;
     }
 
-    // Per-command --help short-circuit.
-    if (rest.includes("--help") || rest.includes("-h")) {
+    // Per-command --help short-circuit. Only intercept if --help is the
+    // FIRST argument after the command — otherwise subcommand dispatchers
+    // (like `kindly setup export --help`) would never see their own help.
+    if (rest[0] === "--help" || rest[0] === "-h") {
         env.stdout.write(cmd.help + "\n");
         return 0;
     }

@@ -5,6 +5,9 @@
 // env.stderr. They never call process.exit directly — that's the dispatcher's
 // job. This keeps command functions pure and testable.
 
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 import type { KindleMount } from "../device/kindle.ts";
 import { detectKindleMount, kindleMountAt, isKindleMount } from "../device/kindle.ts";
 
@@ -34,7 +37,14 @@ export type CliEnv = {
     color: boolean;
     /** Wall clock — injectable for deterministic backup timestamps in tests. */
     now: () => Date;
+    /** Where `setup export` writes by default and `setup list` reads from.
+     * Undefined means "~/.kindly/setups". Tests override with a tmpdir. */
+    setupsDir?: string;
 };
+
+export function resolveSetupsDir(env: CliEnv): string {
+    return env.setupsDir ?? join(homedir(), ".kindly", "setups");
+}
 
 export function defaultEnv(): CliEnv {
     return {

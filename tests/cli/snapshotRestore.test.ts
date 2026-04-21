@@ -1,0 +1,183 @@
+import { describe, test, expect, beforeEach } from "bun:test";
+import {
+    existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { main } from "../../src/cli.ts";
+import { StringWriter, type CliEnv } from "../../src/cli/env.ts";
+
+function makeFakeKindle(): string {
+    const root = mkdtempSync(join(tmpdir(), "kindly-snap-k-"));
+    const kor = join(root, "koreader");
+    mkdirSync(kor);
+    writeFileSync(join(kor, "settings.reader.lua"), "return { a = 1 }\n");
+    writeFileSync(join(kor, "settings.reader.lua.old"), "return { a = 0 }\n");
+    writeFileSync(join(kor, "history.lua"), "return {}\n");
+    mkdirSync(join(kor, "patches"));
+    writeFileSync(join(kor, "patches", "user.lua"), "-- my patch\n");
+    mkdirSync(join(kor, "plugins", "zlibrary.koplugin"), { recursive: true });
+    writeFileSync(join(kor, "plugins", "zlibrary.koplugin", "main.lua"), "-- plugin\n");
+    return root;
+}
+
+function makeEnv(cwd: string, mountOverride: string): { env: CliEnv; out: StringWriter; err: StringWriter } {
+    const out = new StringWriter();
+    const err = new StringWriter();
+    return {
+        env: {
+            cwd,
+            stdout: out,
+            stderr: err,
+            color: false,
+            mountOverride,
+            now: () => new Date("2026-04-21T12:00:00Z"),
+        },
+        out,
+        err,
+    };
+}
+
+let fakeKindle: string;
+let workdir: string;
+let env: CliEnv;
+let stdout: StringWriter;
+let stderr: StringWriter;
+
+beforeEach(() => {
+    fakeKindle = makeFakeKindle();
+    workdir = mkdtempSync(join(tmpdir(), "kindly-snap-w-"));
+    ({ env, out: stdout, err: stderr } = makeEnv(workdir, fakeKindle));
+});
+
+describe("snapshot", () => {
+    test("writes a tar.gz containing the expected files", async () => {
+        const code = await main(["snapshot"], env);
+        expect(code).toBe(0);
+        const archives = readdirSync(workdir).filter((f) => f.endsWith(".tar.gz"));
+        expect(archives.length).toBe(1);
+        expect(stdout.value).toContain("settings.reader.lua");
+        expect(stdout.value).toContain("patches");
+        expect(stdout.value).toContain("plugins");
+    });
+
+    test("warns about secrets in output", async () => {
+        await main(["snapshot"], env);
+        expect(stderr.value.toLowerCase()).toContain("plaintext");
+    });
+
+    test("--output redirects archive path", async () => {
+        const target = join(workdir, "custom.tar.gz");
+        await main(["snapshot", "--output", target], env);
+        expect(existsSync(target)).toBe(true);
+    });
+
+    test("fails cleanly when the koreader dir is empty of known files", async () => {
+        const bareRoot = mkdtempSync(join(tmpdir(), "kindly-snap-bare-"));
+        mkdirSync(join(bareRoot, "koreader"));  // mount is valid…
+        // …but contains no known user-state files.
+        const { env: bareEnv, err: bareErr } = makeEnv(workdir, bareRoot);
+        const code = await main(["snapshot"], bareEnv);
+        expect(code).toBe(1);
+        expect(bareErr.value).toContain("empty archive");
+    });
+});
+
+describe("restore", () => {
+    test("--dry-run lists entries without touching device", async () => {
+        await main(["snapshot"], env);
+        const archives = readdirSync(workdir).filter((f) => f.endsWith(".tar.gz"));
+        const archive = join(workdir, archives[0]!);
+
+        // Mutate the device so we'd notice a write.
+        const settingsPath = join(fakeKindle, "koreader", "settings.reader.lua");
+        writeFileSync(settingsPath, "return { MUTATED = true }\n");
+
+        const code = await main(["restore", archive, "--dry-run"], env);
+        expect(code).toBe(0);
+        expect(stdout.value).toContain("would extract");
+        // Device unchanged
+        expect(readFileSync(settingsPath, "utf8")).toBe("return { MUTATED = true }\n");
+    });
+
+    test("round-trip: snapshot → mutate → restore → original content back", async () => {
+        await main(["snapshot"], env);
+        const archives = readdirSync(workdir).filter((f) => f.endsWith(".tar.gz"));
+        const archive = join(workdir, archives[0]!);
+
+        const settingsPath = join(fakeKindle, "koreader", "settings.reader.lua");
+        const patchPath = join(fakeKindle, "koreader", "patches", "user.lua");
+        writeFileSync(settingsPath, "return { MUTATED = true }\n");
+        writeFileSync(patchPath, "-- corrupted\n");
+
+        const code = await main(["restore", archive], env);
+        expect(code).toBe(0);
+        expect(readFileSync(settingsPath, "utf8")).toBe("return { a = 1 }\n");
+        expect(readFileSync(patchPath, "utf8")).toBe("-- my patch\n");
+    });
+
+    test("takes a safety snapshot by default", async () => {
+        await main(["snapshot"], env);
+        const archives = readdirSync(workdir).filter((f) => f.endsWith(".tar.gz"));
+        const archive = join(workdir, archives[0]!);
+
+        await main(["restore", archive], env);
+        const safetyDir = join(workdir, ".kindly", "pre-restore");
+        expect(existsSync(safetyDir)).toBe(true);
+        expect(readdirSync(safetyDir).filter((f) => f.endsWith(".tar.gz")).length)
+            .toBeGreaterThan(0);
+    });
+
+    test("--no-safety-snapshot skips the rollback copy", async () => {
+        await main(["snapshot"], env);
+        const archives = readdirSync(workdir).filter((f) => f.endsWith(".tar.gz"));
+        const archive = join(workdir, archives[0]!);
+
+        await main(["restore", archive, "--no-safety-snapshot"], env);
+        expect(existsSync(join(workdir, ".kindly", "pre-restore"))).toBe(false);
+    });
+
+    test("errors when archive doesn't exist", async () => {
+        const code = await main(["restore", "/nowhere/nope.tar.gz"], env);
+        expect(code).toBe(1);
+        expect(stderr.value).toContain("archive not found");
+    });
+
+    test("errors when no archive positional given", async () => {
+        const code = await main(["restore"], env);
+        expect(code).toBe(1);
+        expect(stderr.value).toContain("usage");
+    });
+
+    test("safety snapshot can be used to roll back after a bad restore", async () => {
+        // Snapshot "good" state.
+        await main(["snapshot"], env);
+        const archives = readdirSync(workdir).filter((f) => f.endsWith(".tar.gz"));
+        const good = join(workdir, archives[0]!);
+
+        // Mutate device to simulate the "current" state we're restoring over.
+        const settingsPath = join(fakeKindle, "koreader", "settings.reader.lua");
+        const current = "return { DIFFERENT = true }\n";
+        writeFileSync(settingsPath, current);
+
+        // Restore the "good" archive (this should take a safety snapshot of
+        // the current "DIFFERENT" state).
+        await main(["restore", good], env);
+        expect(readFileSync(settingsPath, "utf8")).toBe("return { a = 1 }\n");
+
+        // Find the safety snapshot — restore it to roll back.
+        const safetyDir = join(workdir, ".kindly", "pre-restore");
+        const safety = readdirSync(safetyDir).filter((f) => f.endsWith(".tar.gz"))[0]!;
+        await main(["restore", join(safetyDir, safety), "--no-safety-snapshot"], env);
+        expect(readFileSync(settingsPath, "utf8")).toBe(current);
+    });
+});
+
+describe("top-level dispatcher includes snapshot/restore in help", () => {
+    test("--help lists the new commands", async () => {
+        await main(["--help"], env);
+        expect(stdout.value).toContain("snapshot");
+        expect(stdout.value).toContain("restore");
+    });
+});

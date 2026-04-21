@@ -1,0 +1,22 @@
+{
+  "name": "kindly",
+  "module": "src/cli.ts",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "kindly": "src/cli.ts"
+  },
+  "scripts": {
+    "kindly": "bun run src/cli.ts",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "yaml": "^2.8.3"
+  }
+}

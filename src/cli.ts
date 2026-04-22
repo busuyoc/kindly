@@ -19,6 +19,7 @@ import { runDoctor, doctorHelp } from "./commands/doctor.ts";
 import { runSnapshot, snapshotHelp } from "./commands/snapshot.ts";
 import { runRestore, restoreHelp } from "./commands/restore.ts";
 import { runRollback, rollbackHelp } from "./commands/rollback.ts";
+import { runHistory, historyHelp } from "./commands/history.ts";
 import { runSetup, setupHelp } from "./commands/setup.ts";
 
 import pkg from "../package.json" with { type: "json" };
@@ -38,6 +39,7 @@ const COMMANDS: Record<string, Command> = {
     snapshot: { run: runSnapshot, help: snapshotHelp },
     restore:  { run: runRestore,  help: restoreHelp },
     rollback: { run: runRollback, help: rollbackHelp },
+    history:  { run: runHistory,  help: historyHelp },
     setup:    { run: runSetup,    help: setupHelp },
 };
 
@@ -59,6 +61,7 @@ Safety net:
   snapshot   tarball user-state (plugins, patches, history) for factory-reset insurance
   restore    extract a snapshot back into the Kindle
   rollback   restore a per-import safety snapshot (.kindly/pre-import/<stamp>/)
+  history    list mutations from .kindly/history.jsonl
 
 Shareable Setups:
   setup      create, inspect, and apply curated Setup manifests

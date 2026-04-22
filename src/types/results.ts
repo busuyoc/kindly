@@ -12,6 +12,7 @@
 import type { Change } from "../schema/diff.ts";
 import type { Severity } from "../taxonomy/mapper.ts";
 import type { LuaValue } from "../lua/writer.ts";
+import type { HistoryEntryWithIndex } from "../history/reader.ts";
 
 export interface DiffGroupEntry {
     /** Joined dotted path, e.g. "footer.align" or "avoid_flashing_ui". */
@@ -275,6 +276,23 @@ export interface SetupImportResult {
         blocking: string[];
         forced: boolean;
     } | null;
+}
+
+export interface HistoryResult {
+    /** Filtered + truncated entries, newest first. */
+    entries: HistoryEntryWithIndex[];
+    /** Entries matched by --since before --limit truncation. */
+    matched: number;
+    /** Total entries in history.jsonl (excluding malformed lines). */
+    total: number;
+    /** Malformed (partial-write) lines skipped. ≥1 only after a crash. */
+    malformed: number;
+    /** Absolute path to the history file. */
+    historyPath: string;
+    /** --limit value applied (default 20). */
+    limit: number;
+    /** --since value applied. */
+    since?: string;
 }
 
 export interface RollbackResult {

@@ -244,6 +244,92 @@ describe("history emission — setup import", () => {
     });
 });
 
+describe("history emission — --label flag", () => {
+    test("apply --label persists the label into history", async () => {
+        const kindle = makeFakeKindle();
+        writeFileSync(join(workdir, "kindly.yaml"),
+            "night_mode: true\nhome_dir: /mnt/books\n");
+
+        const { env } = makeEnv(workdir, kindle.root);
+        await main(["apply", "--label", "before-experiment"], env);
+
+        const entries = readHistory(workdir);
+        expect(entries[0]!.label).toBe("before-experiment");
+    });
+
+    test("snapshot --label persists the label", async () => {
+        const kindle = makeFakeKindle();
+        const { env } = makeEnv(workdir, kindle.root);
+        await main(
+            ["snapshot", "--output", join(workdir, "snap.tar.gz"), "--label", "weekly-backup"],
+            env,
+        );
+        expect(readHistory(workdir)[0]!.label).toBe("weekly-backup");
+    });
+
+    test("rollback --label persists the label", async () => {
+        const kindle = makeFakeKindle();
+        const snap = mkdtempSync(join(tmpdir(), "pre-import-"));
+        writeFileSync(join(snap, "settings.reader.lua"), `return { ["night_mode"] = false, }
+`);
+
+        const { env } = makeEnv(workdir, kindle.root);
+        await main(["rollback", snap, "--label", "undo-experiment"], env);
+
+        expect(readHistory(workdir)[0]!.label).toBe("undo-experiment");
+    });
+
+    test("setup import --label persists the label", async () => {
+        const kindle = makeFakeKindle();
+        const exportPath = join(workdir, "test.kset.yaml");
+
+        const { env: exportEnv } = makeEnv(workdir, kindle.root);
+        await main(["setup", "export", "test-setup", "--output", exportPath], exportEnv);
+
+        writeFileSync(kindle.settingsPath, `return {
+    ["night_mode"] = true,
+    ["home_dir"] = "/different",
+}
+`);
+
+        const { env } = makeEnv(workdir, kindle.root);
+        await main(["setup", "import", exportPath, "--label", "night-theme"], env);
+
+        const imports = readHistory(workdir).filter((e) => e.cmd === "setup:import");
+        expect(imports[0]!.label).toBe("night-theme");
+    });
+
+    test("labels are advisory — collisions allowed", async () => {
+        const kindle = makeFakeKindle();
+        writeFileSync(join(workdir, "kindly.yaml"),
+            "night_mode: true\nhome_dir: /mnt/books\n");
+        const { env: e1 } = makeEnv(workdir, kindle.root);
+        await main(["apply", "--label", "experiment"], e1);
+
+        writeFileSync(join(workdir, "kindly.yaml"),
+            "night_mode: false\nhome_dir: /mnt/books\n");
+        const { env: e2 } = makeEnv(workdir, kindle.root);
+        await main(["apply", "--label", "experiment"], e2);
+
+        const entries = readHistory(workdir);
+        expect(entries.length).toBe(2);
+        expect(entries[0]!.label).toBe("experiment");
+        expect(entries[1]!.label).toBe("experiment");
+    });
+
+    test("no --label → no label field in entry", async () => {
+        const kindle = makeFakeKindle();
+        writeFileSync(join(workdir, "kindly.yaml"),
+            "night_mode: true\nhome_dir: /mnt/books\n");
+
+        const { env } = makeEnv(workdir, kindle.root);
+        await main(["apply"], env);
+
+        const entry = readHistory(workdir)[0]!;
+        expect("label" in entry).toBe(false);
+    });
+});
+
 describe("history emission — multi-command sequence", () => {
     test("three mutations produce three ordered entries", async () => {
         const kindle = makeFakeKindle();

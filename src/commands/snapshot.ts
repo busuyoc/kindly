@@ -31,6 +31,10 @@ const FLAGS = {
         type: "string",
         description: "path to a mounted Kindle (auto-detected by default)",
     },
+    label: {
+        type: "string",
+        description: "advisory name for this snapshot — shown in `kindly history`",
+    },
 } as const satisfies FlagSpecs;
 
 // Paths relative to <mount>/koreader/. See docs/40-v0.2-snapshot.md §A1.
@@ -45,6 +49,7 @@ const SNAPSHOT_PATHS = [
 
 export interface SnapshotOptions {
     output?: string;
+    label?: string;
 }
 
 export function executeSnapshot(opts: SnapshotOptions, env: CliEnv): SnapshotResult {
@@ -59,7 +64,10 @@ export function executeSnapshot(opts: SnapshotOptions, env: CliEnv): SnapshotRes
         outputPath,
     });
 
-    appendHistoryEntry(env, "snapshot", { archive_path: res.archivePath });
+    appendHistoryEntry(env, "snapshot",
+        { archive_path: res.archivePath },
+        opts.label ? { label: opts.label } : undefined,
+    );
 
     return {
         archivePath: res.archivePath,
@@ -86,7 +94,7 @@ export async function runSnapshot(argv: readonly string[], env: CliEnv): Promise
     const { flags } = parseArgs(argv, FLAGS);
     if (flags.mount) env = { ...env, mountOverride: flags.mount };
 
-    const result = executeSnapshot({ output: flags.output }, env);
+    const result = executeSnapshot({ output: flags.output, label: flags.label }, env);
     if (env.jsonMode) emitJson(env, "snapshot", result);
     else renderSnapshot(result, env);
     return 0;

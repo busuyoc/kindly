@@ -50,12 +50,17 @@ const FLAGS = {
         type: "string",
         description: "where to archive pre-write snapshots (default: <cwd>/.kindly/backups)",
     },
+    label: {
+        type: "string",
+        description: "advisory name for this change — shown in `kindly history`",
+    },
 } as const satisfies FlagSpecs;
 
 export interface ApplyOptions {
     file?: string;
     dryRun?: boolean;
     backupDir?: string;
+    label?: string;
 }
 
 export function executeApply(opts: ApplyOptions, env: CliEnv): ApplyResult {
@@ -113,7 +118,7 @@ export function executeApply(opts: ApplyOptions, env: CliEnv): ApplyResult {
     appendHistoryEntry(env, "apply", {
         settings_delta_n: changes.length,
         ...(res.backupPath ? { backup_path: res.backupPath } : {}),
-    });
+    }, opts.label ? { label: opts.label } : undefined);
 
     return {
         mode: "applied",
@@ -161,6 +166,7 @@ export async function runApply(argv: readonly string[], env: CliEnv): Promise<nu
         file: flags.file,
         dryRun: flags["dry-run"],
         backupDir: flags["backup-dir"],
+        label: flags.label,
     }, env);
 
     if (env.jsonMode) emitJson(env, "apply", result);

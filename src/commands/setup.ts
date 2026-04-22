@@ -919,6 +919,10 @@ const IMPORT_FLAGS = {
         default: false,
         description: "suppress warnings for setting keys not in the KOReader schema (type mismatches still warn)",
     },
+    label: {
+        type: "string",
+        description: "advisory name for this import — shown in `kindly history`",
+    },
 } as const satisfies FlagSpecs;
 
 // Detect fat (.kset tar.gz) vs lean (.kset.yaml or .yaml) by extension.
@@ -1025,6 +1029,7 @@ export interface SetupImportOptions {
     skipPlugins?: boolean;
     acceptPatches?: boolean;
     skipPatches?: boolean;
+    label?: string;
 }
 
 type ImportResultWithExtras = SetupImportResult & {
@@ -1261,7 +1266,7 @@ export function executeSetupImport(
         ...(backupPath ? { backup_path: backupPath } : {}),
         ...(snapshotDir ? { pre_import_path: snapshotDir } : {}),
         setup_id: baseResult.id,
-    });
+    }, opts.label ? { label: opts.label } : undefined);
 
     return {
         ...baseResult,
@@ -1446,6 +1451,7 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
         skipPlugins: flags["skip-plugins"],
         acceptPatches: flags["accept-patches"],
         skipPatches: flags["skip-patches"],
+        label: flags.label,
     }, env);
 
     if (env.jsonMode) {

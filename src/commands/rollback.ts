@@ -43,6 +43,10 @@ const FLAGS = {
         type: "string",
         description: "path to a mounted Kindle (auto-detected by default)",
     },
+    label: {
+        type: "string",
+        description: "advisory name for this rollback — shown in `kindly history`",
+    },
 } as const satisfies FlagSpecs;
 
 const SETTINGS_FILENAME = "settings.reader.lua";
@@ -52,6 +56,7 @@ export interface RollbackOptions {
     snapshotDir: string;
     dryRun?: boolean;
     safetySnapshot?: boolean;
+    label?: string;
 }
 
 export function executeRollback(opts: RollbackOptions, env: CliEnv): RollbackResult {
@@ -143,7 +148,7 @@ export function executeRollback(opts: RollbackOptions, env: CliEnv): RollbackRes
     appendHistoryEntry(env, "rollback", {
         snapshot_dir: snapshotDir,
         ...(preRollbackDir ? { pre_rollback_path: preRollbackDir } : {}),
-    });
+    }, opts.label ? { label: opts.label } : undefined);
 
     return {
         mode: "rolled-back",
@@ -212,6 +217,7 @@ export async function runRollback(argv: readonly string[], env: CliEnv): Promise
         snapshotDir: snapArg,
         dryRun: flags["dry-run"],
         safetySnapshot: flags["safety-snapshot"],
+        label: flags.label,
     }, env);
 
     if (env.jsonMode) emitJson(env, "rollback", result);

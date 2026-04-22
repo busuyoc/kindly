@@ -209,7 +209,7 @@ describe("setup inspect / import — compat display", () => {
         expect(stdout.value).toContain("kindle-oasis3");
     });
 
-    test("import displays compat with the 'NOT verified' disclaimer", async () => {
+    test("import displays compat with verification results", async () => {
         const out = join(workdir, "import-me.kset.yaml");
         await main([
             "setup", "export", "import-me",
@@ -226,6 +226,10 @@ describe("setup inspect / import — compat display", () => {
         expect(stdout.value).toContain("koreader >= 2024.03");
         expect(stdout.value).toContain("koreader <= 2025.12");
         expect(stdout.value).toContain("kindle-pw5");
-        expect(stdout.value).toMatch(/NOT verified/);
+        expect(stdout.value).toContain("compat check");
+        // This fake kindle has no git-rev / version.txt — detection falls
+        // through as "unknown" but import still proceeds. Enforcement
+        // tests live in setupCompatEnforce.test.ts.
+        expect(stdout.value).toContain("detected: koreader=unknown");
     });
 });

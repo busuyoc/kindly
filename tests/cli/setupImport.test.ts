@@ -220,8 +220,12 @@ describe("setup import — secret-denylist at import boundary", () => {
     });
 });
 
-describe("setup import — compat is shown, not verified", () => {
-    test("prints the compat block and an explicit 'NOT verified' note", async () => {
+describe("setup import — compat verification (detection unavailable)", () => {
+    // This fake kindle has no git-rev or system/version.txt, so version/family
+    // detection returns null/unknown and checkCompat falls into the
+    // "unverifiable" path: warn but proceed. Hard-enforcement tests live
+    // in setupCompatEnforce.test.ts where the fixture seeds both files.
+    test("prints the compat block when the manifest declares one", async () => {
         writeManifestFile(manifestPath, makeManifest({
             compat: { koreader_version_min: "2024.03", device: ["kindle-pw5"] },
             settings: { refresh_rate: 2 },
@@ -229,10 +233,10 @@ describe("setup import — compat is shown, not verified", () => {
         await main(["setup", "import", manifestPath], env);
         expect(stdout.value).toContain("koreader >= 2024.03");
         expect(stdout.value).toContain("kindle-pw5");
-        expect(stdout.value).toMatch(/NOT verified/);
+        expect(stdout.value).toContain("compat check");
     });
 
-    test("does not refuse import when compat is set, even if we can't check it", async () => {
+    test("does not refuse import when detection fails", async () => {
         writeManifestFile(manifestPath, makeManifest({
             compat: { koreader_version_min: "3000.01", device: ["imaginary-device"] },
             settings: { refresh_rate: 2 },

@@ -117,8 +117,11 @@ Current templates: `minimal-ui`, `night-reading`, `distraction-free`.
 All additive. CLI flags (`--keys`, `--tags`, `--compat-*`) layer on top.
 
 **Compat metadata** — `--compat-koreader-min/max` and
-`--compat-device` are stored in the manifest and shown on inspect/import.
-They are **informational in v0.3**; enforcement lands in v0.4.
+`--compat-device` are stored in the manifest and **enforced on import**
+against the detected KOReader version (`koreader/git-rev`) and device
+family (`system/version.txt`). Mismatches block with exit 1; pass
+`--force` to convert the block into a warning. When detection fails
+(missing files, unparseable version) import warns and proceeds.
 
 Setup identity is a sha256 over the canonicalized manifest bytes —
 two exports of the same state produce the same id. Fat archives also
@@ -126,8 +129,9 @@ embed per-file hashes so tampering is detectable at import time.
 
 ## Status
 
-v0.3. Kindle-only. Solo project. 442 tests: byte-identical round-trip on a
-real 180-key `settings.reader.lua`, tar create/extract/list, full
-snapshot→mutate→restore→rollback coverage, plus Setup manifest
-export/import/templates/compat across lean and fat formats. See `docs/`
-for design notes.
+v0.4 in progress. Kindle-only. Solo project. 489 tests: byte-identical
+round-trip on a real 180-key `settings.reader.lua`, tar create/extract/list,
+full snapshot→mutate→restore→rollback coverage, Setup manifest
+export/import/templates across lean and fat formats, and compat gating
+(version window + device family) at the import boundary with `--force`
+override. See `docs/` for design notes.

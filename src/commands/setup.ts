@@ -22,6 +22,8 @@ import { canonicalizeManifest, hashBytes, manifestHash, shortId } from "../setup
 import { parseManifest, SetupSchemaError, type EmbeddedFile, type SetupManifest } from "../setup/schema.ts";
 import { packSetup } from "../setup/pack.ts";
 import { unpackSetup } from "../setup/unpack.ts";
+import { checkCompat, formatCompatIssue } from "../setup/compat.ts";
+import { detectDeviceFamily, readKoreaderVersion } from "../device/version.ts";
 import {
     affectedPatchTargets, affectedPluginTargets,
     collectPatches, collectPluginDirs,
@@ -640,6 +642,11 @@ const IMPORT_FLAGS = {
         type: "string",
         description: "path to a mounted Kindle (auto-detected by default)",
     },
+    force: {
+        type: "boolean",
+        default: false,
+        description: "import even when the device fails the Setup's compat check",
+    },
 } as const satisfies FlagSpecs;
 
 // Detect fat (.kset tar.gz) vs lean (.kset.yaml or .yaml) by extension.
@@ -730,14 +737,6 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
     info(env, dim(env, `  from:   ${path}`));
     if (manifest.meta.author)      info(env, dim(env, `  author: ${manifest.meta.author}`));
     if (manifest.meta.description) info(env, dim(env, `  ${manifest.meta.description}`));
-    if (manifest.compat) {
-        const pieces: string[] = [];
-        if (manifest.compat.koreader_version_min) pieces.push(`koreader >= ${manifest.compat.koreader_version_min}`);
-        if (manifest.compat.koreader_version_max) pieces.push(`koreader <= ${manifest.compat.koreader_version_max}`);
-        if (manifest.compat.device?.length)       pieces.push(`device: ${manifest.compat.device.join(", ")}`);
-        info(env, dim(env, `  requires: ${pieces.join("; ")}`));
-        info(env, dim(env, `  (compat is NOT verified in this release — manifest claims shown above)`));
-    }
 
     // Disclosure + gate for fat content. Print what the Setup ships
     // BEFORE any device touch or flag check — the user needs this info
@@ -766,6 +765,46 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
             `Kindle mount found at ${mount.root}, but ${mount.settingsPath} doesn't exist. ` +
             `Is KOReader installed on this Kindle?`
         );
+    }
+
+    // Compat gate. The manifest's compat block gets verified against what
+    // we can read off the device; blocking mismatches abort the import
+    // unless --force converts them to warnings. Detection failures (e.g.
+    // no git-rev) are soft — we surface them but proceed.
+    if (manifest.compat) {
+        const detected = {
+            version: readKoreaderVersion(mount),
+            family: detectDeviceFamily(mount),
+        };
+        const result = checkCompat(manifest.compat, detected);
+
+        env.stdout.write(`  compat check:\n`);
+        if (manifest.compat.koreader_version_min) {
+            env.stdout.write(`    koreader >= ${manifest.compat.koreader_version_min}\n`);
+        }
+        if (manifest.compat.koreader_version_max) {
+            env.stdout.write(`    koreader <= ${manifest.compat.koreader_version_max}\n`);
+        }
+        if (manifest.compat.device?.length) {
+            env.stdout.write(`    device: ${manifest.compat.device.join(", ")}\n`);
+        }
+        env.stdout.write(`    detected: koreader=${detected.version?.raw ?? "unknown"}, device=${detected.family}\n`);
+
+        for (const issue of result.unverifiable) {
+            warn(env, formatCompatIssue(issue));
+        }
+
+        if (result.blocking.length > 0) {
+            for (const issue of result.blocking) {
+                if (flags.force) warn(env, formatCompatIssue(issue));
+                else             env.stderr.write(`error: ${formatCompatIssue(issue)}\n`);
+            }
+            if (!flags.force) {
+                env.stderr.write(`\nSetup is not compatible with this device. Pass --force to import anyway.\n`);
+                return 1;
+            }
+            warn(env, "--force: proceeding despite compat mismatch.");
+        }
     }
 
     // Flatten + re-apply the secret denylist at the import boundary. A

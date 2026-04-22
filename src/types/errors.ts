@@ -53,6 +53,9 @@ export const ErrorCodes = {
     COMPAT_INCOMPATIBLE:  "COMPAT_INCOMPATIBLE",
     FAT_REQUIRES_ACK:     "FAT_REQUIRES_ACK",
     SETUP_INVALID:        "SETUP_INVALID",
+    CATALOG_NOT_FOUND:    "CATALOG_NOT_FOUND",
+    CATALOG_MALFORMED:    "CATALOG_MALFORMED",
+    PLUGIN_NOT_FOUND:     "PLUGIN_NOT_FOUND",
 } as const;
 
 export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];

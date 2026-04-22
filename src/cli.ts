@@ -21,6 +21,7 @@ import { runRestore, restoreHelp } from "./commands/restore.ts";
 import { runRollback, rollbackHelp } from "./commands/rollback.ts";
 import { runHistory, historyHelp } from "./commands/history.ts";
 import { runSetup, setupHelp } from "./commands/setup.ts";
+import { runPlugin, pluginHelp } from "./commands/plugin.ts";
 
 import pkg from "../package.json" with { type: "json" };
 const VERSION: string = pkg.version;
@@ -41,6 +42,7 @@ const COMMANDS: Record<string, Command> = {
     rollback: { run: runRollback, help: rollbackHelp },
     history:  { run: runHistory,  help: historyHelp },
     setup:    { run: runSetup,    help: setupHelp },
+    plugin:   { run: runPlugin,   help: pluginHelp },
 };
 
 const TOP_HELP = `
@@ -66,6 +68,10 @@ Safety net:
 Shareable Setups:
   setup      create, inspect, and apply curated Setup manifests
              (see \`kindly setup --help\` for subcommands)
+
+Plugin catalog:
+  plugin     browse the curated KOReader bundled-plugin catalog
+             (see \`kindly plugin --help\` for subcommands)
 
 Other:
   help <cmd>   print that command's help

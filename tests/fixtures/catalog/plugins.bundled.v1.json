@@ -1,0 +1,75 @@
+{
+  "catalog_version": "v1",
+  "license": "MIT",
+  "curated_at": "2026-04-22",
+  "koreader_source": "test-fixture",
+  "plugin_count": 4,
+  "plugins": [
+    {
+      "name": "SSH",
+      "folder": "SSH.koplugin",
+      "fullname": "SSH",
+      "category": "dev",
+      "ship_default_on": "hardware_gated",
+      "ship_default_rationale": "Requires Wi-Fi and is a power-user tool.",
+      "curation_opinion": "niche",
+      "description": "Starts an SSH/SFTP server on the device.",
+      "community_sentiment": "Popular among tinkerers.",
+      "kindle_notes": "Works on jailbroken Kindles with Wi-Fi.",
+      "references": [
+        "https://example.invalid/ssh"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "calibre",
+      "folder": "calibre.koplugin",
+      "fullname": "Calibre wireless",
+      "category": "sync",
+      "ship_default_on": "always",
+      "ship_default_rationale": "Ships on by default upstream.",
+      "curation_opinion": "recommended",
+      "description": "Wireless sync with Calibre.",
+      "community_sentiment": "Widely used.",
+      "kindle_notes": "",
+      "references": [],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "hello",
+      "folder": "hello.koplugin",
+      "fullname": "Hello demo",
+      "category": "dev",
+      "ship_default_on": "never",
+      "ship_default_rationale": "Developer example.",
+      "curation_opinion": "debloat",
+      "description": "A demo plugin shipping with KOReader.",
+      "community_sentiment": "Not useful for end users.",
+      "kindle_notes": "",
+      "references": [],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "exporter",
+      "folder": "exporter.koplugin",
+      "fullname": "Notes exporter",
+      "category": "reading",
+      "ship_default_on": "always",
+      "ship_default_rationale": "Ships on.",
+      "curation_opinion": "recommended",
+      "description": "Exports highlights and notes.",
+      "community_sentiment": "Well regarded.",
+      "kindle_notes": "",
+      "references": [],
+      "deprecated": { "kind": "component-removed", "detail": "Joplin" },
+      "computed": false,
+      "warnings": []
+    }
+  ]
+}

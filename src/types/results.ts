@@ -13,6 +13,7 @@ import type { Change } from "../schema/diff.ts";
 import type { Severity } from "../taxonomy/mapper.ts";
 import type { LuaValue } from "../lua/writer.ts";
 import type { HistoryEntryWithIndex } from "../history/reader.ts";
+import type { PluginEntry, PluginWithState } from "../catalog/reader.ts";
 
 export interface DiffGroupEntry {
     /** Joined dotted path, e.g. "footer.align" or "avoid_flashing_ui". */
@@ -340,4 +341,43 @@ export interface RollbackResult {
     fatFileCount: number;
     /** Pre-rollback safety-snapshot directory, if one was created. */
     preRollbackDir: string | null;
+}
+
+export interface PluginListResult {
+    /** Curated catalog version (e.g. "v1"). */
+    catalogVersion: string;
+    /** KOReader source tag the catalog was curated from. */
+    koreaderSource: string;
+    /** Absolute path to the catalog file read. */
+    catalogPath: string;
+    /** Per-plugin cross-reference. `enabled_on_device` is null if no device
+     *  state was available (offline mode / unmounted). */
+    plugins: PluginWithState[];
+    /** --category filter applied (undefined if not set). */
+    filteredByCategory?: string;
+    /** --opinion filter applied (undefined if not set). */
+    filteredByOpinion?: string;
+    /** True when we read actual device state; false when the list is pure
+     *  catalog (no mount). */
+    deviceStateAvailable: boolean;
+    /** Count summary for the renderer — recomputed over the filtered set. */
+    counts: {
+        total: number;
+        recommended: number;
+        debloat: number;
+        niche: number;
+        enabled_on_device: number;
+        disabled_on_device: number;
+    };
+}
+
+export interface PluginDescribeResult {
+    /** Full catalog entry. */
+    plugin: PluginEntry;
+    /** True iff device was mounted and `plugins_disabled` was readable. */
+    deviceStateAvailable: boolean;
+    /** Device state when available; null otherwise. */
+    enabledOnDevice: boolean | null;
+    /** Absolute path to the catalog file read. */
+    catalogPath: string;
 }

@@ -12,7 +12,8 @@ import { dumpSettingsFile, type LuaTable, type LuaValue } from "../lua/writer.ts
 import { filterForYaml } from "../schema/classify.ts";
 import { mergeYamlIntoLua, replaceYamlIntoLua } from "../schema/yaml.ts";
 import { classifyKey } from "../schema/classify.ts";
-import { computeChanges, computeReplaceChanges } from "../schema/diff.ts";
+import { computeChanges, computeReplaceChanges, type Change } from "../schema/diff.ts";
+import { groupChanges } from "../taxonomy/group.ts";
 import { safeWrite } from "../fs/safeWrite.ts";
 import { createTarGz } from "../fs/archive.ts";
 import { ArgError, parseArgs, type FlagSpecs } from "../cli/args.ts";
@@ -537,7 +538,16 @@ function loadManifestFile(path: string): { raw: string; manifest: SetupManifest 
 
 // ---- `kindly setup inspect <file>` -----------------------------------------
 
-export function executeSetupInspect(fileArg: string, env: CliEnv): SetupInspectResult {
+export interface SetupInspectOptions {
+    /** When set, compute a settings-preview diff against the chosen baseline. */
+    preview?: "vs-device" | "vs-default";
+}
+
+export function executeSetupInspect(
+    fileArg: string,
+    env: CliEnv,
+    opts: SetupInspectOptions = {},
+): SetupInspectResult {
     const path = resolve(env.cwd, fileArg);
     const { manifest, manifestBytes, isFat } = loadSetup(path);
 
@@ -576,6 +586,40 @@ export function executeSetupInspect(fileArg: string, env: CliEnv): SetupInspectR
         patchesCount: manifest.patches?.length ?? 0,
         isCanonical,
         ...(isCanonical ? {} : { canonicalHash: manifestHash(manifest) }),
+        ...(opts.preview ? { preview: computePreview(manifest, opts.preview, env) } : {}),
+    };
+}
+
+// Compare manifest.settings against a baseline and return the grouped preview.
+// "vs-device" reads the live settings.reader.lua; "vs-default" diffs against
+// an empty config so every manifest key appears as "added" (answers
+// "what does this setup do to a fresh device?").
+function computePreview(
+    manifest: SetupManifest,
+    mode: "vs-device" | "vs-default",
+    env: CliEnv,
+): NonNullable<SetupInspectResult["preview"]> {
+    const manifestSettings = (manifest.settings ?? {}) as Record<string, LuaValue>;
+
+    let baseline: Record<string, LuaValue>;
+    let settingsPath: string | undefined;
+    if (mode === "vs-device") {
+        const mount = resolveMount(env);
+        baseline = parseSettingsFile(readFileSync(mount.settingsPath, "utf8")) as Record<string, LuaValue>;
+        settingsPath = mount.settingsPath;
+    } else {
+        baseline = {};
+    }
+
+    const changes: Change[] = manifest.apply_mode === "replace"
+        ? computeReplaceChanges(baseline, manifestSettings, new Set())
+        : computeChanges(baseline, manifestSettings);
+
+    return {
+        mode,
+        ...(settingsPath ? { settingsPath } : {}),
+        changes,
+        grouped: groupChanges(changes),
     };
 }
 
@@ -611,17 +655,65 @@ export function renderSetupInspect(result: SetupInspectResult, env: CliEnv): voi
         warn(env, "file is not in canonical form — re-exporting would yield different bytes.");
         info(env, dim(env, `  (canonical hash would be ${result.canonicalHash})`));
     }
+
+    if (result.preview) {
+        const { preview } = result;
+        const totalChanges = preview.changes.length;
+        const catCount = Object.keys(preview.grouped).length;
+        const sevCounts: Record<string, number> = {};
+        for (const bucket of Object.values(preview.grouped)) {
+            for (const e of bucket) sevCounts[e.severity] = (sevCounts[e.severity] ?? 0) + 1;
+        }
+        const sevSummary = ["trivial", "visual", "functional", "breaking"]
+            .filter((s) => sevCounts[s])
+            .map((s) => `${sevCounts[s]} ${s}`)
+            .join(", ");
+        env.stdout.write(`  preview (${preview.mode}):\n`);
+        if (totalChanges === 0) {
+            env.stdout.write(`    no changes — ${preview.mode === "vs-device"
+                ? "device already matches this setup"
+                : "setup has no settings to apply"}\n`);
+        } else {
+            env.stdout.write(`    ${totalChanges} change(s) across ${catCount} categor${catCount === 1 ? "y" : "ies"} (${sevSummary})\n`);
+            for (const [cat, bucket] of Object.entries(preview.grouped)) {
+                env.stdout.write(`    - ${cat}: ${bucket.length}\n`);
+            }
+        }
+    }
 }
 
+const INSPECT_FLAGS = {
+    "vs-device": {
+        type: "boolean",
+        description: "preview how the setup would change the currently-mounted device",
+    },
+    "vs-default": {
+        type: "boolean",
+        description: "preview what the setup would set on an empty/default config",
+    },
+    mount: {
+        type: "string",
+        description: "path to a mounted Kindle (only used with --vs-device; auto-detected otherwise)",
+    },
+} as const satisfies FlagSpecs;
+
 async function runSetupInspect(argv: readonly string[], env: CliEnv): Promise<number> {
-    const { positional } = parseArgs(argv, {} as const satisfies FlagSpecs);
+    const { positional, flags } = parseArgs(argv, INSPECT_FLAGS);
     const fileArg = positional[0];
-    if (!fileArg) throw new ArgError("usage: kindly setup inspect <file>");
+    if (!fileArg) throw new ArgError("usage: kindly setup inspect <file> [--vs-device | --vs-default]");
     if (positional.length > 1) {
         throw new ArgError(`unexpected extra argument: ${positional[1]}`);
     }
+    if (flags["vs-device"] && flags["vs-default"]) {
+        throw new ArgError("--vs-device and --vs-default are mutually exclusive");
+    }
 
-    const result = executeSetupInspect(fileArg, env);
+    const preview: "vs-device" | "vs-default" | undefined =
+        flags["vs-device"] ? "vs-device" :
+        flags["vs-default"] ? "vs-default" : undefined;
+    if (flags.mount) env = { ...env, mountOverride: flags.mount };
+
+    const result = executeSetupInspect(fileArg, env, { preview });
     if (env.jsonMode) emitJson(env, "setup inspect", result);
     else renderSetupInspect(result, env);
     return 0;
@@ -1477,11 +1569,12 @@ working copy). See docs/50-v0.3-setups.md.
 const inspectHelp = `
 kindly setup inspect <file> — print a Setup manifest's summary.
 
-usage: kindly setup inspect <file>
+usage: kindly setup inspect <file> [--vs-device | --vs-default] [--mount <path>]
 
 Reads and validates a .kset.yaml file; prints id, hash, metadata, and
-content counts. Warns if the file is not in canonical form.
-No device access.
+content counts. Warns if the file is not in canonical form. With
+--vs-device (requires a mount) or --vs-default (against empty config),
+also computes a grouped-by-category preview of the settings changes.
 `.trim();
 
 const listHelp = `

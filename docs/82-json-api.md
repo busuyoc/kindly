@@ -268,7 +268,7 @@ Copy a pre-import / pre-apply safety snapshot dir back onto the device.
 ### 3.8 `setup inspect`
 
 Read a `.kset` / `.kset.yaml` manifest, return metadata + counts. No device
-touch.
+touch unless `--vs-device` is passed.
 
 - **Command id:** `"setup inspect"`
 - **Data:** `SetupInspectResult`
@@ -296,10 +296,22 @@ touch.
     pluginFilesCount: number,
     patchesCount: number,
     isCanonical: boolean,
-    canonicalHash?: string      // only set when isCanonical === false
+    canonicalHash?: string,     // only set when isCanonical === false
+    preview?: {                 // present when --vs-device or --vs-default
+      mode: "vs-device" | "vs-default",
+      settingsPath?: string,    // set only when mode === "vs-device"
+      changes: Change[],        // see §4
+      grouped: Record<string, DiffGroupEntry[]>   // same shape as diff (§3.2)
+    }
   }
   ```
-- **Errors:** `ARG_INVALID`; generic `1` for malformed YAML / schema failure (no dedicated code yet — see §5).
+- **Flags affecting shape:** `--vs-device` (requires mount) or `--vs-default`
+  (empty-config baseline) attach `preview`. The two flags are mutually
+  exclusive; passing both yields `ARG_INVALID`. `--vs-default` needs no
+  mount — useful for answering "what does this setup do to a fresh device?"
+- **Errors:** `ARG_INVALID`; `MOUNT_*`, `SETTINGS_NOT_FOUND`, `LUA_PARSE_FAILED`
+  when `--vs-device` can't read the device; generic `1` for malformed YAML
+  / schema failure (no dedicated code yet — see §5).
 
 ### 3.9 `setup export`
 

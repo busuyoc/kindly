@@ -167,6 +167,18 @@ export interface SetupInspectResult {
      *  canonicalHash is what a re-export would produce. */
     isCanonical: boolean;
     canonicalHash?: string;
+    /** Settings-preview against a baseline. Present only when --vs-device or
+     *  --vs-default was passed. `vs-device` diffs the manifest settings
+     *  against the live device; `vs-default` diffs against an empty config
+     *  (so every manifest key appears as "added" — useful for answering
+     *  "what does this setup do to a fresh device?"). */
+    preview?: {
+        mode: "vs-device" | "vs-default";
+        /** Baseline path when mode === "vs-device". */
+        settingsPath?: string;
+        changes: Change[];
+        grouped: Record<string, DiffGroupEntry[]>;
+    };
 }
 
 export interface SetupExportResult {

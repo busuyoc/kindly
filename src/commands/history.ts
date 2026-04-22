@@ -47,6 +47,7 @@ export function executeHistory(opts: HistoryOptions, env: CliEnv): HistoryResult
         malformed: r.malformed,
         historyPath: r.path,
         limit,
+        hasArchives: r.hasArchives,
         ...(opts.since ? { since: opts.since } : {}),
     };
 }
@@ -76,6 +77,9 @@ export function renderHistory(result: HistoryResult, env: CliEnv): void {
     if (result.matched > result.entries.length) {
         const more = result.matched - result.entries.length;
         info(env, dim(env, `  ... ${more} older entr${more === 1 ? "y" : "ies"} not shown (raise --limit to see)`));
+    }
+    if (result.hasArchives) {
+        info(env, dim(env, `  (older rotated entries live under .kindly/history-archive/; still addressable via \`rollback --to N\`)`));
     }
 }
 

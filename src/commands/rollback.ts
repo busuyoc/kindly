@@ -27,7 +27,11 @@ import type { RollbackResult } from "../types/results.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { emitJson } from "../cli/json.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
-import { readHistoryFile, type HistoryEntryWithIndex } from "../history/reader.ts";
+import {
+    countAllHistory,
+    findHistoryEntryByIndex,
+    type HistoryEntryWithIndex,
+} from "../history/reader.ts";
 
 const FLAGS = {
     "dry-run": {
@@ -227,19 +231,19 @@ export function resolveSnapshotFromHistory(
     index: number,
     cwd: string,
 ): { snapshotDir: string; entry: HistoryEntryWithIndex } {
-    const r = readHistoryFile({ cwd });
-    if (r.total === 0) {
+    const total = countAllHistory(cwd);
+    if (total === 0) {
         throw new KindlyError(
             ErrorCodes.SNAPSHOT_INVALID,
             `no history yet — nothing to roll back to.`,
             [{ text: "Run `kindly history` to confirm, or pass a snapshot directory directly." }],
         );
     }
-    const entry = r.entries.find((e) => e.index === index);
+    const entry = findHistoryEntryByIndex(cwd, index);
     if (!entry) {
         throw new KindlyError(
             ErrorCodes.SNAPSHOT_INVALID,
-            `no history entry #${index} (history has ${r.total} entries, valid range 1..${r.total}).`,
+            `no history entry #${index} (history has ${total} entries, valid range 1..${total}).`,
             [{ text: "Run `kindly history` to see the available indexes.", command: "kindly history" }],
         );
     }

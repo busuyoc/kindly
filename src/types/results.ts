@@ -293,6 +293,10 @@ export interface HistoryResult {
     limit: number;
     /** --since value applied. */
     since?: string;
+    /** True iff `.kindly/history-archive/` holds at least one rotated file.
+     *  Addressing those entries via `rollback --to N` still works; the
+     *  GUI / CLI renderer uses this flag to surface their existence. */
+    hasArchives: boolean;
 }
 
 export interface RollbackResult {

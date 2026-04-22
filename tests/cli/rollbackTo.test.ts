@@ -294,6 +294,61 @@ describe("rollback --to — multi-mutation scenario", () => {
     });
 });
 
+describe("rollback --to — crosses archives (W17)", () => {
+    test("--to N resolves an entry that was rotated to an archive file", async () => {
+        const kindle = makeFakeKindle();
+        const pristine = `return {\n    ["step"] = 1,\n}\n`;
+        const backupPath = seedSettingsBackup(workdir, "2026-04-22T10-00-00-000Z", pristine);
+
+        // Seed ONE apply entry in an ARCHIVE file (index 3), leaving active
+        // empty. This mimics a post-rotation state where the user still
+        // wants to roll back to an old mutation.
+        const archiveDir = join(workdir, ".kindly", "history-archive");
+        mkdirSync(archiveDir, { recursive: true });
+        writeFileSync(
+            join(archiveDir, "2026-04.jsonl"),
+            JSON.stringify({
+                ts: "2026-04-22T10:00:00.000Z",
+                cmd: "apply",
+                kindly_version: "0.3.0",
+                index: 3,
+                summary: { settings_delta_n: 1, backup_path: backupPath },
+            }) + "\n",
+        );
+
+        writeFileSync(kindle.settingsPath, `return { ["drifted"] = 1, }\n`);
+        const { env } = makeEnv(workdir, kindle.root);
+        const code = await main(["rollback", "--to", "3"], env);
+        expect(code).toBe(0);
+        expect(readFileSync(kindle.settingsPath, "utf8")).toBe(pristine);
+    });
+
+    test("unknown --to N cites total across active + archives", async () => {
+        // Two entries in archive, one in active → total 3.
+        const archiveDir = join(workdir, ".kindly", "history-archive");
+        mkdirSync(archiveDir, { recursive: true });
+        writeFileSync(
+            join(archiveDir, "2026-03.jsonl"),
+            [
+                JSON.stringify({ ts: "2026-03-15T10:00:00.000Z", cmd: "apply", kindly_version: "0.3.0", index: 1, summary: {} }),
+                JSON.stringify({ ts: "2026-03-16T10:00:00.000Z", cmd: "apply", kindly_version: "0.3.0", index: 2, summary: {} }),
+            ].join("\n") + "\n",
+        );
+        mkdirSync(join(workdir, ".kindly"), { recursive: true });
+        writeFileSync(
+            historyPath(workdir),
+            JSON.stringify({ ts: "2026-04-22T10:00:00.000Z", cmd: "apply", kindly_version: "0.3.0", index: 3, summary: {} }) + "\n",
+        );
+
+        const kindle = makeFakeKindle();
+        const { env, err } = makeEnv(workdir, kindle.root);
+        const code = await main(["rollback", "--to", "99"], env);
+        expect(code).toBe(1);
+        expect(err.value).toMatch(/no history entry #99/);
+        expect(err.value).toMatch(/1\.\.3/);
+    });
+});
+
 describe("rollback --to --dry-run", () => {
     test("--to 1 --dry-run resolves the snapshot but doesn't write", async () => {
         const kindle = makeFakeKindle();

@@ -1,0 +1,306 @@
+{
+  "extracted_at": "2026-04-22T16:54:41.721Z",
+  "koreader_source": "koreader-src",
+  "plugin_count": 37,
+  "plugins": [
+    {
+      "name": "SSH",
+      "fullname": "SSH",
+      "description": "Connect and transfer files to the device using SSH.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "archiveviewer",
+      "fullname": "Archive viewer",
+      "description": "Enables exploring the content of zip archives.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "autodim",
+      "fullname": "Automatic dimmer",
+      "description": "This plugin allows dimming the frontlight after a period of inactivity.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "autostandby",
+      "fullname": "Auto Standby",
+      "description": "Put into standby on no input, wake up from standby on UI input",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "autosuspend",
+      "fullname": "Auto power save",
+      "description": "Puts the device into standby, suspend or power off after specified periods of inactivity.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "autoturn",
+      "fullname": "Autoturn",
+      "description": "Automatically turns the page after a set period of time.\n\nHold to set the scrolling distance.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "autowarmth",
+      "fullname": "Auto warmth and night mode",
+      "description": "This plugin allows to set the frontlight warmth and night mode automagically.",
+      "deprecated": null,
+      "computed": true,
+      "warnings": []
+    },
+    {
+      "name": "batterystat",
+      "fullname": "Battery statistics",
+      "description": "Collects and displays battery statistics.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "bookshortcuts",
+      "fullname": "Book shortcuts",
+      "description": "This plugin allows adding a book shortcut to a gesture.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "calibre",
+      "fullname": "Calibre",
+      "description": "Integration with calibre. Send documents from calibre library via Wi-Fi and search calibre metadata.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "cloudstorage",
+      "fullname": "Cloud storage+",
+      "description": "Provides access to cloud storage.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "coverbrowser",
+      "fullname": "Cover browser",
+      "description": "Alternative display modes for file browser and history.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "coverimage",
+      "fullname": "Cover image",
+      "description": "Stores cover image to a file.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "docsettingtweak",
+      "fullname": "Tweak document settings",
+      "description": "This plugin allows you to tweak document settings before the document is loaded based on external factors.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "exporter",
+      "fullname": "Export highlights",
+      "description": "Exports highlights and notes.",
+      "deprecated": {
+        "kind": "feature",
+        "detail": "Joplin "
+      },
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "externalkeyboard",
+      "fullname": "External keyboard",
+      "description": "Manages USB OTG and configures keyboard.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "gestures",
+      "fullname": "Gestures",
+      "description": "This plugin provides gesture support.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "hello",
+      "fullname": "Hello",
+      "description": "This is a debugging plugin.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "hotkeys",
+      "fullname": "Hotkeys",
+      "description": "This plugin provides custom shortcut support for devices with physical keys.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "httpinspector",
+      "fullname": "HTTP KOReader Inspector",
+      "description": "Allow browsing KOReader internal objects over HTTP. This is aimed at developers, and may pose some security risks. Only enable this on networks you can trust.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "japanese",
+      "fullname": "Japanese support",
+      "description": "Japanese language support for KOReader, modeled after Yomichan.\n\nThis plugin extends KOReader's built-in dictionary and selection system to support Yomichan-style deinflection and text scanning, allowing for one-tap searches of inflected verbs and multi-character words and phrases. As such, this plugin removes the need for synonym-based deinflection rules for StarDict-converted Japanese dictionaries.\n\nYou must have at least one Japanese dictionary installed in order for this plugin to work smoothly with Japanese text.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "keepalive",
+      "fullname": "Keep alive",
+      "description": "Keeps the device awake to prevent automatic Wi-Fi disconnects.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "kosync",
+      "fullname": "Progress sync",
+      "description": "Synchronizes your reading progress to a server across your KOReader devices.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "movetoarchive",
+      "fullname": "Move to archive",
+      "description": "Moves or copies the current book to the archive folder.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "newsdownloader",
+      "fullname": "News downloader",
+      "description": "Retrieves RSS and Atom news entries and saves them as HTML files.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "opds",
+      "fullname": "OPDS",
+      "description": "OPDS allows you to download books from online catalogs.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "perceptionexpander",
+      "fullname": "Perception expander",
+      "description": "Improves your reading speed with the help of two vertical lines over the text.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "profiles",
+      "fullname": "Profiles",
+      "description": "This plugin allows combining multiple settings to make switchable 'profiles'.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "qrclipboard",
+      "fullname": "QR from clipboard",
+      "description": "This plugin generates a QR code from clipboard content.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "readtimer",
+      "fullname": "Read timer",
+      "description": "Shows an alarm after a specified amount of time.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "statistics",
+      "fullname": "Reading statistics",
+      "description": "Keeps and displays your reading statistics.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "systemstat",
+      "fullname": "System statistics",
+      "description": "Shows system statistics.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "terminal",
+      "fullname": "Terminal emulator",
+      "description": "KOReader's terminal emulator.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "texteditor",
+      "fullname": "Text editor",
+      "description": "A basic text editor for making small changes to plain text files.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "timesync",
+      "fullname": "Time sync",
+      "description": "Synchronizes the device time with NTP servers.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "vocabbuilder",
+      "fullname": "Vocabulary builder",
+      "description": "This plugin processes dictionary word lookups and uses spaced repetition to help you remember new words.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "wallabag",
+      "fullname": "Wallabag",
+      "description": "Synchronises articles with a Wallabag server.",
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    }
+  ]
+}

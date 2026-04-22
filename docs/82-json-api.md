@@ -149,9 +149,27 @@ Preview what `apply` would do. No device writes.
     yamlPath: string,           // absolute
     settingsPath: string,       // absolute
     changes: Change[],          // see §4
+    grouped: Record<           // changes bucketed by taxonomy category
+      string,                  // category name, in taxonomy-declared order
+      DiffGroupEntry[]
+    >,
     untrackedKeys: string[]     // on-device top-level keys not in YAML
   }
+
+  // DiffGroupEntry enriches each change with taxonomy-sourced metadata so
+  // GUI consumers don't need to re-apply the mapper themselves.
+  type DiffGroupEntry = {
+    key: string,                // joined dotted path, e.g. "footer.align"
+    label: string,              // human label from taxonomy
+    before: LuaValue | undefined, // undefined for kind="added"
+    after:  LuaValue | undefined, // undefined for kind="removed"
+    severity: "trivial" | "visual" | "functional" | "breaking",
+    hint?: string,              // short human summary ("enabled", "18 → 22 (+22%)")
+    kind: "added" | "changed" | "removed"
+  }
   ```
+  Empty categories are omitted. Nested paths (e.g. `footer.align`) inherit
+  the category/label of their top-level key (`footer`).
 - **Errors:** `YAML_NOT_FOUND`, `MOUNT_*`, `SETTINGS_NOT_FOUND`, `LUA_PARSE_FAILED`, `ARG_INVALID`.
 
 ### 3.3 `apply`

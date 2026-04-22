@@ -22,9 +22,10 @@ import { parseSettingsFile } from "../lua/reader.ts";
 import { yamlToLua } from "../schema/yaml.ts";
 import type { LuaValue } from "../lua/writer.ts";
 import { computeChanges, type Change } from "../schema/diff.ts";
-import type { DiffResult } from "../types/results.ts";
+import type { DiffGroupEntry, DiffResult } from "../types/results.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { emitJson } from "../cli/json.ts";
+import { categoryOf, impactOf, labelOf, loadTaxonomy } from "../taxonomy/mapper.ts";
 
 const FLAGS = {
     file: {
@@ -65,12 +66,57 @@ export function executeDiff(opts: DiffOptions, env: CliEnv): DiffResult {
         .filter((k) => !yamlKeys.has(k))
         .sort();
 
+    const grouped = groupChanges(changes);
+
     return {
         yamlPath,
         settingsPath: mount.settingsPath,
         changes,
+        grouped,
         untrackedKeys,
     };
+}
+
+// Bucket changes by taxonomy category; enrich each with label/severity/hint.
+// Category is looked up on the TOP-level key (path[0]); nested paths inherit.
+function groupChanges(changes: Change[]): Record<string, DiffGroupEntry[]> {
+    const tax = loadTaxonomy();
+    const byCategory = new Map<string, DiffGroupEntry[]>();
+
+    for (const c of changes) {
+        const topKey = c.path[0]!;
+        const prev = c.kind === "added" ? undefined : (c as { prev: unknown }).prev;
+        const next = c.kind === "removed" ? undefined : (c as { next: unknown }).next;
+
+        const impact = impactOf(tax, topKey, prev, next);
+        const entry: DiffGroupEntry = {
+            key: c.path.join("."),
+            label: labelOf(tax, topKey),
+            before: prev as DiffGroupEntry["before"],
+            after: next as DiffGroupEntry["after"],
+            severity: impact.severity,
+            kind: c.kind,
+        };
+        if (impact.hint) entry.hint = impact.hint;
+
+        const cat = categoryOf(tax, topKey);
+        const bucket = byCategory.get(cat) ?? [];
+        bucket.push(entry);
+        byCategory.set(cat, bucket);
+    }
+
+    // Insertion order = taxonomy-declared category order, then any leftover
+    // (e.g. "uncategorized") sorted alphabetically. Deterministic output so
+    // JSON consumers + tests can rely on it.
+    const out: Record<string, DiffGroupEntry[]> = {};
+    for (const cat of tax.categories) {
+        const bucket = byCategory.get(cat);
+        if (bucket && bucket.length > 0) out[cat] = bucket;
+    }
+    for (const cat of [...byCategory.keys()].sort()) {
+        if (!(cat in out)) out[cat] = byCategory.get(cat)!;
+    }
+    return out;
 }
 
 export function renderDiff(result: DiffResult, env: CliEnv): void {

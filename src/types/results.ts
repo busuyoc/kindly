@@ -10,6 +10,23 @@
 // not a side-effect of whatever the CLI felt like printing that day.
 
 import type { Change } from "../schema/diff.ts";
+import type { Severity } from "../taxonomy/mapper.ts";
+import type { LuaValue } from "../lua/writer.ts";
+
+export interface DiffGroupEntry {
+    /** Joined dotted path, e.g. "footer.align" or "avoid_flashing_ui". */
+    key: string;
+    /** Curated human label from the taxonomy (falls back to humanized key). */
+    label: string;
+    /** Value on device; undefined for "added". */
+    before: LuaValue | undefined;
+    /** Value from YAML; undefined for "removed". */
+    after: LuaValue | undefined;
+    severity: Severity;
+    /** Short human summary of the change ("enabled", "18 → 22 (+22%)"). */
+    hint?: string;
+    kind: "added" | "changed" | "removed";
+}
 
 export interface PullResult {
     /** "minimal" strips ephemerals; "full" keeps them. Secrets always dropped. */
@@ -35,6 +52,12 @@ export interface DiffResult {
     settingsPath: string;
     /** Changes that `apply` would make, in deterministic order. */
     changes: Change[];
+    /** Same changes bucketed by taxonomy category, each entry enriched with
+     *  label + severity + hint. Category keys appear in taxonomy-declared
+     *  order; empty categories are omitted. Derivable from `changes` + the
+     *  taxonomy, but pre-grouped here so JSON consumers (and the GUI) don't
+     *  need to re-apply the mapper. */
+    grouped: Record<string, DiffGroupEntry[]>;
     /** Top-level on-device keys NOT present in the YAML. apply leaves them alone. */
     untrackedKeys: string[];
 }

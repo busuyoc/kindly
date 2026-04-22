@@ -51,6 +51,30 @@ export function collectPluginDirs(pluginsRoot: string): CollectedFiles {
 // Walk a patches root (`<koreader>/patches/`) and collect every top-level
 // `*.lua` file. KOReader looks for `N-name.lua` files; non-lua files are
 // ignored. Subdirectories are not scanned (KOReader doesn't use them).
+// List every `<name>.koplugin/` directory under the plugins root, returning
+// the bare plugin name (suffix stripped). Used to validate plugin toggles
+// at import time: a `plugins.disabled` entry that names a plugin not in
+// this list is inert — KOReader has nothing to toggle.
+export function listInstalledPluginFolders(pluginsRoot: string): string[] {
+    if (!existsSync(pluginsRoot)) return [];
+    return readdirSync(pluginsRoot, { withFileTypes: true })
+        .filter((e) => e.isDirectory() && e.name.endsWith(".koplugin"))
+        .filter((e) => !e.name.startsWith("."))
+        .map((e) => e.name.slice(0, -".koplugin".length))
+        .sort();
+}
+
+// Return the toggle names that don't correspond to an installed plugin
+// folder. Order matches the input so callers can correlate with the
+// original list.
+export function findInertToggles(
+    toggles: readonly string[],
+    installedFolders: readonly string[],
+): string[] {
+    const set = new Set(installedFolders);
+    return toggles.filter((name) => !set.has(name));
+}
+
 export function collectPatches(patchesRoot: string): CollectedFiles {
     if (!existsSync(patchesRoot)) return { declared: [], files: new Map() };
 

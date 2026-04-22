@@ -29,7 +29,8 @@ import { validateSettings, formatValidationReport, hasFindings, type ValidationR
 import {
     affectedPatchTargets, affectedPluginTargets,
     collectPatches, collectPluginDirs,
-    installPatches, installPluginFiles,
+    findInertToggles, installPatches, installPluginFiles,
+    listInstalledPluginFolders,
     summarizePluginsByDir, totalBytes,
 } from "../setup/files.ts";
 import {
@@ -878,6 +879,25 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
         const importReport = validateSettings(manifest.settings as Record<string, unknown>, loadSchema());
         if (emitSchemaFindings(env, importReport, { strict: flags.strict, allowUnknownKeys: flags["allow-unknown-keys"] })) {
             return 1;
+        }
+    }
+
+    // Inert-toggle warning. A manifest that lists `plugins.disabled: [calendar]`
+    // but the device has no `calendar.koplugin/` still gets its toggle
+    // stored in settings.reader.lua — KOReader just has nothing to toggle.
+    // Not blocking: disabling a plugin that may be installed later is a
+    // legitimate author intent.
+    const toggledNames: string[] = [
+        ...(manifest.plugins?.disabled ?? []),
+    ];
+    if (toggledNames.length > 0) {
+        const installed = listInstalledPluginFolders(mount.pluginsDir);
+        const inert = findInertToggles(toggledNames, installed);
+        if (inert.length > 0) {
+            warn(env, `${inert.length} plugin toggle(s) reference plugins not installed on this device — stored but inert:`);
+            for (const name of inert) {
+                env.stderr.write(`  - ${name}  (no ${name}.koplugin/ on device)\n`);
+            }
         }
     }
 

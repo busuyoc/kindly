@@ -299,6 +299,32 @@ export interface HistoryResult {
     hasArchives: boolean;
 }
 
+export interface HistoryShowResult {
+    /** The looked-up history entry, with its monotonic index. */
+    entry: HistoryEntryWithIndex;
+    /** Settings diff between this entry's pre-state and the next
+     *  settings-mutation entry's pre-state. Absent when:
+     *    - the entry's cmd has no settings pre-state (snapshot, setup:export, restore),
+     *    - its pre-state file has been removed from disk,
+     *    - no subsequent entry with a pre-state exists, or
+     *    - this is the most recent settings mutation (post-state lives on
+     *      device and isn't captured in history). */
+    diff?: {
+        /** Absolute path of the pre-state file that served as "before". */
+        fromPath: string;
+        /** Absolute path of the pre-state file that served as "after". */
+        toPath: string;
+        /** Index of the history entry whose pre-state is the "after". */
+        toIndex: number;
+        /** Raw change list in deterministic order. */
+        changes: Change[];
+        /** Same changes bucketed by taxonomy. */
+        grouped: Record<string, DiffGroupEntry[]>;
+    };
+    /** Human note explaining why `diff` is omitted. Present iff `diff` is not. */
+    diffUnavailable?: string;
+}
+
 export interface RollbackResult {
     /** "dry-run": preview only. "rolled-back": writes completed. */
     mode: "dry-run" | "rolled-back";

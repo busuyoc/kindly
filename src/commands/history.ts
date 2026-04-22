@@ -2,18 +2,37 @@
 //
 // Reverse-chronological. Default limit 20. `--since <ISO>` narrows to recent
 // activity. `--json` returns the typed HistoryResult inside the standard
-// envelope; W18's `kindly history show <N>` will show one entry in detail
-// (with diff). Numeric indexing is stable across rotations (W17): index 1
-// is the OLDEST entry currently in the active file.
+// envelope.
+//
+// Subcommand `kindly history show <N>` (W18) prints one entry in detail and,
+// when possible, the settings diff introduced by that mutation (reconstructed
+// from the entry's pre-state backup vs the next settings-mutation's pre-state).
+//
+// Numeric indexing is stable across rotations (W17): each entry carries its
+// own `index` field, monotonically increasing.
 //
 // Empty file (or no .kindly/) is a normal first-run state, not an error.
 
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+
 import { ArgError, parseArgs, type FlagSpecs } from "../cli/args.ts";
 import type { CliEnv } from "../cli/env.ts";
-import { dim, info } from "../cli/log.ts";
+import { dim, heading, info } from "../cli/log.ts";
 import { emitJson } from "../cli/json.ts";
-import { readHistoryFile, type HistoryEntryWithIndex } from "../history/reader.ts";
-import type { HistoryResult } from "../types/results.ts";
+import {
+    countAllHistory,
+    findHistoryEntryByIndex,
+    readHistoryFile,
+    type HistoryEntryWithIndex,
+} from "../history/reader.ts";
+import type { HistoryCommand } from "../history/writer.ts";
+import { parseSettingsFile } from "../lua/reader.ts";
+import type { LuaValue } from "../lua/writer.ts";
+import { computeChanges, type Change } from "../schema/diff.ts";
+import { groupChanges } from "../taxonomy/group.ts";
+import type { HistoryResult, HistoryShowResult } from "../types/results.ts";
+import { KindlyError, ErrorCodes } from "../types/errors.ts";
 
 const DEFAULT_LIMIT = 20;
 
@@ -110,7 +129,219 @@ function formatSummary(e: HistoryEntryWithIndex): string {
     return bits.join(" · ");
 }
 
+// Commands that produce a settings pre-state (a standalone settings.reader.lua
+// we can diff against). restore's pre_restore_path is a whole-tree tarball,
+// so it's excluded — we'd need to extract before diffing, out of scope for W18.
+const SETTINGS_PRE_STATE_CMDS = new Set<HistoryCommand>([
+    "apply", "setup:import", "rollback",
+]);
+
+function settingsPreStatePath(entry: HistoryEntryWithIndex): string | null {
+    const s = entry.summary;
+    if (entry.cmd === "apply" && s.backup_path) return s.backup_path;
+    if (entry.cmd === "setup:import" && s.pre_import_path) {
+        return join(s.pre_import_path, "settings.reader.lua");
+    }
+    if (entry.cmd === "rollback" && s.pre_rollback_path) {
+        return join(s.pre_rollback_path, "settings.reader.lua");
+    }
+    return null;
+}
+
+// Walk the history, newest-first, and return the first entry whose cmd is
+// one of SETTINGS_PRE_STATE_CMDS AND whose pre-state file still exists on
+// disk, with index STRICTLY GREATER than `afterIndex`. Used to find the
+// "next" mutation whose pre-state = post-state of the entry we're diffing.
+function findNextWithPreState(
+    cwd: string,
+    afterIndex: number,
+): HistoryEntryWithIndex | null {
+    // readHistoryFile returns active in reverse-chron order; since we want
+    // the SMALLEST index > afterIndex, scan all entries (active first, then
+    // archives) and pick the minimum matching one.
+    const seen = new Set<number>();
+    let best: HistoryEntryWithIndex | null = null;
+    const consider = (e: HistoryEntryWithIndex) => {
+        if (seen.has(e.index)) return;
+        seen.add(e.index);
+        if (e.index <= afterIndex) return;
+        if (!SETTINGS_PRE_STATE_CMDS.has(e.cmd)) return;
+        const p = settingsPreStatePath(e);
+        if (!p || !existsSync(p)) return;
+        if (best === null || e.index < best.index) best = e;
+    };
+
+    const active = readHistoryFile({ cwd });
+    // active.entries is newest-first; iterate as-is.
+    for (const e of active.entries) consider(e);
+
+    // Search archives too — active may not contain anything above afterIndex
+    // if we've rotated.
+    const archiveDir = join(cwd, ".kindly", "history-archive");
+    if (existsSync(archiveDir)) {
+        const files = readdirSync(archiveDir)
+            .filter((f) => f.endsWith(".jsonl"))
+            .sort();
+        for (const f of files) {
+            const raw = readFileSync(join(archiveDir, f), "utf8");
+            let positional = 0;
+            for (const line of raw.split("\n")) {
+                if (line.length === 0) continue;
+                positional++;
+                try {
+                    const parsed = JSON.parse(line) as HistoryEntryWithIndex;
+                    const idx = typeof parsed.index === "number" ? parsed.index : positional;
+                    consider({ ...parsed, index: idx });
+                } catch { /* skip */ }
+            }
+        }
+    }
+    return best;
+}
+
+export function executeHistoryShow(index: number, env: CliEnv): HistoryShowResult {
+    const entry = findHistoryEntryByIndex(env.cwd, index);
+    if (!entry) {
+        const total = countAllHistory(env.cwd);
+        if (total === 0) {
+            throw new KindlyError(
+                ErrorCodes.SNAPSHOT_INVALID,
+                `no history yet — nothing to show.`,
+                [{ text: "Run `kindly apply`, `snapshot`, or `setup import` to log a mutation." }],
+            );
+        }
+        throw new KindlyError(
+            ErrorCodes.SNAPSHOT_INVALID,
+            `no history entry #${index} (history has ${total} entries, valid range 1..${total}).`,
+            [{ text: "Run `kindly history` to see available indexes.", command: "kindly history" }],
+        );
+    }
+
+    const result: HistoryShowResult = { entry };
+
+    if (!SETTINGS_PRE_STATE_CMDS.has(entry.cmd)) {
+        result.diffUnavailable = `\`${entry.cmd}\` does not capture a settings pre-state — nothing to diff.`;
+        return result;
+    }
+
+    const fromPath = settingsPreStatePath(entry);
+    if (!fromPath) {
+        result.diffUnavailable = `entry has no recorded pre-state path (was it run with --no-safety-snapshot?).`;
+        return result;
+    }
+    if (!existsSync(fromPath) || !statSync(fromPath).isFile()) {
+        result.diffUnavailable = `pre-state file no longer on disk: ${fromPath}`;
+        return result;
+    }
+
+    const next = findNextWithPreState(env.cwd, entry.index);
+    if (!next) {
+        result.diffUnavailable = `no later mutation with a pre-state — this is the most recent settings change. Use \`kindly diff\` for current on-device delta.`;
+        return result;
+    }
+    const toPath = settingsPreStatePath(next)!;
+
+    const before = parseSettingsFile(readFileSync(fromPath, "utf8")) as Record<string, LuaValue>;
+    const after = parseSettingsFile(readFileSync(toPath, "utf8")) as Record<string, LuaValue>;
+
+    // computeChanges only emits added/changed for keys in `after`; to catch
+    // keys REMOVED between the two pre-states, merge the key sets.
+    const allKeys = new Set([...Object.keys(before), ...Object.keys(after)]);
+    const synthesized: Record<string, LuaValue> = {};
+    for (const k of allKeys) synthesized[k] = after[k] as LuaValue;
+    const changes: Change[] = computeChanges(before, synthesized);
+    // Pick up removals manually (keys present in before but not after).
+    for (const k of Object.keys(before).sort()) {
+        if (!(k in after)) {
+            changes.push({ kind: "removed", path: [k], prev: before[k] as LuaValue });
+        }
+    }
+
+    result.diff = {
+        fromPath,
+        toPath,
+        toIndex: next.index,
+        changes,
+        grouped: groupChanges(changes),
+    };
+    return result;
+}
+
+export function renderHistoryShow(result: HistoryShowResult, env: CliEnv): void {
+    const e = result.entry;
+    heading(env, `entry #${e.index}  ${e.cmd}${e.label ? `  "${e.label}"` : ""}`);
+    info(env, `  ts:             ${e.ts}`);
+    info(env, `  kindly version: ${e.kindly_version}`);
+
+    const s = e.summary;
+    const rows: Array<[string, string]> = [];
+    if (typeof s.settings_delta_n === "number") rows.push(["settings changed", String(s.settings_delta_n)]);
+    if (s.plugins_delta) {
+        const pd = s.plugins_delta;
+        const parts: string[] = [];
+        if (pd.installed_files) parts.push(`+${pd.installed_files} plugin file(s)`);
+        if (pd.installed_patches) parts.push(`+${pd.installed_patches} patch(es)`);
+        if (pd.skipped_files) parts.push(`${pd.skipped_files} skipped`);
+        if (pd.disabled_count) parts.push(`disabled ${pd.disabled_count}`);
+        if (parts.length) rows.push(["plugins", parts.join(", ")]);
+    }
+    if (s.backup_path)       rows.push(["backup", s.backup_path]);
+    if (s.pre_import_path)   rows.push(["pre-import", s.pre_import_path]);
+    if (s.pre_restore_path)  rows.push(["pre-restore", s.pre_restore_path]);
+    if (s.pre_rollback_path) rows.push(["pre-rollback", s.pre_rollback_path]);
+    if (s.archive_path)      rows.push(["archive", s.archive_path]);
+    if (s.output_path)       rows.push(["output", s.output_path]);
+    if (s.snapshot_dir)      rows.push(["source snapshot", s.snapshot_dir]);
+    if (s.setup_id)          rows.push(["setup id", s.setup_id]);
+    for (const [k, v] of rows) info(env, `  ${k.padEnd(16)}${v}`);
+
+    env.stdout.write("\n");
+    if (result.diff) {
+        heading(env, `changes between #${e.index} and #${result.diff.toIndex}  (${result.diff.changes.length} total)`);
+        for (const [cat, bucket] of Object.entries(result.diff.grouped)) {
+            info(env, dim(env, `  [${cat}]`));
+            for (const g of bucket) {
+                const marker = g.kind === "added" ? "+" : g.kind === "removed" ? "-" : "~";
+                const val = g.hint ?? `${format(g.before)} → ${format(g.after)}`;
+                info(env, `    ${marker} ${g.label}  ${dim(env, val)}`);
+            }
+        }
+    } else if (result.diffUnavailable) {
+        info(env, dim(env, `(diff not shown: ${result.diffUnavailable})`));
+    }
+}
+
+function format(v: unknown): string {
+    if (v === undefined) return "∅";
+    if (typeof v === "string") return JSON.stringify(v);
+    return String(v);
+}
+
+async function runHistoryShow(rest: readonly string[], env: CliEnv): Promise<number> {
+    // Subcommand has no flags today beyond the env-level --json.
+    if (rest.length === 0) {
+        throw new ArgError("usage: kindly history show <N>");
+    }
+    if (rest.length > 1) {
+        throw new ArgError(`unexpected extra argument: ${rest[1]}`);
+    }
+    const n = Number(rest[0]);
+    if (!Number.isInteger(n) || n < 1) {
+        throw new ArgError(`<N> must be a positive integer (got ${JSON.stringify(rest[0])})`);
+    }
+    const result = executeHistoryShow(n, env);
+    if (env.jsonMode) emitJson(env, "history:show", result);
+    else renderHistoryShow(result, env);
+    return 0;
+}
+
 export async function runHistory(argv: readonly string[], env: CliEnv): Promise<number> {
+    // Subcommand dispatch: `kindly history show <N>` routes to the detail
+    // view; everything else is the list view.
+    if (argv[0] === "show") {
+        return runHistoryShow(argv.slice(1), env);
+    }
+
     const { flags, positional } = parseArgs(argv, FLAGS);
     if (positional.length > 0) {
         throw new ArgError(`unexpected argument: ${positional[0]}`);
@@ -148,15 +379,25 @@ export async function runHistory(argv: readonly string[], env: CliEnv): Promise<
 export const historyHelp = `
 kindly history — list mutations from .kindly/history.jsonl.
 
-usage: kindly history [--limit N] [--since <ISO>] [--json]
+usage:
+  kindly history [--limit N] [--since <ISO>] [--json]
+  kindly history show <N> [--json]
 
+list options:
   --limit N      max entries to show (default: 20; 0 = unlimited)
   --since <ISO>  only show entries at or after this timestamp
   --json         JSON envelope on stdout
 
-Display is reverse-chronological. The numeric index (#N) counts from the
-OLDEST entry — that's the stable handle \`rollback --to N\` resolves
-against.
+show:
+  \`kindly history show <N>\` prints one entry in detail, plus a settings
+  diff introduced by that mutation (reconstructed from the entry's
+  pre-state backup vs the next mutation's pre-state). The diff is
+  omitted when the entry has no pre-state (snapshot, setup:export,
+  restore), when the file is gone, or when it's the most recent
+  mutation (use \`kindly diff\` for current on-device delta).
+
+Display is reverse-chronological. The numeric index (#N) is a stable
+monotonic counter — it keeps its value even after rotation (W17).
 
 Tracked commands: apply, snapshot, restore, rollback, setup:import,
 setup:export. No-op and dry-run runs are not logged.

@@ -16,7 +16,7 @@
 // If the rollback itself goes wrong, you can roll it forward again.
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 import { ArgError, parseArgs, type FlagSpecs } from "../cli/args.ts";
 import { type CliEnv, resolveMount } from "../cli/env.ts";
@@ -27,6 +27,7 @@ import type { RollbackResult } from "../types/results.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { emitJson } from "../cli/json.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
+import { readHistoryFile, type HistoryEntryWithIndex } from "../history/reader.ts";
 
 const FLAGS = {
     "dry-run": {
@@ -46,6 +47,10 @@ const FLAGS = {
     label: {
         type: "string",
         description: "advisory name for this rollback — shown in `kindly history`",
+    },
+    to: {
+        type: "string",
+        description: "roll back using history entry #N's safety snapshot (oldest = 1)",
     },
 } as const satisfies FlagSpecs;
 
@@ -204,17 +209,103 @@ function settingsPresent(result: RollbackResult): boolean {
     return existsSync(join(result.snapshotDir, SETTINGS_FILENAME));
 }
 
+// Resolve a 1-based history index (oldest = 1) to the matching mutation's
+// pre-* safety snapshot directory. This is the `--to <N>` bridge: users
+// pick an entry out of `kindly history`, we locate its backup for rollback.
+//
+// Not every entry is rollable:
+//   - apply        → parent of backup_path (dir holds settings.reader.lua)
+//   - setup:import → pre_import_path (dir holds settings + optional fat tar)
+//   - rollback     → pre_rollback_path (dir; rolling back a rollback)
+//   - restore      → pre_restore_path is a tarball, not a dir — redirect
+//                   user to `kindly restore <path>`
+//   - snapshot     → no device mutation, nothing to roll back
+//   - setup:export → no device mutation
+//
+// Entries with --no-safety-snapshot at origin have no pre-* field at all.
+export function resolveSnapshotFromHistory(
+    index: number,
+    cwd: string,
+): { snapshotDir: string; entry: HistoryEntryWithIndex } {
+    const r = readHistoryFile({ cwd });
+    if (r.total === 0) {
+        throw new KindlyError(
+            ErrorCodes.SNAPSHOT_INVALID,
+            `no history yet — nothing to roll back to.`,
+            [{ text: "Run `kindly history` to confirm, or pass a snapshot directory directly." }],
+        );
+    }
+    const entry = r.entries.find((e) => e.index === index);
+    if (!entry) {
+        throw new KindlyError(
+            ErrorCodes.SNAPSHOT_INVALID,
+            `no history entry #${index} (history has ${r.total} entries, valid range 1..${r.total}).`,
+            [{ text: "Run `kindly history` to see the available indexes.", command: "kindly history" }],
+        );
+    }
+
+    const s = entry.summary;
+    if (entry.cmd === "apply" && s.backup_path) {
+        return { snapshotDir: dirname(s.backup_path), entry };
+    }
+    if (entry.cmd === "setup:import" && s.pre_import_path) {
+        return { snapshotDir: s.pre_import_path, entry };
+    }
+    if (entry.cmd === "rollback" && s.pre_rollback_path) {
+        return { snapshotDir: s.pre_rollback_path, entry };
+    }
+    if (entry.cmd === "restore" && s.pre_restore_path) {
+        throw new KindlyError(
+            ErrorCodes.SNAPSHOT_INVALID,
+            `history entry #${index} is a \`restore\` — rollback operates on per-mutation snapshot directories, not whole-tree archives.`,
+            [{
+                text: "Extract the pre-restore archive with `kindly restore` instead.",
+                command: `kindly restore ${s.pre_restore_path}`,
+            }],
+        );
+    }
+    if (entry.cmd === "snapshot" || entry.cmd === "setup:export") {
+        throw new KindlyError(
+            ErrorCodes.SNAPSHOT_INVALID,
+            `history entry #${index} is a \`${entry.cmd}\` — it produces an archive but doesn't modify the device, so there's nothing to roll back.`,
+            [{ text: "Pick an entry for `apply`, `setup:import`, or `rollback` from `kindly history`." }],
+        );
+    }
+    throw new KindlyError(
+        ErrorCodes.SNAPSHOT_INVALID,
+        `history entry #${index} (${entry.cmd}) has no safety snapshot on record — was it run with --no-safety-snapshot?`,
+        [{ text: "Pass a snapshot directory directly, or pick a different entry." }],
+    );
+}
+
 export async function runRollback(argv: readonly string[], env: CliEnv): Promise<number> {
     const { flags, positional } = parseArgs(argv, FLAGS);
     const snapArg = positional[0];
-    if (!snapArg) throw new ArgError("usage: kindly rollback <snapshot-dir> [options]");
+
+    if (flags.to !== undefined && snapArg !== undefined) {
+        throw new ArgError("--to <N> and a positional snapshot-dir are mutually exclusive");
+    }
+    if (flags.to === undefined && !snapArg) {
+        throw new ArgError("usage: kindly rollback <snapshot-dir> | --to <N> [options]");
+    }
     if (positional.length > 1) {
         throw new ArgError(`unexpected extra argument: ${positional[1]}`);
     }
     if (flags.mount) env = { ...env, mountOverride: flags.mount };
 
+    let resolvedDir: string;
+    if (flags.to !== undefined) {
+        const n = Number(flags.to);
+        if (!Number.isInteger(n) || n < 1) {
+            throw new ArgError(`--to must be a positive integer (got ${JSON.stringify(flags.to)})`);
+        }
+        resolvedDir = resolveSnapshotFromHistory(n, env.cwd).snapshotDir;
+    } else {
+        resolvedDir = snapArg!;
+    }
+
     const result = executeRollback({
-        snapshotDir: snapArg,
+        snapshotDir: resolvedDir,
         dryRun: flags["dry-run"],
         safetySnapshot: flags["safety-snapshot"],
         label: flags.label,
@@ -226,30 +317,36 @@ export async function runRollback(argv: readonly string[], env: CliEnv): Promise
 }
 
 export const rollbackHelp = `
-kindly rollback <snapshot-dir>
+kindly rollback <snapshot-dir> | --to <N>
 
 Roll back a kindly-imported Setup (or kindly apply) by copying a
 timestamped safety snapshot back onto the device.
 
-The snapshot dir is one of the directories under .kindly/pre-import/
-(created automatically on every setup import / kindly apply). It can
-contain:
-  - settings.reader.lua           (pre-write copy of the settings file)
-  - plugins-patches.tar.gz        (pre-install archive of affected plugin
-                                   dirs and patch files)
+Two ways to pick the snapshot:
+  - explicit directory from .kindly/pre-import/<stamp>/, .kindly/backups/<stamp>/, etc.
+  - --to <N> where N is a history index (run \`kindly history\` to list them).
+    The oldest entry is #1; indexes are stable across history rotations.
 
 Usage:
   kindly rollback <snapshot-dir> [--dry-run] [--no-safety-snapshot]
-                                 [--mount <path>]
+                                 [--label <text>] [--mount <path>]
+  kindly rollback --to <N>       [--dry-run] [--no-safety-snapshot]
+                                 [--label <text>] [--mount <path>]
 
 Options:
+  --to <N>              resolve snapshot from history entry #N
   --dry-run             list what would be restored; don't write
   --no-safety-snapshot  skip the pre-rollback backup of current state
                         (default: safety snapshot is ON — saved to
                          .kindly/pre-rollback/<stamp>/)
+  --label <text>        advisory name logged into kindly history
   --mount <path>        point at a specific Kindle mount
 
+\`--to <N>\` works for apply, setup:import, and prior rollback entries.
+restore entries point you at the archive (\`kindly restore <path>\`); snapshot
+and setup:export don't modify the device so there's nothing to undo.
+
 This is different from \`kindly restore\`: restore extracts a whole-tree
-v0.2 snapshot tarball; rollback handles the finer-grained per-import
+v0.2 snapshot tarball; rollback handles the finer-grained per-mutation
 safety net produced by setup import / apply.
 `.trim();

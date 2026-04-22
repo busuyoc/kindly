@@ -23,6 +23,7 @@ import { runHistory, historyHelp } from "./commands/history.ts";
 import { runSetup, setupHelp } from "./commands/setup.ts";
 import { runPlugin, pluginHelp } from "./commands/plugin.ts";
 import { runServe, serveHelp } from "./cli/serve.ts";
+import { runWatch, watchHelp } from "./commands/watch.ts";
 
 import pkg from "../package.json" with { type: "json" };
 const VERSION: string = pkg.version;
@@ -45,6 +46,7 @@ const COMMANDS: Record<string, Command> = {
     setup:    { run: runSetup,    help: setupHelp },
     plugin:   { run: runPlugin,   help: pluginHelp },
     serve:    { run: runServe,    help: serveHelp },
+    watch:    { run: runWatch,    help: watchHelp },
 };
 
 const TOP_HELP = `
@@ -78,6 +80,8 @@ Plugin catalog:
 Automation:
   serve      long-running JSON-IPC mode over stdin/stdout
              (see \`kindly serve --help\` for the protocol)
+  watch      stream new history entries as JSON (tail -f for the GUI)
+             (see \`kindly watch --help\` for the protocol)
 
 Other:
   help <cmd>   print that command's help

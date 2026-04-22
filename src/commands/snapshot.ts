@@ -20,6 +20,7 @@ import { createTarGz } from "../fs/archive.ts";
 import { resolve } from "node:path";
 import type { SnapshotResult } from "../types/results.ts";
 import { emitJson } from "../cli/json.ts";
+import { appendHistoryEntry } from "../history/writer.ts";
 
 const FLAGS = {
     output: {
@@ -57,6 +58,8 @@ export function executeSnapshot(opts: SnapshotOptions, env: CliEnv): SnapshotRes
         paths: SNAPSHOT_PATHS,
         outputPath,
     });
+
+    appendHistoryEntry(env, "snapshot", { archive_path: res.archivePath });
 
     return {
         archivePath: res.archivePath,

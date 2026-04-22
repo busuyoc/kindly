@@ -29,6 +29,7 @@ import { safeWrite } from "../fs/safeWrite.ts";
 import type { ApplyResult } from "../types/results.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { emitJson } from "../cli/json.ts";
+import { appendHistoryEntry } from "../history/writer.ts";
 
 const FLAGS = {
     file: {
@@ -108,6 +109,11 @@ export function executeApply(opts: ApplyOptions, env: CliEnv): ApplyResult {
         : join(env.cwd, ".kindly", "backups");
 
     const res = safeWrite(mount.settingsPath, newContent, { backupDir, verifyLua: true });
+
+    appendHistoryEntry(env, "apply", {
+        settings_delta_n: changes.length,
+        ...(res.backupPath ? { backup_path: res.backupPath } : {}),
+    });
 
     return {
         mode: "applied",

@@ -26,6 +26,7 @@ import { safeWrite } from "../fs/safeWrite.ts";
 import type { RollbackResult } from "../types/results.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { emitJson } from "../cli/json.ts";
+import { appendHistoryEntry } from "../history/writer.ts";
 
 const FLAGS = {
     "dry-run": {
@@ -138,6 +139,11 @@ export function executeRollback(opts: RollbackOptions, env: CliEnv): RollbackRes
         fatRestored = true;
         fatFileCount = r.fileCount;
     }
+
+    appendHistoryEntry(env, "rollback", {
+        snapshot_dir: snapshotDir,
+        ...(preRollbackDir ? { pre_rollback_path: preRollbackDir } : {}),
+    });
 
     return {
         mode: "rolled-back",

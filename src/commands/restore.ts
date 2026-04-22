@@ -20,6 +20,7 @@ import { existsSync } from "node:fs";
 import type { RestoreResult } from "../types/results.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { emitJson } from "../cli/json.ts";
+import { appendHistoryEntry } from "../history/writer.ts";
 
 const FLAGS = {
     "dry-run": {
@@ -102,6 +103,11 @@ export function executeRestore(opts: RestoreOptions, env: CliEnv): RestoreResult
     }
 
     const res = extractTarGz({ archivePath, destRoot: mount.koreaderRoot });
+
+    appendHistoryEntry(env, "restore", {
+        archive_path: archivePath,
+        ...(safetySnapshotPath ? { pre_restore_path: safetySnapshotPath } : {}),
+    });
 
     return {
         mode: "restored",

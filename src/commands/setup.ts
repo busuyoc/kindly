@@ -42,6 +42,7 @@ import type {
 } from "../types/results.ts";
 import { emitJson } from "../cli/json.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
+import { appendHistoryEntry } from "../history/writer.ts";
 
 // ---- `kindly setup export` -------------------------------------------------
 
@@ -303,6 +304,10 @@ export function executeSetupExport(
             writeFileSync(outPath, canonical);
             bytesWritten = Buffer.byteLength(canonical);
         }
+        appendHistoryEntry(env, "setup:export", {
+            output_path: outPath,
+            setup_id: id,
+        });
     } else if (!isFat) {
         // Dry-run byte count is still informative for lean exports.
         bytesWritten = Buffer.byteLength(canonicalizeManifest(manifest));
@@ -1243,6 +1248,20 @@ export function executeSetupImport(
             installedPatches = shippedPatches.length;
         }
     }
+
+    appendHistoryEntry(env, "setup:import", {
+        settings_delta_n: baseResult.changes.length,
+        plugins_delta: {
+            installed_files: installedPluginFiles,
+            installed_patches: installedPatches,
+            skipped_files: baseResult.skippedPluginFiles,
+            skipped_patches: baseResult.skippedPatches,
+            disabled_count: manifest.plugins?.disabled?.length ?? 0,
+        },
+        ...(backupPath ? { backup_path: backupPath } : {}),
+        ...(snapshotDir ? { pre_import_path: snapshotDir } : {}),
+        setup_id: baseResult.id,
+    });
 
     return {
         ...baseResult,

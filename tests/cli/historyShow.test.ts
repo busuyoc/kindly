@@ -280,3 +280,56 @@ describe("history show — --json envelope", () => {
         expect(env_.data.diffUnavailable).toMatch(/does not capture/);
     });
 });
+
+describe("history show — robustness", () => {
+    test("removed keys emit EXACTLY ONE change each (no spurious changed→undefined)", async () => {
+        // Regression guard: the pre-fix code wrapped the "after" record in
+        // a synthesized object that explicitly set removed keys to
+        // undefined, which slipped through computeChanges as "changed" —
+        // then the manual loop also pushed "removed", duplicating the
+        // entry. One `removed` per key, zero `changed` for those keys.
+        const backupA = join(workdir, ".kindly", "backups", "a", "settings.reader.lua");
+        writeLua(backupA, { gone_a: "x", gone_b: 9, keep: true });
+        const backupB = join(workdir, ".kindly", "backups", "b", "settings.reader.lua");
+        writeLua(backupB, { keep: true });
+
+        seedHistory(workdir, [
+            { ts: "2026-04-22T12:00:00.000Z", cmd: "apply", kindly_version: "0.3.0",
+              index: 1, summary: { backup_path: backupA } },
+            { ts: "2026-04-22T12:05:00.000Z", cmd: "apply", kindly_version: "0.3.0",
+              index: 2, summary: { backup_path: backupB } },
+        ]);
+        const { env, out } = makeEnv(workdir, { jsonMode: true });
+        await main(["history", "show", "1", "--json"], env);
+        const payload = JSON.parse(out.value);
+        const changes = payload.data.diff.changes as Array<{ kind: string; path: string[] }>;
+
+        const forGoneA = changes.filter((c) => c.path.join(".") === "gone_a");
+        const forGoneB = changes.filter((c) => c.path.join(".") === "gone_b");
+        expect(forGoneA.length).toBe(1);
+        expect(forGoneA[0]!.kind).toBe("removed");
+        expect(forGoneB.length).toBe(1);
+        expect(forGoneB[0]!.kind).toBe("removed");
+    });
+
+    test("non-object pre-state (e.g. scalar return) → diffUnavailable", async () => {
+        const backupA = join(workdir, ".kindly", "backups", "a", "settings.reader.lua");
+        mkdirSync(join(backupA, ".."), { recursive: true });
+        writeFileSync(backupA, "return 42\n");
+        const backupB = join(workdir, ".kindly", "backups", "b", "settings.reader.lua");
+        writeLua(backupB, { x: 1 });
+
+        seedHistory(workdir, [
+            { ts: "2026-04-22T12:00:00.000Z", cmd: "apply", kindly_version: "0.3.0",
+              index: 1, summary: { backup_path: backupA } },
+            { ts: "2026-04-22T12:05:00.000Z", cmd: "apply", kindly_version: "0.3.0",
+              index: 2, summary: { backup_path: backupB } },
+        ]);
+        const { env, out } = makeEnv(workdir, { jsonMode: true });
+        const code = await main(["history", "show", "1", "--json"], env);
+        expect(code).toBe(0);
+        const payload = JSON.parse(out.value);
+        expect(payload.data.diff).toBeUndefined();
+        expect(payload.data.diffUnavailable).toMatch(/did not parse to a settings table/);
+    });
+});

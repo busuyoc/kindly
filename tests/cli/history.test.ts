@@ -94,6 +94,24 @@ describe("history — display", () => {
         expect(lines[2]).toContain("#1");
     });
 
+    test("overlong label is truncated with an ellipsis so the summary stays aligned", async () => {
+        const longLabel = "this is a ridiculously long label that nobody should write but might";
+        seedHistory(workdir, [
+            makeEntry({
+                ts: "2026-04-22T12:00:00.000Z", cmd: "apply",
+                settings_delta_n: 1, label: longLabel,
+            }),
+        ]);
+
+        const { env, out } = makeEnv(workdir);
+        await main(["history"], env);
+        const line = out.value.split("\n").find((l) => l.startsWith("#"))!;
+        expect(line).not.toContain(longLabel);
+        expect(line).toContain("…");
+        // Summary column still follows — "1 setting" is the delta summary.
+        expect(line).toMatch(/1 setting/);
+    });
+
     test("--limit N caps display, footer mentions hidden entries", async () => {
         seedHistory(workdir, [
             makeEntry({ ts: "2026-04-22T12:00:00.000Z", cmd: "apply", settings_delta_n: 1 }),

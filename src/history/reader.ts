@@ -95,38 +95,49 @@ export function readHistoryFile(opts: ReadHistoryOptions): HistoryReadResult {
 // Look up one entry by its monotonic `index`, searching the active file
 // first and then archives (newest month first so the common case — a
 // recent entry just rotated — returns quickly). Returns null when no
-// entry with that index exists anywhere.
+// entry with that index exists anywhere. Active-first ordering also
+// naturally handles the rotation crash window (W17): if the same entry
+// appears in both active and archive (archive-append succeeded, truncate
+// didn't), we return the active copy and ignore the archive duplicate.
 export function findHistoryEntryByIndex(
     cwd: string,
     index: number,
 ): HistoryEntryWithIndex | null {
-    const hit = searchFile(historyPath(cwd), index);
-    if (hit) return hit;
-
-    const dir = historyArchiveDir(cwd);
-    if (!existsSync(dir)) return null;
-    const archives = readdirSync(dir)
-        .filter((f) => f.endsWith(".jsonl"))
-        .sort()
-        .reverse();
-    for (const f of archives) {
-        const found = searchFile(join(dir, f), index);
-        if (found) return found;
+    for (const e of iterateAllEntries(cwd)) {
+        if (e.index === index) return e;
     }
     return null;
 }
 
 // Total entries across active + archives (well-formed only). Used for
-// range-error messages in rollback --to.
+// range-error messages in rollback --to. Dedupes by `index` so a
+// rotation-crash duplicate doesn't inflate the count.
 export function countAllHistory(cwd: string): number {
-    let n = countFile(historyPath(cwd));
+    const seen = new Set<number>();
+    for (const e of iterateAllEntries(cwd)) seen.add(e.index);
+    return seen.size;
+}
+
+// Iterate every well-formed entry across active + archives. Order:
+// active (oldest → newest), then archives newest-month-first (matching
+// findHistoryEntryByIndex's search order). Callers that need dedupe
+// should track seen indexes — archive files may contain duplicates of
+// active entries if a rotation crashed between archive-append and
+// active-truncate.
+export function* iterateAllEntries(
+    cwd: string,
+): Generator<HistoryEntryWithIndex> {
+    yield* parseEntriesFromFile(historyPath(cwd));
+
     const dir = historyArchiveDir(cwd);
-    if (existsSync(dir)) {
-        for (const f of readdirSync(dir)) {
-            if (f.endsWith(".jsonl")) n += countFile(join(dir, f));
-        }
+    if (!existsSync(dir)) return;
+    const archives = readdirSync(dir)
+        .filter((f) => f.endsWith(".jsonl"))
+        .sort()
+        .reverse();
+    for (const f of archives) {
+        yield* parseEntriesFromFile(join(dir, f));
     }
-    return n;
 }
 
 function hasAnyArchives(cwd: string): boolean {
@@ -135,37 +146,21 @@ function hasAnyArchives(cwd: string): boolean {
     return readdirSync(dir).some((f) => f.endsWith(".jsonl"));
 }
 
-function searchFile(path: string, index: number): HistoryEntryWithIndex | null {
-    if (!existsSync(path)) return null;
+function* parseEntriesFromFile(
+    path: string,
+): Generator<HistoryEntryWithIndex> {
+    if (!existsSync(path)) return;
     const raw = readFileSync(path, "utf8");
-    const lines = raw.split("\n");
     let positional = 0;
-    for (const line of lines) {
+    for (const line of raw.split("\n")) {
         if (line.length === 0) continue;
         positional++;
         try {
             const parsed = JSON.parse(line) as HistoryEntry;
             const idx = typeof parsed.index === "number" ? parsed.index : positional;
-            if (idx === index) return { ...parsed, index: idx };
+            yield { ...parsed, index: idx };
         } catch {
             /* skip malformed */
         }
     }
-    return null;
-}
-
-function countFile(path: string): number {
-    if (!existsSync(path)) return 0;
-    const raw = readFileSync(path, "utf8");
-    let n = 0;
-    for (const line of raw.split("\n")) {
-        if (line.length === 0) continue;
-        try {
-            JSON.parse(line);
-            n++;
-        } catch {
-            /* skip */
-        }
-    }
-    return n;
 }

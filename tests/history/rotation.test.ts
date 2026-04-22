@@ -15,7 +15,7 @@
 //   - countAllHistory sums active + archives
 
 import { describe, test, expect, beforeEach } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -202,5 +202,50 @@ describe("findHistoryEntryByIndex + countAllHistory", () => {
         // Two files: archive has 500, active has 3.
         const archiveFiles = readdirSync(historyArchiveDir(workdir));
         expect(archiveFiles).toContain("2026-04.jsonl");
+    });
+});
+
+describe("rotation crash — archive+truncate not atomic", () => {
+    // Simulate the window between appendFileSync(archive) and
+    // writeFileSync("") on active: the same entry lives in both files.
+    test("countAllHistory dedupes the overlap by index", () => {
+        const dup = {
+            ts: "2026-04-22T10:00:00.000Z",
+            cmd: "apply" as const,
+            kindly_version: "0.3.0",
+            index: 1,
+            summary: {},
+        };
+        mkdirSync(historyArchiveDir(workdir), { recursive: true });
+        writeFileSync(historyPath(workdir), JSON.stringify(dup) + "\n");
+        writeFileSync(
+            join(historyArchiveDir(workdir), "2026-04.jsonl"),
+            JSON.stringify(dup) + "\n",
+        );
+        expect(countAllHistory(workdir)).toBe(1);
+    });
+
+    test("findHistoryEntryByIndex prefers active over archive for duplicates", () => {
+        // Active copy has a distinguishing label; archive has the stale one.
+        // This verifies the active-first search order survives the generator
+        // refactor — future-you can change one or the other's content to
+        // eyeball which won.
+        const activeCopy = {
+            ts: "2026-04-22T10:00:00.000Z",
+            cmd: "apply" as const,
+            kindly_version: "0.3.0",
+            index: 1,
+            label: "active-copy",
+            summary: {},
+        };
+        const archiveCopy = { ...activeCopy, label: "archive-copy" };
+        mkdirSync(historyArchiveDir(workdir), { recursive: true });
+        writeFileSync(historyPath(workdir), JSON.stringify(activeCopy) + "\n");
+        writeFileSync(
+            join(historyArchiveDir(workdir), "2026-04.jsonl"),
+            JSON.stringify(archiveCopy) + "\n",
+        );
+        const hit = findHistoryEntryByIndex(workdir, 1);
+        expect(hit?.label).toBe("active-copy");
     });
 });

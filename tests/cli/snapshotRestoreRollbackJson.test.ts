@@ -4,7 +4,7 @@
 
 import { describe, test, expect, beforeEach } from "bun:test";
 import {
-    existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync,
+    existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -124,6 +124,24 @@ describe("executeRestore", () => {
             safetySnapshot: false,
         }, env);
         expect(result.safetySnapshotPath).toBeNull();
+    });
+
+    test("--label reaches the history entry", async () => {
+        await main(["snapshot"], env);
+        const archive = readdirSync(workdir).find((f) => f.endsWith(".tar.gz"))!;
+
+        const code = await main(
+            ["restore", join(workdir, archive), "--label", "pre-reset check"],
+            env,
+        );
+        expect(code).toBe(0);
+
+        const hist = readFileSync(
+            join(workdir, ".kindly", "history.jsonl"),
+            "utf8",
+        ).trim().split("\n").map((l) => JSON.parse(l));
+        const restoreEntry = hist.find((e) => e.cmd === "restore");
+        expect(restoreEntry?.label).toBe("pre-reset check");
     });
 });
 

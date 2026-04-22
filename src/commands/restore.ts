@@ -37,6 +37,10 @@ const FLAGS = {
         type: "string",
         description: "path to a mounted Kindle (auto-detected by default)",
     },
+    label: {
+        type: "string",
+        description: "advisory name for this restore — shown in `kindly history`",
+    },
 } as const satisfies FlagSpecs;
 
 const SAFETY_PATHS = [
@@ -52,6 +56,7 @@ export interface RestoreOptions {
     archive: string;
     dryRun?: boolean;
     safetySnapshot?: boolean;
+    label?: string;
 }
 
 export function executeRestore(opts: RestoreOptions, env: CliEnv): RestoreResult {
@@ -107,7 +112,7 @@ export function executeRestore(opts: RestoreOptions, env: CliEnv): RestoreResult
     appendHistoryEntry(env, "restore", {
         archive_path: archivePath,
         ...(safetySnapshotPath ? { pre_restore_path: safetySnapshotPath } : {}),
-    });
+    }, opts.label ? { label: opts.label } : undefined);
 
     return {
         mode: "restored",
@@ -157,6 +162,7 @@ export async function runRestore(argv: readonly string[], env: CliEnv): Promise<
         archive,
         dryRun: flags["dry-run"],
         safetySnapshot: flags["safety-snapshot"],
+        label: flags.label,
     }, env);
 
     if (env.jsonMode) emitJson(env, "restore", result);
@@ -171,10 +177,12 @@ function isoStamp(d: Date): string {
 export const restoreHelp = `
 kindly restore <archive> — extract a snapshot back into the Kindle.
 
-usage: kindly restore <archive.tar.gz> [--dry-run] [--no-safety-snapshot] [--mount <path>]
+usage: kindly restore <archive.tar.gz> [--dry-run] [--no-safety-snapshot]
+                                       [--label <text>] [--mount <path>]
 
   --dry-run              list entries without writing
   --no-safety-snapshot   skip the pre-restore snapshot of current state
+  --label <text>         advisory name logged into kindly history
   --mount <path>         path to a mounted Kindle (auto-detect by default)
 
 By default, takes a safety snapshot of the CURRENT device state first. If

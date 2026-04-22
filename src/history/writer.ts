@@ -28,6 +28,22 @@
 // only one in the active file. Indexes continue monotonically — the new
 // entry's index is (last-archived-index + 1).
 //
+// Rotation is NOT atomic. If the process dies between `appendFileSync`
+// on the archive and `writeFileSync("")` on the active file, the same
+// entry ends up in both places. The reader handles this by preferring
+// active over archive in `findHistoryEntryByIndex` and by deduping on
+// `index` in `countAllHistory` / `iterateAllEntries` consumers. Worst
+// case: a doubled entry is counted once. We don't try harder (e.g.,
+// staging file + rename) because kindly is a single-user desktop tool
+// and a mid-rotation crash is vanishingly rare on macOS.
+//
+// Concurrency: assumes ONE writer per cwd. Two `kindly apply` processes
+// racing on the same working directory would interleave appends; the
+// JSONL format stays well-formed line-by-line, but index collisions are
+// possible if both read `active` at the same offset. Kindle workflows
+// are single-user — we don't guard against this. A file lock would be
+// the fix if we ever grow a parallel harness.
+//
 // Non-op / dry-run: we do NOT log those. "mutation" means the device or
 // user-state actually changed. apply mode="no-op"/"dry-run" → no entry.
 

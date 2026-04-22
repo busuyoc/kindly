@@ -323,6 +323,32 @@ describe("rollback --to — crosses archives (W17)", () => {
         expect(readFileSync(kindle.settingsPath, "utf8")).toBe(pristine);
     });
 
+    test("--to N resolves an archived setup:import entry via pre_import_path", async () => {
+        const kindle = makeFakeKindle();
+        const pristine = `return {\n    ["imported"] = true,\n}\n`;
+        const preImportDir = seedPreImportDir(workdir, "2026-03-10T09-00-00-000Z", pristine);
+
+        // Archived setup:import entry; active file is empty.
+        const archiveDir = join(workdir, ".kindly", "history-archive");
+        mkdirSync(archiveDir, { recursive: true });
+        writeFileSync(
+            join(archiveDir, "2026-03.jsonl"),
+            JSON.stringify({
+                ts: "2026-03-10T09:00:00.000Z",
+                cmd: "setup:import",
+                kindly_version: "0.3.0",
+                index: 42,
+                summary: { settings_delta_n: 2, pre_import_path: preImportDir, setup_id: "abc123" },
+            }) + "\n",
+        );
+
+        writeFileSync(kindle.settingsPath, `return { ["drifted"] = 9, }\n`);
+        const { env } = makeEnv(workdir, kindle.root);
+        const code = await main(["rollback", "--to", "42"], env);
+        expect(code).toBe(0);
+        expect(readFileSync(kindle.settingsPath, "utf8")).toBe(pristine);
+    });
+
     test("unknown --to N cites total across active + archives", async () => {
         // Two entries in archive, one in active → total 3.
         const archiveDir = join(workdir, ".kindly", "history-archive");

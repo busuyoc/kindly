@@ -13,7 +13,7 @@
 //
 // Empty file (or no .kindly/) is a normal first-run state, not an error.
 
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { ArgError, parseArgs, type FlagSpecs } from "../cli/args.ts";
@@ -23,6 +23,7 @@ import { emitJson } from "../cli/json.ts";
 import {
     countAllHistory,
     findHistoryEntryByIndex,
+    iterateAllEntries,
     readHistoryFile,
     type HistoryEntryWithIndex,
 } from "../history/reader.ts";
@@ -102,12 +103,17 @@ export function renderHistory(result: HistoryResult, env: CliEnv): void {
     }
 }
 
+const LABEL_COL_WIDTH = 20;
+
 function formatLine(e: HistoryEntryWithIndex, indexW: number): string {
     const idx = `#${String(e.index).padStart(indexW)}`;
     const ts = e.ts.replace("T", " ").replace(/\.\d+Z$/, "Z").slice(0, 19);
     const cmd = e.cmd.padEnd(13);
     const label = e.label ?? "";
-    const labelCol = label.padEnd(20);
+    // Truncate to keep the summary column aligned regardless of label length.
+    const labelCol = label.length > LABEL_COL_WIDTH
+        ? label.slice(0, LABEL_COL_WIDTH - 1) + "…"
+        : label.padEnd(LABEL_COL_WIDTH);
     return `${idx}  ${ts}  ${cmd}  ${labelCol}  ${formatSummary(e)}`.trimEnd();
 }
 
@@ -148,53 +154,25 @@ function settingsPreStatePath(entry: HistoryEntryWithIndex): string | null {
     return null;
 }
 
-// Walk the history, newest-first, and return the first entry whose cmd is
-// one of SETTINGS_PRE_STATE_CMDS AND whose pre-state file still exists on
-// disk, with index STRICTLY GREATER than `afterIndex`. Used to find the
-// "next" mutation whose pre-state = post-state of the entry we're diffing.
+// Scan active + archives and return the entry with the SMALLEST index
+// strictly greater than `afterIndex` whose cmd carries a settings
+// pre-state AND whose pre-state file is still on disk. This is the
+// "next settings mutation" whose pre-state serves as the post-state
+// proxy for the entry we're diffing.
 function findNextWithPreState(
     cwd: string,
     afterIndex: number,
 ): HistoryEntryWithIndex | null {
-    // readHistoryFile returns active in reverse-chron order; since we want
-    // the SMALLEST index > afterIndex, scan all entries (active first, then
-    // archives) and pick the minimum matching one.
     const seen = new Set<number>();
     let best: HistoryEntryWithIndex | null = null;
-    const consider = (e: HistoryEntryWithIndex) => {
-        if (seen.has(e.index)) return;
+    for (const e of iterateAllEntries(cwd)) {
+        if (seen.has(e.index)) continue;
         seen.add(e.index);
-        if (e.index <= afterIndex) return;
-        if (!SETTINGS_PRE_STATE_CMDS.has(e.cmd)) return;
+        if (e.index <= afterIndex) continue;
+        if (!SETTINGS_PRE_STATE_CMDS.has(e.cmd)) continue;
         const p = settingsPreStatePath(e);
-        if (!p || !existsSync(p)) return;
+        if (!p || !existsSync(p)) continue;
         if (best === null || e.index < best.index) best = e;
-    };
-
-    const active = readHistoryFile({ cwd });
-    // active.entries is newest-first; iterate as-is.
-    for (const e of active.entries) consider(e);
-
-    // Search archives too — active may not contain anything above afterIndex
-    // if we've rotated.
-    const archiveDir = join(cwd, ".kindly", "history-archive");
-    if (existsSync(archiveDir)) {
-        const files = readdirSync(archiveDir)
-            .filter((f) => f.endsWith(".jsonl"))
-            .sort();
-        for (const f of files) {
-            const raw = readFileSync(join(archiveDir, f), "utf8");
-            let positional = 0;
-            for (const line of raw.split("\n")) {
-                if (line.length === 0) continue;
-                positional++;
-                try {
-                    const parsed = JSON.parse(line) as HistoryEntryWithIndex;
-                    const idx = typeof parsed.index === "number" ? parsed.index : positional;
-                    consider({ ...parsed, index: idx });
-                } catch { /* skip */ }
-            }
-        }
     }
     return best;
 }
@@ -241,16 +219,19 @@ export function executeHistoryShow(index: number, env: CliEnv): HistoryShowResul
     }
     const toPath = settingsPreStatePath(next)!;
 
-    const before = parseSettingsFile(readFileSync(fromPath, "utf8")) as Record<string, LuaValue>;
-    const after = parseSettingsFile(readFileSync(toPath, "utf8")) as Record<string, LuaValue>;
+    const beforeRaw = parseSettingsFile(readFileSync(fromPath, "utf8"));
+    const afterRaw = parseSettingsFile(readFileSync(toPath, "utf8"));
+    if (!isPlainRecord(beforeRaw) || !isPlainRecord(afterRaw)) {
+        result.diffUnavailable = `pre-state file did not parse to a settings table: ${fromPath}`;
+        return result;
+    }
+    const before = beforeRaw as Record<string, LuaValue>;
+    const after = afterRaw as Record<string, LuaValue>;
 
-    // computeChanges only emits added/changed for keys in `after`; to catch
-    // keys REMOVED between the two pre-states, merge the key sets.
-    const allKeys = new Set([...Object.keys(before), ...Object.keys(after)]);
-    const synthesized: Record<string, LuaValue> = {};
-    for (const k of allKeys) synthesized[k] = after[k] as LuaValue;
-    const changes: Change[] = computeChanges(before, synthesized);
-    // Pick up removals manually (keys present in before but not after).
+    // computeChanges iterates keys in `after` (it's designed for apply's
+    // additive semantics). Pick up additions + changes from it, then
+    // backfill keys present in `before` but not `after` as removals.
+    const changes: Change[] = computeChanges(before, after);
     for (const k of Object.keys(before).sort()) {
         if (!(k in after)) {
             changes.push({ kind: "removed", path: [k], prev: before[k] as LuaValue });
@@ -315,6 +296,10 @@ function format(v: unknown): string {
     if (v === undefined) return "∅";
     if (typeof v === "string") return JSON.stringify(v);
     return String(v);
+}
+
+function isPlainRecord(v: unknown): v is Record<string, unknown> {
+    return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
 async function runHistoryShow(rest: readonly string[], env: CliEnv): Promise<number> {

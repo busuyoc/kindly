@@ -251,6 +251,10 @@ function skipBracketString(source: string, start: number): number {
     // Skips `[[ ... ]]`. Lua also allows `[=[...]=]` etc. but _meta.lua
     // files use the plain form exclusively, so we don't bother with
     // level-matched variants.
+    // LIMITATION: if a future _meta.lua uses `[=[...]=]`, `sliceReturnTableBody`
+    // will miscount brace depth and `extractGettextString`'s regex won't
+    // match either — the field comes back null with a warning. Graceful
+    // degradation, not silent corruption. Curator sees it immediately.
     let i = start + 2;
     while (i < source.length - 1) {
         if (source[i] === "]" && source[i + 1] === "]") return i + 2;

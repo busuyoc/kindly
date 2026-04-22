@@ -1,0 +1,689 @@
+{
+  "scaffold_generated_at": "2026-04-22T00:00:00.000Z",
+  "koreader_source": "koreader-src",
+  "license_note": "description_verbatim is copied from _meta.lua (AGPL) for curator reference only — it MUST NOT appear in the MIT-licensed plugins.bundled.v1.json. Only description_paraphrased is safe to ship.",
+  "plugin_count": 37,
+  "plugins": [
+    {
+      "name": "SSH",
+      "fullname": "SSH",
+      "category": "dev",
+      "ship_default_on": "hardware_gated",
+      "ship_default_rationale": "Requires Wi-Fi and is a power-user tool; also has a dangerous passwordless option that should never be auto-enabled.",
+      "description_verbatim": "Connect and transfer files to the device using SSH.",
+      "description_paraphrased": "Starts a lightweight SSH/SFTP server on the device so you can log in and transfer files wirelessly from a computer.",
+      "community_sentiment": "Popular among tinkerers on MobileRead and the Kindle modding scene as the canonical way to manage files and debug without plugging in USB. Beginners report connection trouble (wrong IP, firewall, ECDSA-only keys) and the wiki explicitly warns against the no-password mode.",
+      "kindle_notes": "Works on jailbroken Kindles with Wi-Fi; KOReader must be running and Wi-Fi enabled. Kindle's USBMS path is incompatible with KOReader, so SSH is often the preferred transfer method once set up.",
+      "references": [
+        "https://github.com/koreader/koreader/wiki/SSH",
+        "https://www.mobileread.com/forums/showthread.php?t=359837",
+        "https://www.mobileread.com/forums/showthread.php?t=365198"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "archiveviewer",
+      "fullname": "Archive viewer",
+      "category": "reading",
+      "ship_default_on": "never",
+      "ship_default_rationale": "Niche utility; most Kindle users never open raw ZIPs, and KOReader already auto-handles .cbz/.txt.zip files without this plugin.",
+      "description_verbatim": "Enables exploring the content of zip archives.",
+      "description_paraphrased": "Lets you peek inside ZIP archives and browse their contents from within KOReader's file browser.",
+      "community_sentiment": "Very little community discussion found. It is a quiet, low-profile utility rather than a celebrated feature; most forum threads about ZIPs point to KOReader's built-in .format.zip convention rather than this viewer.",
+      "kindle_notes": "",
+      "references": [
+        "https://github.com/koreader/koreader/wiki/ZIP",
+        "https://koreader.rocks/user_guide/"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "autodim",
+      "fullname": "Automatic dimmer",
+      "category": "system",
+      "ship_default_on": "hardware_gated",
+      "ship_default_rationale": "Only meaningful on Kindles that have a frontlight (all modern models do; base Kindle 4/Touch do not).",
+      "description_verbatim": "This plugin allows dimming the frontlight after a period of inactivity.",
+      "description_paraphrased": "Gradually lowers the frontlight brightness when you stop interacting with the device for a while.",
+      "community_sentiment": "Lightly discussed — a small quality-of-life feature most users either love or never notice. No significant complaints or bug threads surfaced.",
+      "kindle_notes": "Requires a frontlight; irrelevant on old non-lit Kindles. Does not need warm-light hardware.",
+      "references": [
+        "https://github.com/koreader/koreader/tree/master/plugins/autodim.koplugin"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "autostandby",
+      "fullname": "Auto Standby",
+      "category": "system",
+      "ship_default_on": "never",
+      "ship_default_rationale": "The wiki and source note this plugin is essentially PocketBook-specific and relies on quirky platform behavior; Kindle power management is handled by autosuspend instead.",
+      "description_verbatim": "Put into standby on no input, wake up from standby on UI input",
+      "description_paraphrased": "Drops the device into a low-power standby state when idle and wakes it back up on the first tap or key press.",
+      "community_sentiment": "On PocketBook it dramatically improves idle battery life (reports of 20x better drain). Outside PocketBook it is widely regarded as not applicable, and the KOReader team itself flags it as platform-specific.",
+      "kindle_notes": "Not a Kindle plugin in practice — Kindles use autosuspend. Leaving this off on Kindle is correct.",
+      "references": [
+        "https://github.com/koreader/koreader/wiki/Auto-Standby",
+        "https://github.com/koreader/koreader/pull/8815"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "autosuspend",
+      "fullname": "Auto power save",
+      "category": "system",
+      "ship_default_on": "always",
+      "ship_default_rationale": "Core battery-life feature on Kindle; without it the device can stay awake and drain fast.",
+      "description_verbatim": "Puts the device into standby, suspend or power off after specified periods of inactivity.",
+      "description_paraphrased": "After configurable idle periods, sends the device to standby, then suspend, then optional full power-off.",
+      "community_sentiment": "Considered essential on Kindle and Kobo — users consistently credit it with turning KOReader from a battery hog into something that lasts days or weeks. There are recurring 'unscheduled wakeup' / standby-drain bug reports on specific Kindle models (Voyage, some PW generations) that the devs actively track.",
+      "kindle_notes": "Shipped enabled by default on Kindle builds of KOReader. If users see excessive battery drain, the usual fix is tuning the suspend timeout, not disabling the plugin.",
+      "references": [
+        "https://github.com/koreader/koreader/wiki/Auto-suspend",
+        "https://github.com/koreader/koreader/issues/13176",
+        "https://github.com/koreader/koreader/issues/13880"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "autoturn",
+      "fullname": "Autoturn",
+      "category": "reading",
+      "ship_default_on": "never",
+      "ship_default_rationale": "Niche hands-free use case; most readers turn pages manually and would find auto-advance disorienting.",
+      "description_verbatim": "Automatically turns the page after a set period of time.\n\nHold to set the scrolling distance.",
+      "description_paraphrased": "Advances pages automatically after a configurable interval, letting you read hands-free.",
+      "community_sentiment": "Users enable it for cooking, exercise, or accessibility scenarios, but reports are sprinkled with complaints: on Kindle Paperwhite the timer stops after sleep/wakeup, and the built-in auto-dimmer can fight it by dimming the screen while reading is in progress. Functional for steady readers, but rough edges on several devices.",
+      "kindle_notes": "Known issue: autoturn can stop working after Kindle wakes from sleep; auto-dimmer may dim the frontlight while autoturn is active.",
+      "references": [
+        "https://github.com/koreader/koreader/issues/13216",
+        "https://github.com/koreader/koreader/issues/11979"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "autowarmth",
+      "fullname": "Auto warmth and night mode",
+      "category": "reading",
+      "ship_default_on": "hardware_gated",
+      "ship_default_rationale": "Warm-light scheduling requires a natural-light frontlight; otherwise the plugin degrades to just a night-mode timer and the feature set most users want isn't there.",
+      "description_verbatim": "This plugin allows to set the frontlight warmth and night mode automagically.",
+      "description_paraphrased": "Schedules frontlight warmth and/or night mode around sunrise and sunset; on devices without warm light it only drives the night-mode schedule.",
+      "community_sentiment": "Beloved on devices with warm light (Kobo Libra, some newer Kindle models). On Kindle Paperwhites without warm hardware users complain that night-mode toasts fire constantly and that the plugin still nags even though the warmth slider does nothing — several GitHub issues track this.",
+      "kindle_notes": "Most Kindles do not have a warm frontlight. The plugin detects this via Device:hasNaturalLight() and collapses to 'Auto night mode' only. Kindle Scribe and some later PWs are the main exceptions.",
+      "references": [
+        "https://github.com/koreader/koreader/issues/13546",
+        "https://github.com/koreader/koreader/issues/9817",
+        "https://github.com/koreader/koreader/discussions/11299"
+      ],
+      "deprecated": null,
+      "computed": true,
+      "warnings": []
+    },
+    {
+      "name": "batterystat",
+      "fullname": "Battery statistics",
+      "category": "dev",
+      "ship_default_on": "never",
+      "ship_default_rationale": "Diagnostic tool for power-usage troubleshooting; not something a typical Kindle user needs enabled during normal reading.",
+      "description_verbatim": "Collects and displays battery statistics.",
+      "description_paraphrased": "Logs battery drain over time and shows charts of power usage between charges.",
+      "community_sentiment": "Referenced mainly in troubleshooting threads where users try to diagnose unexpected drain or compare firmware/KOReader power behaviour. Not a fan-favourite but respected as a useful debugging aid.",
+      "kindle_notes": "Can be handy on Kindles when debugging whether KOReader itself vs. Amazon framework is responsible for drain; otherwise adds background bookkeeping.",
+      "references": [
+        "https://github.com/koreader/koreader/wiki/Battery-statistics"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "bookshortcuts",
+      "fullname": "Book shortcuts",
+      "category": "ui",
+      "ship_default_on": "never",
+      "ship_default_rationale": "Power-user convenience that requires the user to already know which files they want shortcuts for; disabling keeps the menu uncluttered by default.",
+      "description_verbatim": "This plugin allows adding a book shortcut to a gesture.",
+      "description_paraphrased": "Lets you bind a specific book (or other file) to a gesture or profile so it opens directly without the file browser.",
+      "community_sentiment": "Very little chatter; it mostly appears in recent PRs extending the plugin (script execution, opening files with an associated provider like TextViewer for crash.log). Seen as a power-user glue feature rather than a mainstream one.",
+      "kindle_notes": "",
+      "references": [
+        "https://github.com/koreader/koreader/pull/13106",
+        "https://github.com/koreader/koreader/pull/13393"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "calibre",
+      "fullname": "Calibre",
+      "category": "sync",
+      "ship_default_on": "always",
+      "ship_default_rationale": "Idle until you tap Connect; the canonical companion workflow for any Kindle user who owns a Calibre library.",
+      "description_verbatim": "Integration with calibre. Send documents from calibre library via Wi-Fi and search calibre metadata.",
+      "description_paraphrased": "Connects KOReader to a running Calibre instance over Wi-Fi so you can push books wirelessly from your library and search Calibre's metadata on the device.",
+      "community_sentiment": "Widely used and considered the standard wireless pipeline to a jailbroken Kindle, with multiple tutorials and YouTube walkthroughs. The main complaints are setup friction: firewall/port issues, timeouts when the laptop and Kindle aren't on the same subnet, and books occasionally not appearing until the inbox folder is refreshed.",
+      "kindle_notes": "Requires the Kindle's Wi-Fi to stay awake for the duration of the transfer; aggressive Wi-Fi sleep will drop the connection. Calibre uses TCP 9090 plus several UDP discovery ports, so a locked-down PC firewall is the usual culprit when the Kindle can't see the server.",
+      "references": [
+        "https://github.com/koreader/koreader/wiki/calibre",
+        "https://www.mobileread.com/forums/showthread.php?t=367645",
+        "https://github.com/koreader/koreader/issues/13406"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "cloudstorage",
+      "fullname": "Cloud storage+",
+      "category": "sync",
+      "ship_default_on": "always",
+      "ship_default_rationale": "Harmless when unconfigured and the primary wireless alternative for users who don't run Calibre; adding an account is opt-in.",
+      "description_verbatim": "Provides access to cloud storage.",
+      "description_paraphrased": "Mounts remote folders from Dropbox, WebDAV, FTP, or SFTP inside the KOReader file browser so you can download books (and sync some folders) without plugging in.",
+      "community_sentiment": "Generally positive as a lightweight way to pull books onto a Kindle, with a popular MobileRead walkthrough for Dropbox. Recurring pain points: Dropbox access tokens expire after 4 hours so users must jump through the refresh-token dance, and WebDAV against some servers (Nextcloud, certain NAS setups) fails to add the account on Kindle even when it works from a PC.",
+      "kindle_notes": "All operations require live Wi-Fi, and Kindles drop Wi-Fi aggressively when idle; expect to reconnect before each sync. Dropbox auth on a Kindle's tiny keyboard is painful, so many users paste the refresh token via settings.reader.lua instead.",
+      "references": [
+        "https://www.mobileread.com/forums/showthread.php?t=353670",
+        "https://github.com/koreader/koreader/issues/14036",
+        "https://koreader.rocks/user_guide/"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "coverbrowser",
+      "fullname": "Cover browser",
+      "category": "ui",
+      "ship_default_on": "always",
+      "ship_default_rationale": "Turns a spartan filename list into a visual library, which is what most Kindle users expect coming from the stock reader.",
+      "description_verbatim": "Alternative display modes for file browser and history.",
+      "description_paraphrased": "Replaces the plain file-browser list with cover-thumbnail views (mosaic/grid and detailed list) for the file browser and history.",
+      "community_sentiment": "Generally well-liked on MobileRead as the feature that makes KOReader's file browser feel modern; the dedicated 'Plugin CoverBrowser' thread has long been an active spot for tips and cache/thumbnail troubleshooting. Main friction is initial thumbnail-cache build time on large libraries.",
+      "kindle_notes": "First-time mosaic view on a large library can take a while to render thumbnails on older Kindle hardware.",
+      "references": [
+        "https://github.com/koreader/koreader/wiki/Cover-browser",
+        "https://www.mobileread.com/forums/showthread.php?t=339681"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "coverimage",
+      "fullname": "Cover image",
+      "category": "ui",
+      "ship_default_on": "never",
+      "ship_default_rationale": "Primarily a workaround for Android/Tolino/Onyx/PocketBook screensavers; Kindle uses its own screensaver pipeline and most users don't need this.",
+      "description_verbatim": "Stores cover image to a file.",
+      "description_paraphrased": "Writes the current book's cover to a file on disk so other system components (e.g. a screensaver) can pick it up.",
+      "community_sentiment": "Niche but appreciated by users of Tolino and Onyx Boox who want current-book covers as sleep screens. Little Kindle-specific discussion — it's mostly configured by users who already know exactly what they want.",
+      "kindle_notes": "Kindle doesn't consume this file out of the box; you'd need a separate mod to turn it into a screensaver. Safe to leave off by default on Kindle.",
+      "references": [
+        "https://github.com/koreader/koreader/wiki/Coverimage"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "docsettingtweak",
+      "fullname": "Tweak document settings",
+      "category": "reading",
+      "ship_default_on": "never",
+      "ship_default_rationale": "Requires hand-edited Lua templates and is dev-adjacent; most users will never touch directory_defaults_template.lua.",
+      "description_verbatim": "This plugin allows you to tweak document settings before the document is loaded based on external factors.",
+      "description_paraphrased": "Applies per-directory default document settings (style tweaks, margins, etc.) so books in a given folder open with pre-chosen preferences.",
+      "community_sentiment": "Discussion is almost entirely on GitHub PRs and a style-tweak-by-directory discussion thread. October 2025 changes fixed it being incorrectly disabled on non-touch Kindles and switched it to absolute paths. No real forum/Reddit user-facing feedback.",
+      "kindle_notes": "As of October 2025 the plugin is no longer auto-disabled on non-touch Kindles.",
+      "references": [
+        "https://github.com/koreader/koreader/pull/14412",
+        "https://github.com/koreader/koreader/discussions/14913"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "exporter",
+      "fullname": "Export highlights",
+      "category": "sync",
+      "ship_default_on": "always",
+      "ship_default_rationale": "Inert without credentials, but one of the headline reasons power users run KOReader on Kindle, so shipping it enabled costs nothing.",
+      "description_verbatim": "Exports highlights and notes.",
+      "description_paraphrased": "Pushes highlights and notes (from both KOReader and the native Kindle reader) out to Readwise, Joplin, or Nextcloud Notes, or to local JSON / HTML / Markdown / TXT files.",
+      "community_sentiment": "Highly valued by the highlight-workflow crowd (Readwise and Obsidian-via-Joplin users), and actively maintained: Readwise support landed in PR #8548 and is a frequent topic on MobileRead. The main friction is flaky 'Export all notes in your library' runs that intermittently fail against Readwise, tracked in issue #12213.",
+      "kindle_notes": "Export runs over HTTPS and needs Wi-Fi up for the whole batch; large libraries can take minutes, so force Wi-Fi on before hitting export. Pulling highlights from the native Kindle reader requires that the clippings file be readable, which works out of the box on KUAL-installed KOReader.",
+      "references": [
+        "https://github.com/koreader/koreader/wiki/Highlight-export",
+        "https://github.com/koreader/koreader/issues/12213",
+        "https://www.mobileread.com/forums/showthread.php?t=367730"
+      ],
+      "deprecated": {
+        "kind": "feature",
+        "detail": "Joplin"
+      },
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "externalkeyboard",
+      "fullname": "External keyboard",
+      "category": "accessibility",
+      "ship_default_on": "hardware_gated",
+      "ship_default_rationale": "Requires the device to support USB host/OTG, which most Kindles do not.",
+      "description_verbatim": "Manages USB OTG and configures keyboard.",
+      "description_paraphrased": "Detects USB-OTG keyboards when plugged in and wires them up as input devices for KOReader.",
+      "community_sentiment": "Small but enthusiastic user base that pairs keyboards for typing notes or as page-turner pedals. Multiple GitHub issues show Android/Kindle users asking for broader support; on Kindle it's reported as working only on select models with extra hardware, and connecting USB while KOReader runs is generally risky.",
+      "kindle_notes": "USB OTG on Kindle is limited and fragile — switching to USBMS while KOReader is active can crash the device. Leave off unless the user explicitly wants a keyboard.",
+      "references": [
+        "https://github.com/koreader/koreader/issues/13240",
+        "https://github.com/koreader/koreader/issues/9840",
+        "https://www.mobileread.com/forums/showthread.php?t=346884"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "gestures",
+      "fullname": "Gestures",
+      "category": "ui",
+      "ship_default_on": "always",
+      "ship_default_rationale": "Every Kindle has a touchscreen and KOReader's default tap zones (page turn, menus) are driven through this plugin; disabling it cripples navigation.",
+      "description_verbatim": "This plugin provides gesture support.",
+      "description_paraphrased": "Central manager for tap zones, swipes, multiswipes, and (with a keyboard) key shortcuts, letting you bind hundreds of actions to any input.",
+      "community_sentiment": "Widely praised as KOReader's killer feature; MobileRead and eReadersForum threads routinely recommend customizing tap zones (e.g. 75/25 forward/back) and multiswipes. Non-touch Kindle 4 users still lack an equivalent manager and have an open FR (#12744) asking for one.",
+      "kindle_notes": "All modern touchscreen Kindles are supported; non-touch Kindle 4 relies on the ENTER/OK key instead of gestures.",
+      "references": [
+        "https://github.com/koreader/koreader/wiki/KOReader-Gestures",
+        "https://www.ereadersforum.com/threads/how-to-customize-page-turns-and-gestures-in-koreader-on-any-e-reader.7807/",
+        "https://github.com/koreader/koreader/issues/12744"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "hello",
+      "fullname": "Hello",
+      "category": "dev",
+      "ship_default_on": "never",
+      "ship_default_rationale": "It is an internal scaffolding/debug plugin with no user value; KOReader itself ships it disabled.",
+      "description_verbatim": "This is a debugging plugin.",
+      "description_paraphrased": "A minimal example/debug plugin that just prints the KOReader version, used as a template for plugin authors.",
+      "community_sentiment": "No meaningful user discussion exists; it is only referenced in plugin-development tutorials as a 'hello world' starting point.",
+      "kindle_notes": "",
+      "references": [
+        "https://github.com/koreader/koreader/blob/master/plugins/hello.koplugin/main.lua"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "hotkeys",
+      "fullname": "Hotkeys",
+      "category": "accessibility",
+      "ship_default_on": "hardware_gated",
+      "ship_default_rationale": "Explicitly described as for devices with physical keys; most modern Kindles are touch-only.",
+      "description_verbatim": "This plugin provides custom shortcut support for devices with physical keys.",
+      "description_paraphrased": "Lets you assign custom actions to the device's physical buttons.",
+      "community_sentiment": "Loved on Kindles with page-turn buttons (Oasis, Voyage haptic bars, old keyboard Kindles) where users map next/prev page and menu shortcuts. No real negative sentiment found; it's a set-and-forget feature.",
+      "kindle_notes": "Useful on Kindle Oasis and older keyboard/button Kindles. Pointless on touch-only Paperwhites and base Kindles.",
+      "references": [
+        "https://github.com/koreader/koreader/tree/master/plugins/hotkeys.koplugin"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "httpinspector",
+      "fullname": "HTTP KOReader Inspector",
+      "category": "dev",
+      "ship_default_on": "never",
+      "ship_default_rationale": "The plugin's own description warns of security risk; it is aimed at developers and must only run on trusted networks.",
+      "description_verbatim": "Allow browsing KOReader internal objects over HTTP. This is aimed at developers, and may pose some security risks. Only enable this on networks you can trust.",
+      "description_paraphrased": "Exposes KOReader's internal objects and actions over an HTTP endpoint so developers can introspect and remote-control the app.",
+      "community_sentiment": "Warmly received by the developer/tinkerer niche — people build Go clients, automation scripts, and remote control hacks on top of it. Ordinary readers do not discuss it; most tickets are crash/port-conflict bug reports rather than feature praise.",
+      "kindle_notes": "On a Kindle often sharing public Wi-Fi, leaving this on is an unnecessary attack surface; keep off by default.",
+      "references": [
+        "https://github.com/koreader/koreader/pull/11457",
+        "https://github.com/koreader/koreader/discussions/14208",
+        "https://github.com/consoleaf/koreader-http-inspector"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "japanese",
+      "fullname": "Japanese support",
+      "category": "reading",
+      "ship_default_on": "never",
+      "ship_default_rationale": "Language pack; useless (and menu-cluttering) unless the reader actually reads Japanese and has installed a JP StarDict dictionary.",
+      "description_verbatim": "Japanese language support for KOReader, modeled after Yomichan.\n\nThis plugin extends KOReader's built-in dictionary and selection system to support Yomichan-style deinflection and text scanning, allowing for one-tap searches of inflected verbs and multi-character words and phrases. As such, this plugin removes the need for synonym-based deinflection rules for StarDict-converted Japanese dictionaries.\n\nYou must have at least one Japanese dictionary installed in order for this plugin to work smoothly with Japanese text.",
+      "description_paraphrased": "Yomichan-style language support for Japanese: one-tap selection of inflected verbs/phrases plus deinflection back to dictionary form for accurate lookups.",
+      "community_sentiment": "Positive among JP-learner users who compare it favorably to Yomichan on PC; main gripes are that deinflection paths aren't shown in the dictionary popup and that fuzzy search must be disabled for JP. Niche but appreciated.",
+      "kindle_notes": "Requires a Japanese StarDict dictionary installed separately; fuzzy search should be turned off for JP lookups to work.",
+      "references": [
+        "https://github.com/koreader/koreader/wiki/Japanese-Support",
+        "https://github.com/koreader/koreader/pull/8312",
+        "https://github.com/koreader/koreader/issues/9283"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "keepalive",
+      "fullname": "Keep alive",
+      "category": "system",
+      "ship_default_on": "never",
+      "ship_default_rationale": "Directly works against autosuspend and will drain the battery hard if left on; it's a temporary toggle for syncs and downloads.",
+      "description_verbatim": "Keeps the device awake to prevent automatic Wi-Fi disconnects.",
+      "description_paraphrased": "Stops the device from auto-sleeping so that Wi-Fi doesn't drop during long-running tasks.",
+      "community_sentiment": "Users turn it on deliberately for long OPDS downloads, big sync operations, or SSH sessions, then turn it off. Not much drama around it — its purpose is narrow and well-understood.",
+      "kindle_notes": "Safe to have installed; should not be auto-enabled. Users should know to flip it off after finishing a network task.",
+      "references": [
+        "https://github.com/koreader/koreader/wiki/Keep-alive"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "kosync",
+      "fullname": "Progress sync",
+      "category": "sync",
+      "ship_default_on": "never",
+      "ship_default_rationale": "Useless without an account on sync.koreader.rocks or a self-hosted koreader-sync-server, and silently posts to the network once enabled.",
+      "description_verbatim": "Synchronizes your reading progress to a server across your KOReader devices.",
+      "description_paraphrased": "Keeps your furthest-read page in sync across devices by posting an anonymised document hash and progress marker to a KOReader sync server.",
+      "community_sentiment": "The go-to solution for people reading the same book on a Kindle and a phone/Kobo, and praised for its privacy story (only MD5 hash + progress, all over HTTPS). Typical complaints are around registration failures on koreader.rocks and intermittent 'unable to register' errors, which is why bridges like abs-kosync-bridge and self-hosted instances are common.",
+      "kindle_notes": "Auto-sync fires on book open/close, so the Kindle must wake Wi-Fi at exactly those moments; expect occasional missed syncs. Registration over the Kindle's keyboard is painful, so most users create the account on a computer first and just log in on the device.",
+      "references": [
+        "https://github.com/koreader/koreader/wiki/Progress-sync",
+        "https://github.com/koreader/koreader-sync-server",
+        "https://www.mobileread.com/forums/showthread.php?t=354035"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "movetoarchive",
+      "fullname": "Move to archive",
+      "category": "ui",
+      "ship_default_on": "never",
+      "ship_default_rationale": "Does nothing until the user points it at an archive folder, and most Kindle users already have their own organisation scheme; better to leave it off and let people opt in.",
+      "description_verbatim": "Moves or copies the current book to the archive folder.",
+      "description_paraphrased": "Adds a one-tap action to move or copy the book you just finished into a preset archive folder.",
+      "community_sentiment": "Niche but quietly useful; no rave threads, mostly GitHub traffic around bugs like the crash-on-missing-folder (issue #11245, fixed in PR #11262). No meaningful Reddit discussion found.",
+      "kindle_notes": "Purely local file move, so no Wi-Fi or account required. On Kindle the archive folder should live under the KOReader library root (e.g. /mnt/us/documents/archive) so the native Kindle reader doesn't also index it.",
+      "references": [
+        "https://github.com/koreader/koreader/pull/6101",
+        "https://github.com/koreader/koreader/issues/11245",
+        "https://github.com/koreader/koreader/pull/11262"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "newsdownloader",
+      "fullname": "News downloader",
+      "category": "sync",
+      "ship_default_on": "never",
+      "ship_default_rationale": "Requires hand-editing a JSON-ish Lua feeds file before it does anything, and an unconfigured plugin adds menu clutter for users who don't want RSS.",
+      "description_verbatim": "Retrieves RSS and Atom news entries and saves them as HTML files.",
+      "description_paraphrased": "Fetches RSS and Atom feeds and saves each entry as an HTML (or EPUB) file you can read offline like any other book.",
+      "community_sentiment": "Appreciated as a 'free Kindle-newsstand' replacement and covered in the 2024.04 release notes, but the config UX is widely criticised: users have to edit a feeds file by hand and get caught by the 'comma at the end of each line' rule. Recent issues (#9467, #13933, #9225) point to crashes with BOM-prefixed feeds and a long-standing rebuild request.",
+      "kindle_notes": "Needs Wi-Fi during the download cycle; budget a minute or two while feeds are pulled. Kindle Paperwhite 5 users have reported crashes when adding feeds (issue #13933), so the plugin is less polished on current-gen hardware than QuickRSS alternatives.",
+      "references": [
+        "https://github.com/koreader/koreader/wiki/News-downloader",
+        "https://github.com/koreader/koreader/issues/9225",
+        "https://www.mobileread.com/forums/showthread.php?t=289858"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "opds",
+      "fullname": "OPDS",
+      "category": "sync",
+      "ship_default_on": "always",
+      "ship_default_rationale": "The single most popular way to get books onto a Kindle wirelessly; safe when unused and ships with sensible public catalogs preloaded.",
+      "description_verbatim": "OPDS allows you to download books from online catalogs.",
+      "description_paraphrased": "Browses OPDS catalogs (Calibre Content Server, Calibre-Web, Komga, Standard Ebooks, Project Gutenberg, etc.) straight from KOReader and downloads books over Wi-Fi.",
+      "community_sentiment": "Universally praised - MobileRead has dozens of OPDS threads, and the community even maintains an enhanced 'OPDS Plus' fork with grid view and covers. Typical friction is HTTPS + basic auth against Calibre-Web and the occasional 'book downloaded via OPDS only visible in KOReader' confusion, which is really a native-reader indexing issue, not the plugin's fault.",
+      "kindle_notes": "Needs Wi-Fi during browsing and download; Kindle Wi-Fi sleep will kill in-flight downloads of large books. Books land under KOReader's download folder, so they show up in KOReader immediately but not in the native Kindle library unless you also copy them to /mnt/us/documents.",
+      "references": [
+        "https://www.mobileread.com/forums/showthread.php?t=370780",
+        "https://www.mobileread.com/forums/showthread.php?t=369405",
+        "https://www.mobileread.com/forums/showthread.php?t=336372"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "perceptionexpander",
+      "fullname": "Perception expander",
+      "category": "accessibility",
+      "ship_default_on": "never",
+      "ship_default_rationale": "Highly niche visual overlay that most readers find distracting; opt-in only.",
+      "description_verbatim": "Improves your reading speed with the help of two vertical lines over the text.",
+      "description_paraphrased": "Draws two adjustable vertical guide lines on the page as a peripheral-vision speed-reading aid inspired by Tim Ferriss's technique.",
+      "community_sentiment": "Small but vocal enthusiast following; the existing MobileRead thread is mostly about tuning line length and position. Recurring complaints are custom settings resetting every 40-60 pages and a burn-in concern that prompted an FR to shift the lines over time.",
+      "kindle_notes": "E-ink burn-in from the static vertical lines is a real concern raised in issue #12696; not recommended for long continuous use on older Kindles.",
+      "references": [
+        "https://github.com/koreader/koreader/wiki/Perception-Expander-plugin",
+        "https://www.mobileread.com/forums/showthread.php?t=353432",
+        "https://github.com/koreader/koreader/issues/12696"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "profiles",
+      "fullname": "Profiles",
+      "category": "reading",
+      "ship_default_on": "always",
+      "ship_default_rationale": "Low-risk power tool; disabled it does nothing, enabled it unlocks one-tap day/night, comics/novels, landscape/portrait switches that users ask for constantly.",
+      "description_verbatim": "This plugin allows combining multiple settings to make switchable 'profiles'.",
+      "description_paraphrased": "Saves bundles of reader settings (font, spacing, margins, frontlight, refresh rate, etc.) so you can switch between setups in one tap.",
+      "community_sentiment": "Strong positive sentiment across the wiki, MobileRead, and GitHub discussion #13280 — users cite day/night, double-column landscape, 'bad HTML' style-disable, and per-collection comics profiles. Main pain point is UX around editing and auto-applying profiles (issue #9391).",
+      "kindle_notes": "",
+      "references": [
+        "https://github.com/koreader/koreader/wiki/Profiles",
+        "https://github.com/koreader/koreader/discussions/13280",
+        "https://github.com/koreader/koreader/issues/9391"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "qrclipboard",
+      "fullname": "QR from clipboard",
+      "category": "ui",
+      "ship_default_on": "never",
+      "ship_default_rationale": "Useful only for the specific 'send this quote/URL to my phone' workflow; not needed for reading and easily added later.",
+      "description_verbatim": "This plugin generates a QR code from clipboard content.",
+      "description_paraphrased": "Turns the current clipboard text (or a highlighted passage) into a QR code on screen, so you can scan it to your phone.",
+      "community_sentiment": "Limited public discussion; recent PRs (#12746, #12833) added a QR button directly to the highlight popup and fixed a bug, suggesting modest but active interest. No substantial Reddit or MobileRead threads.",
+      "kindle_notes": "",
+      "references": [
+        "https://github.com/koreader/koreader/pull/12746",
+        "https://github.com/koreader/koreader/issues/11909"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "readtimer",
+      "fullname": "Read timer",
+      "category": "reading",
+      "ship_default_on": "always",
+      "ship_default_rationale": "Tiny footprint, zero side effects when unused, and a common 'one small thing I missed' feature; safe to ship on.",
+      "description_verbatim": "Shows an alarm after a specified amount of time.",
+      "description_paraphrased": "A simple countdown timer that pops a message when it expires — handy for break reminders or time-boxed reading sessions.",
+      "community_sentiment": "Users generally like it but have steady complaints: it sometimes triggers on its own after device boot (#9276), pauses are delayed by a couple of minutes after sleep (#13547), and some devices see it run slowly (#14661). A community 'break timer' fork builds on it for recurring breaks.",
+      "kindle_notes": "On Kindle the pause-on-sleep lag means the timer can overrun real reading time by a minute or two.",
+      "references": [
+        "https://github.com/koreader/koreader/wiki/Read-timer",
+        "https://github.com/koreader/koreader/issues/9216",
+        "https://github.com/jwillikers/koreader-break-timer"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "statistics",
+      "fullname": "Reading statistics",
+      "category": "reading",
+      "ship_default_on": "always",
+      "ship_default_rationale": "One of KOReader's most-loved features and a primary reason users switch from stock readers; expected to be on for any typical user.",
+      "description_verbatim": "Keeps and displays your reading statistics.",
+      "description_paraphrased": "Tracks how long you spend on each page and builds a per-book reading history with daily, weekly and calendar-style breakdowns.",
+      "community_sentiment": "Widely considered a flagship feature. Users rave about the per-book analytics and heatmaps, and a whole ecosystem of third-party tools (KoInsight, KoShelf, reading-streak plugins) exists purely to consume its statistics.sqlite3 database. Common complaint: it skips PDF/DjVu/CBZ.",
+      "kindle_notes": "Works well on all supported Kindles; sqlite file lives under koreader/settings and survives KOReader upgrades, so it is safe to preserve across reinstalls.",
+      "references": [
+        "https://github.com/koreader/koreader/wiki/Statistics-plugin",
+        "https://github.com/GeorgeSG/KoInsight",
+        "https://www.mobileread.com/forums/showthread.php?t=365263"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "systemstat",
+      "fullname": "System statistics",
+      "category": "dev",
+      "ship_default_on": "never",
+      "ship_default_rationale": "Useful for diagnostics and bug reports, but normal readers do not need system metrics visible; leaving it off keeps the menu clean.",
+      "description_verbatim": "Shows system statistics.",
+      "description_paraphrased": "Displays device-level information such as uptime, CPU, memory and storage usage inside a KOReader dialog.",
+      "community_sentiment": "Little fan discussion; it surfaces mainly in bug-report threads where maintainers ask users to share system stats. Respected as a diagnostic aid rather than a day-to-day feature.",
+      "kindle_notes": "",
+      "references": [
+        "https://github.com/koreader/koreader/wiki/System-statistics"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "terminal",
+      "fullname": "Terminal emulator",
+      "category": "dev",
+      "ship_default_on": "never",
+      "ship_default_rationale": "Developer/power-user tool with no benefit for a typical reader; can also be broken depending on the shell available on the device.",
+      "description_verbatim": "KOReader's terminal emulator.",
+      "description_paraphrased": "Opens a simple in-app shell that runs one-shot Unix commands and prints their output.",
+      "community_sentiment": "Handy for modders who occasionally want to run a shell script or inspect the filesystem without SSH. Users report it doesn't preserve state between commands and that on some Kindle NT (new Kindle Scribe-era) firmware the default shell path is wrong and the terminal fails to launch.",
+      "kindle_notes": "Works on jailbroken Kindles with a usable /bin/sh; on newer NT-based Kindles there are reports it simply doesn't open. Off by default is the right call.",
+      "references": [
+        "https://github.com/koreader/koreader/wiki/Terminal-emulator",
+        "https://github.com/koreader/koreader/issues/12760"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "texteditor",
+      "fullname": "Text editor",
+      "category": "dev",
+      "ship_default_on": "never",
+      "ship_default_rationale": "Editing arbitrary files on a Kindle is a foot-gun (settings, lua configs); best left opt-in so casual users can't brick their config by accident.",
+      "description_verbatim": "A basic text editor for making small changes to plain text files.",
+      "description_paraphrased": "A lightweight in-app editor for viewing and modifying small plain-text files directly on the device.",
+      "community_sentiment": "Appreciated by power users who edit News Downloader feeds or tweak config files on-device without a computer. Not mainstream, but treated as a quiet convenience rather than a headline feature.",
+      "kindle_notes": "On a Kindle without easy SSH/USB access this is one of the only ways to tweak config files on the device, which is exactly why it is risky to enable by default.",
+      "references": [
+        "https://github.com/koreader/koreader/issues/4033",
+        "https://koreader.rocks/user_guide/"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "timesync",
+      "fullname": "Time sync",
+      "category": "system",
+      "ship_default_on": "always",
+      "ship_default_rationale": "Kindles in airplane mode or long offline stretches drift; a correct clock keeps statistics, timestamps, and autowarmth schedules accurate. Cheap and safe.",
+      "description_verbatim": "Synchronizes the device time with NTP servers.",
+      "description_paraphrased": "Fetches the current time from an NTP server and updates the device clock.",
+      "community_sentiment": "Low-drama utility, mostly appreciated silently. Main reported issue is on newer Kindle NT firmware where time sync (like terminal) can fail because the plugin can't execute the expected binary — tracked upstream.",
+      "kindle_notes": "Needs Wi-Fi to actually sync; otherwise a silent no-op. No root/jailbreak beyond what KOReader itself already requires.",
+      "references": [
+        "https://github.com/koreader/koreader/wiki/Time-sync",
+        "https://github.com/koreader/koreader/issues/12760"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "vocabbuilder",
+      "fullname": "Vocabulary builder",
+      "category": "reading",
+      "ship_default_on": "always",
+      "ship_default_rationale": "Broadly loved, low-risk, and directly complements dictionary lookups; KOReader ships it enabled by default and the community treats it as a standout feature for non-native readers.",
+      "description_verbatim": "This plugin processes dictionary word lookups and uses spaced repetition to help you remember new words.",
+      "description_paraphrased": "Turns your dictionary lookups into spaced-repetition flashcards so words you look up while reading become words you actually learn.",
+      "community_sentiment": "Strongly positive, especially from language learners who read in a second language. Users praise the auto-collection from dictionary lookups and the Forgot/Got it flow; feature requests focus on tuning intervals, filtering by book, and exporting — signs of engaged use rather than complaint.",
+      "kindle_notes": "Database (vocabulary_builder.sqlite3) should be preserved across KOReader reinstalls on Kindle; do not downgrade KOReader after the DB has been written by a newer version.",
+      "references": [
+        "https://github.com/koreader/koreader/wiki/Vocabulary-builder",
+        "https://github.com/koreader/koreader/discussions/9256"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    },
+    {
+      "name": "wallabag",
+      "fullname": "Wallabag",
+      "category": "sync",
+      "ship_default_on": "never",
+      "ship_default_rationale": "Does nothing without a Wallabag server plus four pieces of OAuth credentials, and also fires background network calls once enabled.",
+      "description_verbatim": "Synchronises articles with a Wallabag server.",
+      "description_paraphrased": "Pulls saved articles from your Wallabag server, converts each into an EPUB for offline reading, and syncs archive/delete state back.",
+      "community_sentiment": "The read-it-later plugin everyone points to - blog posts from anarcat, jqno.nl, LinuxLiaison and a KDE planet post all rate it higher than the third-party Wallabako tool, citing cleaner sync and full KOReader typography control. No major complaints beyond the initial four-field credential setup and the requirement to restart KOReader after changing server settings.",
+      "kindle_notes": "Self-hosted or app.wallabag.it account required, plus Client ID / Client Secret from the server's API Clients page. Sync needs Wi-Fi; on Kindle, trigger it manually rather than relying on an auto-sync schedule because the radio will usually be asleep.",
+      "references": [
+        "https://github.com/koreader/koreader/wiki/Wallabag",
+        "https://planet.kde.org/matija-suklje-hook-2025-05-24-trying-out-koreader-and-wallabag-the-first-few-days-and-months/",
+        "https://bnolet.me/posts/2024/11/wallabag-kobo-offline-reading-bliss/"
+      ],
+      "deprecated": null,
+      "computed": false,
+      "warnings": []
+    }
+  ]
+}

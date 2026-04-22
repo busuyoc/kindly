@@ -23,6 +23,9 @@ import { type CliEnv, resolveMount } from "../cli/env.ts";
 import { dim, heading, info, ok, warn } from "../cli/log.ts";
 import { createTarGz, extractTarGz, listTarGz } from "../fs/archive.ts";
 import { safeWrite } from "../fs/safeWrite.ts";
+import type { RollbackResult } from "../types/results.ts";
+import { KindlyError, ErrorCodes } from "../types/errors.ts";
+import { emitJson } from "../cli/json.ts";
 
 const FLAGS = {
     "dry-run": {
@@ -44,17 +47,20 @@ const FLAGS = {
 const SETTINGS_FILENAME = "settings.reader.lua";
 const FAT_FILENAME = "plugins-patches.tar.gz";
 
-export async function runRollback(argv: readonly string[], env: CliEnv): Promise<number> {
-    const { flags, positional } = parseArgs(argv, FLAGS);
-    const snapArg = positional[0];
-    if (!snapArg) throw new ArgError("usage: kindly rollback <snapshot-dir> [options]");
-    if (positional.length > 1) {
-        throw new ArgError(`unexpected extra argument: ${positional[1]}`);
-    }
+export interface RollbackOptions {
+    snapshotDir: string;
+    dryRun?: boolean;
+    safetySnapshot?: boolean;
+}
 
-    const snapshotDir = resolve(env.cwd, snapArg);
+export function executeRollback(opts: RollbackOptions, env: CliEnv): RollbackResult {
+    const snapshotDir = resolve(env.cwd, opts.snapshotDir);
     if (!existsSync(snapshotDir) || !statSync(snapshotDir).isDirectory()) {
-        throw new Error(`snapshot not found or not a directory: ${snapshotDir}`);
+        throw new KindlyError(
+            ErrorCodes.SNAPSHOT_INVALID,
+            `snapshot not found or not a directory: ${snapshotDir}`,
+            [{ text: "Pass a directory from `.kindly/pre-import/<stamp>/`." }],
+        );
     }
 
     const settingsSnap = join(snapshotDir, SETTINGS_FILENAME);
@@ -63,48 +69,44 @@ export async function runRollback(argv: readonly string[], env: CliEnv): Promise
     const hasFat = existsSync(fatSnap);
 
     if (!hasSettings && !hasFat) {
-        throw new Error(
-            `snapshot ${snapshotDir} is empty — expected ${SETTINGS_FILENAME} or ${FAT_FILENAME}.`
+        throw new KindlyError(
+            ErrorCodes.SNAPSHOT_INVALID,
+            `snapshot ${snapshotDir} is empty — expected ${SETTINGS_FILENAME} or ${FAT_FILENAME}.`,
+            [{ text: "Point at a kindly pre-import snapshot directory, not an arbitrary folder." }],
         );
     }
 
-    if (flags.mount) env = { ...env, mountOverride: flags.mount };
     const mount = resolveMount(env);
-
-    heading(env, `rollback from ${snapshotDir}`);
-
     const fatEntries: string[] = hasFat ? listTarGz(fatSnap) : [];
-    if (hasSettings) {
-        info(env, `  settings: ${SETTINGS_FILENAME} (${statSync(settingsSnap).size} bytes)`);
-    }
-    if (hasFat) {
-        info(env, `  fat state: ${fatEntries.length} path(s) will be restored from ${FAT_FILENAME}`);
-        for (const e of fatEntries.slice(0, 12)) info(env, dim(env, `    - ${e}`));
-        if (fatEntries.length > 12) info(env, dim(env, `    ... and ${fatEntries.length - 12} more`));
-    }
 
-    if (flags["dry-run"]) {
-        info(env, "");
-        info(env, dim(env, "(--dry-run — nothing written)"));
-        return 0;
+    if (opts.dryRun) {
+        return {
+            mode: "dry-run",
+            snapshotDir,
+            settingsRestored: false,
+            fatRestored: false,
+            fatEntries,
+            fatFileCount: 0,
+            preRollbackDir: null,
+        };
     }
 
     // Pre-rollback safety snapshot. Mirrors the snapshot we're rolling
     // BACK to, one level deeper: current device state → .kindly/pre-rollback/<stamp>/.
     let preRollbackDir: string | null = null;
-    if (flags["safety-snapshot"]) {
+    if (opts.safetySnapshot !== false) {
         const stamp = env.now().toISOString().replace(/[:.]/g, "-");
         preRollbackDir = join(env.cwd, ".kindly", "pre-rollback", stamp);
         mkdirSync(preRollbackDir, { recursive: true });
     }
 
+    let settingsRestored = false;
     if (hasSettings) {
         // Mirror the pre-import layout: stamp dir holds the file directly,
         // no extra nesting. Do the backup ourselves and tell safeWrite to
         // skip its own timestamped archive.
-        let settingsBackupPath: string | null = null;
         if (preRollbackDir && existsSync(mount.settingsPath)) {
-            settingsBackupPath = join(preRollbackDir, basename(mount.settingsPath));
+            const settingsBackupPath = join(preRollbackDir, basename(mount.settingsPath));
             copyFileSync(mount.settingsPath, settingsBackupPath);
         }
         const buf = readFileSync(settingsSnap);
@@ -112,10 +114,11 @@ export async function runRollback(argv: readonly string[], env: CliEnv): Promise
             verifyLua: true,
             skipBackup: true,
         });
-        ok(env, `restored ${SETTINGS_FILENAME} → ${mount.settingsPath}`);
-        if (settingsBackupPath) info(env, dim(env, `  pre-rollback backup: ${settingsBackupPath}`));
+        settingsRestored = true;
     }
 
+    let fatRestored = false;
+    let fatFileCount = 0;
     if (hasFat) {
         if (preRollbackDir) {
             // createTarGz refuses empty input; filter to the paths still on device.
@@ -129,14 +132,84 @@ export async function runRollback(argv: readonly string[], env: CliEnv): Promise
                     paths: existing,
                     outputPath: preFat,
                 });
-                info(env, dim(env, `  pre-rollback backup: ${preFat}  (${existing.length} path(s))`));
             }
         }
         const r = extractTarGz({ archivePath: fatSnap, destRoot: mount.koreaderRoot });
-        ok(env, `restored ${r.fileCount} plugin/patch file(s) → ${mount.koreaderRoot}`);
+        fatRestored = true;
+        fatFileCount = r.fileCount;
     }
 
+    return {
+        mode: "rolled-back",
+        snapshotDir,
+        settingsRestored,
+        fatRestored,
+        fatEntries,
+        fatFileCount,
+        preRollbackDir,
+    };
+}
+
+export function renderRollback(result: RollbackResult, env: CliEnv): void {
+    const mount = { settingsPath: "" }; // placeholder — real paths live on result
+    void mount;
+
+    heading(env, `rollback from ${result.snapshotDir}`);
+
+    if (result.settingsRestored || (result.mode === "dry-run" && settingsPresent(result))) {
+        info(env, `  settings: ${SETTINGS_FILENAME}`);
+    }
+    if (result.fatEntries.length > 0) {
+        info(env, `  fat state: ${result.fatEntries.length} path(s) will be restored from ${FAT_FILENAME}`);
+        for (const e of result.fatEntries.slice(0, 12)) info(env, dim(env, `    - ${e}`));
+        if (result.fatEntries.length > 12) {
+            info(env, dim(env, `    ... and ${result.fatEntries.length - 12} more`));
+        }
+    }
+
+    if (result.mode === "dry-run") {
+        info(env, "");
+        info(env, dim(env, "(--dry-run — nothing written)"));
+        return;
+    }
+
+    if (result.settingsRestored) {
+        ok(env, `restored ${SETTINGS_FILENAME}`);
+        if (result.preRollbackDir) {
+            info(env, dim(env, `  pre-rollback backup: ${result.preRollbackDir}`));
+        }
+    }
+    if (result.fatRestored) {
+        ok(env, `restored ${result.fatFileCount} plugin/patch file(s)`);
+    }
     warn(env, "restart KOReader (or your Kindle) for changes to take effect.");
+}
+
+// Dry-run result doesn't expose a boolean for "settings is in the snapshot"
+// directly — infer from the fact that renderer is only called for non-empty
+// snapshots (executeRollback throws otherwise). We detect settings presence
+// by the FS state; but result.snapshotDir is trusted in renderer context.
+function settingsPresent(result: RollbackResult): boolean {
+    return existsSync(join(result.snapshotDir, SETTINGS_FILENAME));
+}
+
+export async function runRollback(argv: readonly string[], env: CliEnv): Promise<number> {
+    const { flags, positional } = parseArgs(argv, FLAGS);
+    const snapArg = positional[0];
+    if (!snapArg) throw new ArgError("usage: kindly rollback <snapshot-dir> [options]");
+    if (positional.length > 1) {
+        throw new ArgError(`unexpected extra argument: ${positional[1]}`);
+    }
+    if (flags.mount) env = { ...env, mountOverride: flags.mount };
+
+    const result = executeRollback({
+        snapshotDir: snapArg,
+        dryRun: flags["dry-run"],
+        safetySnapshot: flags["safety-snapshot"],
+    }, env);
+
+    if (env.jsonMode) emitJson(env, "rollback", result);
+    else renderRollback(result, env);
     return 0;
 }
 

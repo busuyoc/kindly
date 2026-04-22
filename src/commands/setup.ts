@@ -36,6 +36,11 @@ import {
 import {
     getTemplate, listTemplates, templateKeyCount, type Template,
 } from "../setup/templates.ts";
+import type {
+    SetupInspectResult, SetupExportResult, SetupImportResult,
+} from "../types/results.ts";
+import { emitJson } from "../cli/json.ts";
+import { KindlyError, ErrorCodes } from "../types/errors.ts";
 
 // ---- `kindly setup export` -------------------------------------------------
 
@@ -109,72 +114,74 @@ const EXPORT_FLAGS = {
         default: false,
         description: "suppress warnings for setting keys not in the KOReader schema (type mismatches still warn)",
     },
+    "dry-run": {
+        type: "boolean",
+        default: false,
+        description: "plan the export without writing — reports what would be written",
+    },
 } as const satisfies FlagSpecs;
 
-async function runSetupExport(argv: readonly string[], env: CliEnv): Promise<number> {
-    const { flags, positional } = parseArgs(argv, EXPORT_FLAGS);
+export interface SetupExportOptions {
+    name: string;
+    output?: string;
+    keys?: string;
+    applyMode?: "additive" | "replace";
+    template?: string;
+    description?: string;
+    author?: string;
+    tags?: string;
+    mount?: string;
+    force?: boolean;
+    includePluginFiles?: boolean;
+    includePatches?: boolean;
+    compatKoreaderMin?: string;
+    compatKoreaderMax?: string;
+    compatDevice?: string;
+    strict?: boolean;
+    allowUnknownKeys?: boolean;
+    dryRun?: boolean;
+}
 
-    const name = positional[0];
-    if (!name) {
-        throw new ArgError("usage: kindly setup export <name> [options]");
-    }
-    if (positional.length > 1) {
-        throw new ArgError(`unexpected extra argument: ${positional[1]}`);
-    }
+// schemaFindings travels on the result only when non-empty — renderer uses
+// it to reproduce the warning text that emitSchemaFindings would have written.
+type ExportResultWithSchema = SetupExportResult & {
+    schemaFindings?: ValidationReport;
+    /** Present when no settings were read from the device (template mode). */
+    sourcePath: string | null;
+    /** Bytes of plugin + patch files, for the "fat setup — ships N B" line. */
+    fatLuaBytes: number;
+};
 
-    // --apply-mode: explicit CLI > template default > "additive". Template
-    // resolution happens below; we validate the raw flag here and pick the
-    // effective value once both sources are known.
-    if (flags["apply-mode"] !== undefined
-        && flags["apply-mode"] !== "additive"
-        && flags["apply-mode"] !== "replace") {
-        throw new ArgError(
-            `--apply-mode must be 'additive' or 'replace' (got ${JSON.stringify(flags["apply-mode"])})`
-        );
-    }
-
-    // Resolve template first; it decides whether we need a mount for
-    // settings at all (templates bypass the device read).
-    const template: Template | undefined = flags.template
-        ? (getTemplate(flags.template) ?? throwUnknownTemplate(flags.template))
+export function executeSetupExport(
+    opts: SetupExportOptions,
+    env: CliEnv,
+): ExportResultWithSchema {
+    const template: Template | undefined = opts.template
+        ? (getTemplate(opts.template) ?? throwUnknownTemplate(opts.template))
         : undefined;
 
     const effectiveApplyMode: "additive" | "replace" =
-        (flags["apply-mode"] as "additive" | "replace" | undefined)
+        opts.applyMode
         ?? template?.apply_mode
         ?? "additive";
 
-    // Mount is needed whenever we read settings from the device (no
-    // template) OR when augmenting a template with fat content
-    // (--include-plugin-files / --include-patches scan the live device).
-    const needsMount = !template || flags["include-plugin-files"] || flags["include-patches"];
-    const mount = needsMount
-        ? (flags.mount ? resolveMount({ ...env, mountOverride: flags.mount }) : resolveMount(env))
-        : null;
+    const needsMount = !template || opts.includePluginFiles || opts.includePatches;
+    const mountEnv = opts.mount ? { ...env, mountOverride: opts.mount } : env;
+    const mount = needsMount ? resolveMount(mountEnv) : null;
 
     if (mount && !existsSync(mount.settingsPath) && !template) {
-        throw new Error(
+        throw new KindlyError(
+            ErrorCodes.SETTINGS_NOT_FOUND,
             `Kindle mount found at ${mount.root}, but ${mount.settingsPath} doesn't exist. ` +
-            `Is KOReader installed on this Kindle?`
+            `Is KOReader installed on this Kindle?`,
         );
     }
 
-    // Source of settings + plugins.disabled.
-    //
-    //   template set         → template's settings / plugins.disabled; no
-    //                          device read for settings (fat augment still
-    //                          reads the device below).
-    //   template NOT set     → existing flow: read device, filter, lift
-    //                          plugins_disabled.
-    //
-    // Secret filtering runs in both branches — templates shouldn't contain
-    // secrets, but `filterForYaml` is cheap defense-in-depth against a
-    // buggy template definition.
     let sourceSettings: Record<string, LuaValue>;
     let droppedSecrets: string[] = [];
     let droppedEphemerals: string[] = [];
+    let sourcePath: string | null = null;
     if (template) {
-        info(env, dim(env, `using template: ${template.id}`));
         const templateSettings = { ...(template.settings ?? {}) } as Record<string, LuaValue>;
         if (template.plugins?.disabled && template.plugins.disabled.length > 0) {
             const pd: Record<string, LuaValue> = {};
@@ -186,7 +193,7 @@ async function runSetupExport(argv: readonly string[], env: CliEnv): Promise<num
         droppedSecrets = filtered.droppedSecrets;
         droppedEphemerals = filtered.droppedEphemerals;
     } else {
-        info(env, dim(env, `reading ${mount!.settingsPath}`));
+        sourcePath = mount!.settingsPath;
         const raw = readFileSync(mount!.settingsPath, "utf8");
         const parsed = parseSettingsFile(raw) as Record<string, LuaValue>;
         const filtered = filterForYaml(parsed, "minimal");
@@ -195,9 +202,8 @@ async function runSetupExport(argv: readonly string[], env: CliEnv): Promise<num
         droppedEphemerals = filtered.droppedEphemerals;
     }
 
-    // Cherry-pick if --keys was passed. Warn per missing key, don't fail.
     let settings: Record<string, LuaValue> = sourceSettings;
-    const keysList = parseCsv(flags.keys);
+    const keysList = parseCsv(opts.keys);
     let skippedKeys = 0;
     if (keysList.length > 0) {
         const picked: Record<string, LuaValue> = {};
@@ -208,51 +214,53 @@ async function runSetupExport(argv: readonly string[], env: CliEnv): Promise<num
         settings = picked;
     }
 
-    // Lift KOReader's `plugins_disabled = { name = true, ... }` into
-    // manifest.plugins.disabled. Better data shape for UI/diff; trivially
-    // reversed on import.
     const { pluginsDisabled, settingsMinusPlugins } = liftPluginsDisabled(settings);
 
-    // Schema validation. Runs against the final settings shape that lands
-    // in the manifest. Unknown keys are almost always typos (nightmode vs
-    // night_mode) or plugin-scoped keys the schema doesn't know. Default
-    // is warn + proceed; --strict fails; --allow-unknown-keys suppresses
-    // unknown-key warnings (type mismatches always warn).
-    const exportReport = validateSettings(settingsMinusPlugins as Record<string, unknown>, loadSchema());
-    if (emitSchemaFindings(env, exportReport, { strict: flags.strict, allowUnknownKeys: flags["allow-unknown-keys"] })) {
-        return 1;
+    const exportReport = validateSettings(
+        settingsMinusPlugins as Record<string, unknown>,
+        loadSchema(),
+    );
+    const hasUnknowns = exportReport.unknownKeys.length > 0;
+    const hasMismatches = exportReport.typeMismatches.length > 0;
+    const showUnknowns = !opts.allowUnknownKeys;
+    const schemaBlocks = !!opts.strict
+        && ((showUnknowns && hasUnknowns) || hasMismatches);
+
+    if (schemaBlocks) {
+        const msg = formatValidationReport(exportReport, { showUnknowns });
+        throw new KindlyError(
+            ErrorCodes.SCHEMA_VIOLATION,
+            `${msg}\n--strict: aborting due to schema findings.`,
+            [
+                { text: "Review the listed keys — likely typos or plugin-scoped unknowns." },
+                { text: "Re-run without --strict, or pass --allow-unknown-keys if you're sure." },
+            ],
+        );
     }
 
-    // Fat collection — scan plugin dirs / patches if flagged. Empty
-    // results are fine: the manifest just stays lean. Templates can be
-    // fat-augmented: we use the live device's plugin/patch directories
-    // regardless of whether settings came from a template.
-    const collectedPlugins = flags["include-plugin-files"]
+    const collectedPlugins = opts.includePluginFiles
         ? collectPluginDirs(mount!.pluginsDir)
         : { declared: [] as EmbeddedFile[], files: new Map<string, Buffer>() };
-    const collectedPatches = flags["include-patches"]
+    const collectedPatches = opts.includePatches
         ? collectPatches(mount!.patchesDir)
         : { declared: [] as EmbeddedFile[], files: new Map<string, Buffer>() };
 
-    // Build + validate the manifest in one shot. If this throws, the bug is
-    // in our construction logic (validated inputs should always pass).
     const pluginsBlock = buildPluginsBlock(pluginsDisabled, collectedPlugins.declared);
     const compatBlock = buildCompatBlock(
-        flags["compat-koreader-min"],
-        flags["compat-koreader-max"],
-        parseCsv(flags["compat-device"]),
+        opts.compatKoreaderMin,
+        opts.compatKoreaderMax,
+        parseCsv(opts.compatDevice),
     );
-    // Description precedence: CLI --description > template description > none.
-    const effectiveDescription = flags.description ?? template?.description;
+    const effectiveDescription = opts.description ?? template?.description;
 
     const manifest = parseManifest({
         kindly_setup: "v1",
         meta: {
-            name,
-            ...(flags.author ? { author: flags.author } : {}),
+            name: opts.name,
+            ...(opts.author ? { author: opts.author } : {}),
             ...(effectiveDescription ? { description: effectiveDescription } : {}),
             created_at: env.now().toISOString(),
-            ...(parseCsv(flags.tags).length > 0 ? { tags: parseCsv(flags.tags) } : {}),
+            ...(parseCsv(opts.tags).length > 0 ? { tags: parseCsv(opts.tags) } : {}),
         },
         ...(compatBlock ? { compat: compatBlock } : {}),
         apply_mode: effectiveApplyMode,
@@ -262,63 +270,164 @@ async function runSetupExport(argv: readonly string[], env: CliEnv): Promise<num
     });
 
     const id = shortId(manifest);
+    const fullHash = manifestHash(manifest);
     const isFat = collectedPlugins.declared.length > 0 || collectedPatches.declared.length > 0;
+    const fatLuaBytes = totalBytes([...collectedPlugins.declared, ...collectedPatches.declared]);
 
-    const outPath = flags.output
-        ? resolve(env.cwd, flags.output)
-        : defaultOutputPath(env, id, name, isFat);
+    const outPath = opts.output
+        ? resolve(env.cwd, opts.output)
+        : defaultOutputPath(env, id, opts.name, isFat);
 
-    if (existsSync(outPath) && !flags.force) {
-        throw new Error(
-            `${outPath} already exists. Pass --force to overwrite, or --output <path> to write elsewhere.`
+    const mode: SetupExportResult["mode"] = opts.dryRun ? "dry-run" : "exported";
+
+    let bytesWritten = 0;
+    if (!opts.dryRun) {
+        if (existsSync(outPath) && !opts.force) {
+            throw new KindlyError(
+                ErrorCodes.OUTPUT_EXISTS,
+                `${outPath} already exists. Pass --force to overwrite, or --output <path> to write elsewhere.`,
+                [{ text: "Use --force to overwrite, or --output to redirect." }],
+            );
+        }
+        const outDir = dirname(outPath);
+        if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
+        if (isFat) {
+            const allFiles = new Map<string, Buffer>();
+            for (const [k, v] of collectedPlugins.files) allFiles.set(k, v);
+            for (const [k, v] of collectedPatches.files) allFiles.set(k, v);
+            const r = packSetup({ manifest, files: allFiles }, outPath);
+            bytesWritten = r.bytesWritten;
+        } else {
+            const canonical = canonicalizeManifest(manifest);
+            writeFileSync(outPath, canonical);
+            bytesWritten = Buffer.byteLength(canonical);
+        }
+    } else if (!isFat) {
+        // Dry-run byte count is still informative for lean exports.
+        bytesWritten = Buffer.byteLength(canonicalizeManifest(manifest));
+    }
+
+    const settingsCount = Object.keys(settingsMinusPlugins).length;
+    const result: ExportResultWithSchema = {
+        mode,
+        outputPath: outPath,
+        bytesWritten,
+        id,
+        hash: fullHash,
+        name: opts.name,
+        isFat,
+        applyMode: effectiveApplyMode,
+        settingsCount,
+        pluginsDisabledCount: pluginsDisabled.length,
+        pluginFilesCount: collectedPlugins.declared.length,
+        patchesCount: collectedPatches.declared.length,
+        sourceMode: template ? "template" : "device",
+        ...(template ? { templateId: template.id } : {}),
+        droppedSecrets,
+        droppedEphemerals,
+        skippedKeys,
+        sourcePath,
+        fatLuaBytes,
+        ...(hasUnknowns || hasMismatches ? { schemaFindings: exportReport } : {}),
+    };
+    return result;
+}
+
+export function renderSetupExport(
+    result: ExportResultWithSchema,
+    env: CliEnv,
+    renderOpts: { allowUnknownKeys: boolean; strict: boolean },
+): void {
+    if (result.sourceMode === "template") {
+        info(env, dim(env, `using template: ${result.templateId}`));
+    } else if (result.sourcePath) {
+        info(env, dim(env, `reading ${result.sourcePath}`));
+    }
+
+    if (result.schemaFindings) {
+        emitSchemaFindings(env, result.schemaFindings, renderOpts);
+    }
+
+    if (result.mode === "dry-run") {
+        heading(env, `setup ${result.id}  (dry-run)`);
+        info(env, dim(env, `  would write:   ${result.outputPath}`));
+        info(env, dim(env, `  bytes:         ${result.bytesWritten}`));
+    } else {
+        ok(env, `exported setup ${result.id} → ${result.outputPath}`);
+    }
+    const summary: string[] = [
+        `${result.bytesWritten} bytes`,
+        `${result.settingsCount} settings`,
+        `${result.pluginsDisabledCount} plugin toggle(s)`,
+    ];
+    if (result.pluginFilesCount > 0) summary.push(`${result.pluginFilesCount} plugin file(s)`);
+    if (result.patchesCount > 0)     summary.push(`${result.patchesCount} patch(es)`);
+    info(env, dim(env, "  " + summary.join(", ")));
+    info(env, dim(env, `  hash: ${result.hash}`));
+    if (result.isFat) {
+        info(env, dim(env, `  fat setup — ships ${result.fatLuaBytes} B of Lua`));
+    }
+    if (result.droppedSecrets.length > 0) {
+        info(env, dim(env, `  filtered ${result.droppedSecrets.length} secret(s) (never in shared Setups)`));
+    }
+    if (result.droppedEphemerals.length > 0) {
+        info(env, dim(env, `  filtered ${result.droppedEphemerals.length} ephemeral(s) (personal state, not shareable)`));
+    }
+    if (result.skippedKeys > 0) {
+        info(env, dim(env, `  ${result.skippedKeys} --keys entr(ies) not found on device or filtered; skipped`));
+    }
+}
+
+async function runSetupExport(argv: readonly string[], env: CliEnv): Promise<number> {
+    const { flags, positional } = parseArgs(argv, EXPORT_FLAGS);
+
+    const name = positional[0];
+    if (!name) {
+        throw new ArgError("usage: kindly setup export <name> [options]");
+    }
+    if (positional.length > 1) {
+        throw new ArgError(`unexpected extra argument: ${positional[1]}`);
+    }
+    if (flags["apply-mode"] !== undefined
+        && flags["apply-mode"] !== "additive"
+        && flags["apply-mode"] !== "replace") {
+        throw new ArgError(
+            `--apply-mode must be 'additive' or 'replace' (got ${JSON.stringify(flags["apply-mode"])})`
         );
     }
 
-    const outDir = dirname(outPath);
-    if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
+    const result = executeSetupExport({
+        name,
+        output: flags.output,
+        keys: flags.keys,
+        applyMode: flags["apply-mode"] as "additive" | "replace" | undefined,
+        template: flags.template,
+        description: flags.description,
+        author: flags.author,
+        tags: flags.tags,
+        mount: flags.mount,
+        force: flags.force,
+        includePluginFiles: flags["include-plugin-files"],
+        includePatches: flags["include-patches"],
+        compatKoreaderMin: flags["compat-koreader-min"],
+        compatKoreaderMax: flags["compat-koreader-max"],
+        compatDevice: flags["compat-device"],
+        strict: flags.strict,
+        allowUnknownKeys: flags["allow-unknown-keys"],
+        dryRun: flags["dry-run"],
+    }, env);
 
-    let bytesWritten: number;
-    if (isFat) {
-        // Merge plugin + patch files into one Map for packSetup.
-        const allFiles = new Map<string, Buffer>();
-        for (const [k, v] of collectedPlugins.files) allFiles.set(k, v);
-        for (const [k, v] of collectedPatches.files) allFiles.set(k, v);
-        const r = packSetup({ manifest, files: allFiles }, outPath);
-        bytesWritten = r.bytesWritten;
+    if (env.jsonMode) {
+        // Strip rendering-only fields from the JSON payload.
+        const { schemaFindings, sourcePath, fatLuaBytes, ...publicData } = result;
+        void schemaFindings; void sourcePath; void fatLuaBytes;
+        emitJson(env, "setup export", publicData);
     } else {
-        const canonical = canonicalizeManifest(manifest);
-        writeFileSync(outPath, canonical);
-        bytesWritten = Buffer.byteLength(canonical);
+        renderSetupExport(result, env, {
+            allowUnknownKeys: !!flags["allow-unknown-keys"],
+            strict: !!flags.strict,
+        });
     }
-
-    ok(env, `exported setup ${id} → ${outPath}`);
-    const summary: string[] = [
-        `${bytesWritten} bytes`,
-        `${Object.keys(settingsMinusPlugins).length} settings`,
-        `${pluginsDisabled.length} plugin toggle(s)`,
-    ];
-    if (collectedPlugins.declared.length > 0) {
-        summary.push(`${collectedPlugins.declared.length} plugin file(s)`);
-    }
-    if (collectedPatches.declared.length > 0) {
-        summary.push(`${collectedPatches.declared.length} patch(es)`);
-    }
-    info(env, dim(env, "  " + summary.join(", ")));
-    info(env, dim(env, `  hash: ${manifestHash(manifest)}`));
-    if (isFat) {
-        info(env, dim(env, `  fat setup — ships ${totalBytes([...collectedPlugins.declared, ...collectedPatches.declared])} B of Lua`));
-    }
-
-    if (droppedSecrets.length > 0) {
-        info(env, dim(env, `  filtered ${droppedSecrets.length} secret(s) (never in shared Setups)`));
-    }
-    if (droppedEphemerals.length > 0) {
-        info(env, dim(env, `  filtered ${droppedEphemerals.length} ephemeral(s) (personal state, not shareable)`));
-    }
-    if (skippedKeys > 0) {
-        info(env, dim(env, `  ${skippedKeys} --keys entr(ies) not found on device or filtered; skipped`));
-    }
-
     return 0;
 }
 
@@ -428,14 +537,7 @@ function loadManifestFile(path: string): { raw: string; manifest: SetupManifest 
 
 // ---- `kindly setup inspect <file>` -----------------------------------------
 
-async function runSetupInspect(argv: readonly string[], env: CliEnv): Promise<number> {
-    const { positional } = parseArgs(argv, {} as const satisfies FlagSpecs);
-    const fileArg = positional[0];
-    if (!fileArg) throw new ArgError("usage: kindly setup inspect <file>");
-    if (positional.length > 1) {
-        throw new ArgError(`unexpected extra argument: ${positional[1]}`);
-    }
-
+export function executeSetupInspect(fileArg: string, env: CliEnv): SetupInspectResult {
     const path = resolve(env.cwd, fileArg);
     const { manifest, manifestBytes, isFat } = loadSetup(path);
 
@@ -445,43 +547,83 @@ async function runSetupInspect(argv: readonly string[], env: CliEnv): Promise<nu
     const isCanonical = rawText === canonicalBytes;
     const id = shortId(rawHash);
 
-    const settingsCount = manifest.settings ? Object.keys(manifest.settings).length : 0;
-    const pluginsDisabled = manifest.plugins?.disabled?.length ?? 0;
-    const pluginFiles = manifest.plugins?.files?.length ?? 0;
-    const patches = manifest.patches?.length ?? 0;
+    return {
+        filePath: path,
+        id,
+        hash: rawHash,
+        name: manifest.meta.name,
+        isFat,
+        fileSize: statSync(path).size,
+        manifestBytes: manifestBytes.length,
+        applyMode: manifest.apply_mode,
+        createdAt: manifest.meta.created_at,
+        ...(manifest.meta.author ? { author: manifest.meta.author } : {}),
+        ...(manifest.meta.description ? { description: manifest.meta.description } : {}),
+        tags: manifest.meta.tags ?? [],
+        ...(manifest.compat ? {
+            compat: {
+                ...(manifest.compat.koreader_version_min
+                    ? { koreaderVersionMin: manifest.compat.koreader_version_min } : {}),
+                ...(manifest.compat.koreader_version_max
+                    ? { koreaderVersionMax: manifest.compat.koreader_version_max } : {}),
+                ...(manifest.compat.device?.length
+                    ? { device: [...manifest.compat.device] } : {}),
+            },
+        } : {}),
+        settingsCount: manifest.settings ? Object.keys(manifest.settings).length : 0,
+        pluginsDisabledCount: manifest.plugins?.disabled?.length ?? 0,
+        pluginFilesCount: manifest.plugins?.files?.length ?? 0,
+        patchesCount: manifest.patches?.length ?? 0,
+        isCanonical,
+        ...(isCanonical ? {} : { canonicalHash: manifestHash(manifest) }),
+    };
+}
 
-    heading(env, `${manifest.meta.name}  (${id})`);
-    env.stdout.write(`  hash:         ${rawHash}\n`);
-    env.stdout.write(`  file:         ${path}\n`);
-    env.stdout.write(`  format:       ${isFat ? "fat (.kset tar.gz)" : "lean (.kset.yaml)"}\n`);
-    if (isFat) {
-        env.stdout.write(`  bytes:        ${statSync(path).size}  (tarball)\n`);
-        env.stdout.write(`  manifest:     ${manifestBytes.length} bytes\n`);
+export function renderSetupInspect(result: SetupInspectResult, env: CliEnv): void {
+    heading(env, `${result.name}  (${result.id})`);
+    env.stdout.write(`  hash:         ${result.hash}\n`);
+    env.stdout.write(`  file:         ${result.filePath}\n`);
+    env.stdout.write(`  format:       ${result.isFat ? "fat (.kset tar.gz)" : "lean (.kset.yaml)"}\n`);
+    if (result.isFat) {
+        env.stdout.write(`  bytes:        ${result.fileSize}  (tarball)\n`);
+        env.stdout.write(`  manifest:     ${result.manifestBytes} bytes\n`);
     } else {
-        env.stdout.write(`  bytes:        ${manifestBytes.length}\n`);
+        env.stdout.write(`  bytes:        ${result.manifestBytes}\n`);
     }
-    env.stdout.write(`  apply_mode:   ${manifest.apply_mode}\n`);
-    env.stdout.write(`  created_at:   ${manifest.meta.created_at}\n`);
-    if (manifest.meta.author)      env.stdout.write(`  author:       ${manifest.meta.author}\n`);
-    if (manifest.meta.description) env.stdout.write(`  description:  ${manifest.meta.description}\n`);
-    if (manifest.meta.tags?.length) env.stdout.write(`  tags:         ${manifest.meta.tags.join(", ")}\n`);
-    if (manifest.compat) {
+    env.stdout.write(`  apply_mode:   ${result.applyMode}\n`);
+    env.stdout.write(`  created_at:   ${result.createdAt}\n`);
+    if (result.author)      env.stdout.write(`  author:       ${result.author}\n`);
+    if (result.description) env.stdout.write(`  description:  ${result.description}\n`);
+    if (result.tags.length) env.stdout.write(`  tags:         ${result.tags.join(", ")}\n`);
+    if (result.compat) {
         env.stdout.write(`  compat:\n`);
-        if (manifest.compat.koreader_version_min) env.stdout.write(`    koreader >= ${manifest.compat.koreader_version_min}\n`);
-        if (manifest.compat.koreader_version_max) env.stdout.write(`    koreader <= ${manifest.compat.koreader_version_max}\n`);
-        if (manifest.compat.device?.length)       env.stdout.write(`    device:    ${manifest.compat.device.join(", ")}\n`);
+        if (result.compat.koreaderVersionMin) env.stdout.write(`    koreader >= ${result.compat.koreaderVersionMin}\n`);
+        if (result.compat.koreaderVersionMax) env.stdout.write(`    koreader <= ${result.compat.koreaderVersionMax}\n`);
+        if (result.compat.device?.length)     env.stdout.write(`    device:    ${result.compat.device.join(", ")}\n`);
     }
     env.stdout.write(`  contents:\n`);
-    env.stdout.write(`    settings:        ${settingsCount}\n`);
-    env.stdout.write(`    plugins off:     ${pluginsDisabled}\n`);
-    if (pluginFiles > 0) env.stdout.write(`    plugin files:    ${pluginFiles}  (fat setup)\n`);
-    if (patches > 0)     env.stdout.write(`    patches:         ${patches}  (fat setup)\n`);
+    env.stdout.write(`    settings:        ${result.settingsCount}\n`);
+    env.stdout.write(`    plugins off:     ${result.pluginsDisabledCount}\n`);
+    if (result.pluginFilesCount > 0) env.stdout.write(`    plugin files:    ${result.pluginFilesCount}  (fat setup)\n`);
+    if (result.patchesCount > 0)     env.stdout.write(`    patches:         ${result.patchesCount}  (fat setup)\n`);
 
-    if (!isCanonical) {
+    if (!result.isCanonical) {
         warn(env, "file is not in canonical form — re-exporting would yield different bytes.");
-        info(env, dim(env, `  (canonical hash would be ${manifestHash(manifest)})`));
+        info(env, dim(env, `  (canonical hash would be ${result.canonicalHash})`));
+    }
+}
+
+async function runSetupInspect(argv: readonly string[], env: CliEnv): Promise<number> {
+    const { positional } = parseArgs(argv, {} as const satisfies FlagSpecs);
+    const fileArg = positional[0];
+    if (!fileArg) throw new ArgError("usage: kindly setup inspect <file>");
+    if (positional.length > 1) {
+        throw new ArgError(`unexpected extra argument: ${positional[1]}`);
     }
 
+    const result = executeSetupInspect(fileArg, env);
+    if (env.jsonMode) emitJson(env, "setup inspect", result);
+    else renderSetupInspect(result, env);
     return 0;
 }
 
@@ -774,6 +916,384 @@ function fmtValue(v: unknown): string {
     return String(v);
 }
 
+export interface SetupImportOptions {
+    file: string;
+    mount?: string;
+    force?: boolean;
+    strict?: boolean;
+    allowUnknownKeys?: boolean;
+    dryRun?: boolean;
+    safetySnapshot?: boolean;
+    acceptPlugins?: boolean;
+    skipPlugins?: boolean;
+    acceptPatches?: boolean;
+    skipPatches?: boolean;
+}
+
+type ImportResultWithExtras = SetupImportResult & {
+    /** meta.author, for render intro line. */
+    author?: string;
+    /** meta.description, for render intro line. */
+    description?: string;
+    /** Needed to format --skip-plugins / --skip-patches render lines. */
+    shippedPluginCount: number;
+    shippedPatchCount: number;
+    /** Findings from the schema validator (non-strict warnings). */
+    schemaFindings?: ValidationReport;
+};
+
+export function executeSetupImport(
+    opts: SetupImportOptions,
+    env: CliEnv,
+): ImportResultWithExtras {
+    const path = resolve(env.cwd, opts.file);
+    const loaded = loadSetup(path);
+    const { manifest, manifestBytes, files } = loaded;
+    const id = shortId(hashBytes(manifestBytes));
+
+    const shippedPlugins: readonly EmbeddedFile[] = manifest.plugins?.files ?? [];
+    const shippedPatches: readonly EmbeddedFile[] = manifest.patches ?? [];
+
+    if (shippedPlugins.length > 0 && !opts.acceptPlugins && !opts.skipPlugins) {
+        throw new KindlyError(
+            ErrorCodes.FAT_REQUIRES_ACK,
+            `this Setup ships ${shippedPlugins.length} plugin file(s) — Lua code that will execute on your Kindle. ` +
+            `Pass --accept-plugins to install, or --skip-plugins to apply settings only.`,
+            [
+                { text: "Review the shipped files before accepting.", command: "kindly setup inspect <file>" },
+            ],
+        );
+    }
+    if (shippedPatches.length > 0 && !opts.acceptPatches && !opts.skipPatches) {
+        throw new KindlyError(
+            ErrorCodes.FAT_REQUIRES_ACK,
+            `this Setup ships ${shippedPatches.length} patch file(s) — Lua code that will execute on your Kindle. ` +
+            `Pass --accept-patches to install, or --skip-patches to apply settings only.`,
+            [],
+        );
+    }
+
+    const mountEnv = opts.mount ? { ...env, mountOverride: opts.mount } : env;
+    const mount = resolveMount(mountEnv);
+
+    if (!existsSync(mount.settingsPath)) {
+        throw new KindlyError(
+            ErrorCodes.SETTINGS_NOT_FOUND,
+            `Kindle mount found at ${mount.root}, but ${mount.settingsPath} doesn't exist. ` +
+            `Is KOReader installed on this Kindle?`,
+        );
+    }
+
+    let compatSummary: SetupImportResult["compat"] = null;
+    if (manifest.compat) {
+        const detected = {
+            version: readKoreaderVersion(mount),
+            family: detectDeviceFamily(mount),
+        };
+        const cr = checkCompat(manifest.compat, detected);
+
+        const blocking = cr.blocking.map(formatCompatIssue);
+        const unverifiable = cr.unverifiable.map(formatCompatIssue);
+
+        if (cr.blocking.length > 0 && !opts.force) {
+            throw new KindlyError(
+                ErrorCodes.COMPAT_INCOMPATIBLE,
+                `Setup is not compatible with this device:\n  ${blocking.join("\n  ")}`,
+                [{ text: "Pass --force to import anyway.", command: "kindly setup import <file> --force" }],
+            );
+        }
+
+        compatSummary = {
+            declared: {
+                ...(manifest.compat.koreader_version_min ? { koreaderVersionMin: manifest.compat.koreader_version_min } : {}),
+                ...(manifest.compat.koreader_version_max ? { koreaderVersionMax: manifest.compat.koreader_version_max } : {}),
+                ...(manifest.compat.device?.length ? { device: [...manifest.compat.device] } : {}),
+            },
+            detected: {
+                koreaderVersion: detected.version?.raw ?? null,
+                deviceFamily: detected.family,
+            },
+            unverifiable,
+            blocking,
+            forced: cr.blocking.length > 0 && !!opts.force,
+        };
+    }
+
+    let schemaFindings: ValidationReport | undefined;
+    if (manifest.settings) {
+        const report = validateSettings(manifest.settings as Record<string, unknown>, loadSchema());
+        const hasUnknowns = report.unknownKeys.length > 0;
+        const hasMismatches = report.typeMismatches.length > 0;
+        const showUnknowns = !opts.allowUnknownKeys;
+        const schemaBlocks = !!opts.strict
+            && ((showUnknowns && hasUnknowns) || hasMismatches);
+        if (schemaBlocks) {
+            const msg = formatValidationReport(report, { showUnknowns });
+            throw new KindlyError(
+                ErrorCodes.SCHEMA_VIOLATION,
+                `${msg}\n--strict: aborting due to schema findings.`,
+                [
+                    { text: "Review the listed keys — likely typos or plugin-scoped unknowns." },
+                    { text: "Re-run without --strict, or pass --allow-unknown-keys if you're sure." },
+                ],
+            );
+        }
+        if (hasUnknowns || hasMismatches) schemaFindings = report;
+    }
+
+    const toggledNames: string[] = [...(manifest.plugins?.disabled ?? [])];
+    let inertPluginToggles: string[] = [];
+    if (toggledNames.length > 0) {
+        const installed = listInstalledPluginFolders(mount.pluginsDir);
+        inertPluginToggles = [...findInertToggles(toggledNames, installed)].sort();
+    }
+
+    const manifestFlat = flattenManifestForApply(manifest);
+    const { kept: safeFlat, droppedSecrets: refusedSecrets } =
+        filterForYaml(manifestFlat, "full");
+
+    const onDeviceSrc = readFileSync(mount.settingsPath, "utf8");
+    const onDevice = parseSettingsFile(onDeviceSrc) as Record<string, LuaValue>;
+
+    const isReplace = manifest.apply_mode === "replace";
+    const preservedKeys: Set<string> = new Set();
+    if (isReplace) {
+        for (const k of Object.keys(onDevice)) {
+            const cls = classifyKey(k);
+            if (cls === "SECRET" || cls === "EPHEMERAL") preservedKeys.add(k);
+        }
+    }
+
+    const changes = isReplace
+        ? computeReplaceChanges(onDevice, safeFlat, preservedKeys)
+        : computeChanges(onDevice, safeFlat);
+
+    const willInstallPlugins = !!opts.acceptPlugins && shippedPlugins.length > 0;
+    const willInstallPatches = !!opts.acceptPatches && shippedPatches.length > 0;
+    const writeSettings = changes.length > 0;
+
+    const baseResult: ImportResultWithExtras = {
+        mode: "no-op",
+        setupFile: path,
+        id,
+        name: manifest.meta.name,
+        applyMode: manifest.apply_mode,
+        settingsPath: mount.settingsPath,
+        changes,
+        installedPluginFiles: 0,
+        installedPatches: 0,
+        skippedPluginFiles: opts.skipPlugins ? shippedPlugins.length : 0,
+        skippedPatches: opts.skipPatches ? shippedPatches.length : 0,
+        inertPluginToggles,
+        refusedSecrets,
+        backupPath: null,
+        snapshotDir: null,
+        fatSnapshotPath: null,
+        compat: compatSummary,
+        ...(manifest.meta.author ? { author: manifest.meta.author } : {}),
+        ...(manifest.meta.description ? { description: manifest.meta.description } : {}),
+        shippedPluginCount: shippedPlugins.length,
+        shippedPatchCount: shippedPatches.length,
+        ...(schemaFindings ? { schemaFindings } : {}),
+    };
+
+    if (!writeSettings && !willInstallPlugins && !willInstallPatches) {
+        return baseResult;  // mode: "no-op"
+    }
+
+    if (opts.dryRun) {
+        return { ...baseResult, mode: "dry-run" };
+    }
+
+    let snapshotDir: string | null = null;
+    let backupPath: string | null = null;
+    if (writeSettings) {
+        const merged = isReplace
+            ? replaceYamlIntoLua(onDevice, safeFlat) as LuaTable
+            : mergeYamlIntoLua(onDevice, safeFlat) as LuaTable;
+        const newContent = dumpSettingsFile(merged, "./settings.reader.lua");
+
+        const backupDir = join(env.cwd, ".kindly", "pre-import");
+        const res = safeWrite(mount.settingsPath, newContent, {
+            backupDir,
+            verifyLua: true,
+            skipBackup: opts.safetySnapshot === false,
+        });
+        if (res.backupPath) {
+            backupPath = res.backupPath;
+            snapshotDir = dirname(res.backupPath);
+        }
+    } else if (opts.safetySnapshot !== false && (willInstallPlugins || willInstallPatches)) {
+        const stamp = env.now().toISOString().replace(/[:.]/g, "-");
+        snapshotDir = join(env.cwd, ".kindly", "pre-import", stamp);
+        mkdirSync(snapshotDir, { recursive: true });
+    }
+
+    let fatSnapshotPath: string | null = null;
+    let installedPluginFiles = 0;
+    let installedPatches = 0;
+    if (willInstallPlugins || willInstallPatches) {
+        if (snapshotDir && opts.safetySnapshot !== false) {
+            snapshotFatTargets(mount.koreaderRoot, snapshotDir,
+                willInstallPlugins ? affectedPluginTargets(mount.pluginsDir, shippedPlugins) : [],
+                willInstallPatches ? affectedPatchTargets(mount.patchesDir, shippedPatches) : [],
+            );
+            fatSnapshotPath = join(snapshotDir, "plugins-patches.tar.gz");
+            if (!existsSync(fatSnapshotPath)) fatSnapshotPath = null;
+        }
+
+        if (willInstallPlugins) {
+            installPluginFiles(mount.pluginsDir, shippedPlugins, files);
+            installedPluginFiles = shippedPlugins.length;
+        }
+        if (willInstallPatches) {
+            installPatches(mount.patchesDir, shippedPatches, files);
+            installedPatches = shippedPatches.length;
+        }
+    }
+
+    return {
+        ...baseResult,
+        mode: "imported",
+        installedPluginFiles,
+        installedPatches,
+        backupPath,
+        snapshotDir,
+        fatSnapshotPath,
+    };
+}
+
+// Emitted as a preview block before `executeSetupImport` runs so that text-
+// mode users see the heading + fat disclosure BEFORE any gate failure.
+// Non-mutating; safe to call on every invocation.
+function renderSetupImportIntro(
+    manifest: SetupManifest,
+    id: string,
+    setupFile: string,
+    shippedPlugins: readonly EmbeddedFile[],
+    shippedPatches: readonly EmbeddedFile[],
+    env: CliEnv,
+): void {
+    heading(env, `importing ${manifest.meta.name}  (${id})`);
+    info(env, dim(env, `  from:   ${setupFile}`));
+    if (manifest.meta.author)      info(env, dim(env, `  author: ${manifest.meta.author}`));
+    if (manifest.meta.description) info(env, dim(env, `  ${manifest.meta.description}`));
+    if (shippedPlugins.length > 0 || shippedPatches.length > 0) {
+        printFatDisclosure(env, shippedPlugins, shippedPatches);
+    }
+}
+
+export function renderSetupImport(
+    result: ImportResultWithExtras,
+    env: CliEnv,
+    renderOpts: { allowUnknownKeys: boolean; strict: boolean; force: boolean },
+): void {
+    if (result.compat) {
+        env.stdout.write(`  compat check:\n`);
+        if (result.compat.declared.koreaderVersionMin) {
+            env.stdout.write(`    koreader >= ${result.compat.declared.koreaderVersionMin}\n`);
+        }
+        if (result.compat.declared.koreaderVersionMax) {
+            env.stdout.write(`    koreader <= ${result.compat.declared.koreaderVersionMax}\n`);
+        }
+        if (result.compat.declared.device?.length) {
+            env.stdout.write(`    device: ${result.compat.declared.device.join(", ")}\n`);
+        }
+        env.stdout.write(`    detected: koreader=${result.compat.detected.koreaderVersion ?? "unknown"}, device=${result.compat.detected.deviceFamily}\n`);
+        for (const line of result.compat.unverifiable) warn(env, line);
+        if (result.compat.forced) {
+            for (const line of result.compat.blocking) warn(env, line);
+            warn(env, "--force: proceeding despite compat mismatch.");
+        }
+    }
+
+    if (result.schemaFindings) {
+        emitSchemaFindings(env, result.schemaFindings, renderOpts);
+    }
+
+    if (result.inertPluginToggles.length > 0) {
+        warn(env, `${result.inertPluginToggles.length} plugin toggle(s) reference plugins not installed on this device — stored but inert:`);
+        for (const name of result.inertPluginToggles) {
+            env.stderr.write(`  - ${name}  (no ${name}.koplugin/ on device)\n`);
+        }
+    }
+
+    const writeSettings = result.changes.length > 0;
+    const isReplace = result.applyMode === "replace";
+    const willInstallPlugins = result.installedPluginFiles > 0
+        || (result.mode !== "imported" && result.shippedPluginCount > 0 && result.skippedPluginFiles === 0);
+    const willInstallPatches = result.installedPatches > 0
+        || (result.mode !== "imported" && result.shippedPatchCount > 0 && result.skippedPatches === 0);
+
+    if (result.mode === "no-op") {
+        info(env, "no changes needed — device already matches this setup.");
+        if (result.refusedSecrets.length > 0) {
+            info(env, dim(env, `  (${result.refusedSecrets.length} secret-key(s) in manifest were refused by denylist)`));
+        }
+        return;
+    }
+
+    if (writeSettings) {
+        if (isReplace) {
+            heading(env, `${result.changes.length} change(s) to apply (replace mode):`);
+            info(env, dim(env, `  replace mode: USER keys not declared in the manifest will be removed.`));
+            info(env, dim(env, `  secrets and ephemerals are preserved regardless.`));
+        } else {
+            heading(env, `${result.changes.length} change(s) to apply:`);
+        }
+        for (const c of result.changes) {
+            const p = c.path.join(".");
+            if (c.kind === "added") {
+                info(env, paint(env, "green", `  + ${p}`) + `  = ${fmtValue(c.next)}`);
+            } else if (c.kind === "changed") {
+                info(env, paint(env, "yellow", `  ~ ${p}`) + `  ${fmtValue(c.prev)} → ${fmtValue(c.next)}`);
+            } else {
+                info(env, paint(env, "red", `  - ${p}`) + `  (was ${fmtValue(c.prev)})`);
+            }
+        }
+    } else if (willInstallPlugins || willInstallPatches) {
+        info(env, dim(env, "settings already match; proceeding to plugin/patch install."));
+    }
+
+    if (result.refusedSecrets.length > 0) {
+        warn(env, `refused ${result.refusedSecrets.length} secret-named key(s) in manifest: ${result.refusedSecrets.join(", ")}`);
+    }
+
+    if (result.mode === "dry-run") {
+        info(env, "");
+        info(env, dim(env, "(--dry-run — nothing written)"));
+        return;
+    }
+
+    // mode === "imported"
+    if (writeSettings) {
+        ok(env, `imported to ${result.settingsPath}`);
+        if (result.backupPath) {
+            info(env, dim(env, `  safety backup: ${result.backupPath}`));
+        } else {
+            info(env, dim(env, `  (safety backup skipped by --no-safety-snapshot; .old sibling preserved)`));
+        }
+    }
+
+    if (result.fatSnapshotPath) {
+        info(env, dim(env, `  pre-install snapshot: ${result.fatSnapshotPath}`));
+    }
+    if (result.installedPluginFiles > 0) {
+        ok(env, `installed ${result.installedPluginFiles} plugin file(s) → <mount>/koreader/plugins`);
+    }
+    if (result.installedPatches > 0) {
+        ok(env, `installed ${result.installedPatches} patch(es) → <mount>/koreader/patches`);
+    }
+    if (result.skippedPluginFiles > 0) {
+        info(env, dim(env, `  --skip-plugins: ${result.skippedPluginFiles} plugin file(s) NOT installed`));
+    }
+    if (result.skippedPatches > 0) {
+        info(env, dim(env, `  --skip-patches: ${result.skippedPatches} patch(es) NOT installed`));
+    }
+
+    warn(env, "restart KOReader (or your Kindle) for changes to take effect.");
+}
+
 async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<number> {
     const { flags, positional } = parseArgs(argv, IMPORT_FLAGS);
     const fileArg = positional[0];
@@ -789,246 +1309,53 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
         throw new ArgError("--accept-patches and --skip-patches are mutually exclusive");
     }
 
+    // Pre-emit the intro + fat-disclosure in text mode so the user sees
+    // what's being imported BEFORE any gate throws. No-op in JSON mode.
     const path = resolve(env.cwd, fileArg);
-    const loaded = loadSetup(path);
-    const { manifest, manifestBytes, files } = loaded;
-    const id = shortId(hashBytes(manifestBytes));
-
-    const shippedPlugins: readonly EmbeddedFile[] = manifest.plugins?.files ?? [];
-    const shippedPatches: readonly EmbeddedFile[] = manifest.patches ?? [];
-
-    heading(env, `importing ${manifest.meta.name}  (${id})`);
-    info(env, dim(env, `  from:   ${path}`));
-    if (manifest.meta.author)      info(env, dim(env, `  author: ${manifest.meta.author}`));
-    if (manifest.meta.description) info(env, dim(env, `  ${manifest.meta.description}`));
-
-    // Disclosure + gate for fat content. Print what the Setup ships
-    // BEFORE any device touch or flag check — the user needs this info
-    // to pick between --accept-X and --skip-X.
-    if (shippedPlugins.length > 0 || shippedPatches.length > 0) {
-        printFatDisclosure(env, shippedPlugins, shippedPatches);
-    }
-    if (shippedPlugins.length > 0 && !flags["accept-plugins"] && !flags["skip-plugins"]) {
-        throw new Error(
-            `this Setup ships ${shippedPlugins.length} plugin file(s) — Lua code that will execute on your Kindle. ` +
-            `Pass --accept-plugins to install, or --skip-plugins to apply settings only.`
-        );
-    }
-    if (shippedPatches.length > 0 && !flags["accept-patches"] && !flags["skip-patches"]) {
-        throw new Error(
-            `this Setup ships ${shippedPatches.length} patch file(s) — Lua code that will execute on your Kindle. ` +
-            `Pass --accept-patches to install, or --skip-patches to apply settings only.`
+    if (!env.jsonMode) {
+        const loaded = loadSetup(path);
+        const id = shortId(hashBytes(loaded.manifestBytes));
+        renderSetupImportIntro(
+            loaded.manifest, id, path,
+            loaded.manifest.plugins?.files ?? [],
+            loaded.manifest.patches ?? [],
+            env,
         );
     }
 
-    if (flags.mount) env = { ...env, mountOverride: flags.mount };
-    const mount = resolveMount(env);
+    const result = executeSetupImport({
+        file: fileArg,
+        mount: flags.mount,
+        force: flags.force,
+        strict: flags.strict,
+        allowUnknownKeys: flags["allow-unknown-keys"],
+        dryRun: flags["dry-run"],
+        safetySnapshot: flags["safety-snapshot"],
+        acceptPlugins: flags["accept-plugins"],
+        skipPlugins: flags["skip-plugins"],
+        acceptPatches: flags["accept-patches"],
+        skipPatches: flags["skip-patches"],
+    }, env);
 
-    if (!existsSync(mount.settingsPath)) {
-        throw new Error(
-            `Kindle mount found at ${mount.root}, but ${mount.settingsPath} doesn't exist. ` +
-            `Is KOReader installed on this Kindle?`
-        );
-    }
-
-    // Compat gate. The manifest's compat block gets verified against what
-    // we can read off the device; blocking mismatches abort the import
-    // unless --force converts them to warnings. Detection failures (e.g.
-    // no git-rev) are soft — we surface them but proceed.
-    if (manifest.compat) {
-        const detected = {
-            version: readKoreaderVersion(mount),
-            family: detectDeviceFamily(mount),
+    if (env.jsonMode) {
+        const { schemaFindings, shippedPluginCount, shippedPatchCount,
+                author, description, ...publicData } = result;
+        void schemaFindings; void shippedPluginCount; void shippedPatchCount;
+        // author/description are useful in JSON too — add them back explicitly
+        // as declared fields (they're on the manifest, consumers will want them).
+        const withMeta = {
+            ...publicData,
+            ...(author ? { author } : {}),
+            ...(description ? { description } : {}),
         };
-        const result = checkCompat(manifest.compat, detected);
-
-        env.stdout.write(`  compat check:\n`);
-        if (manifest.compat.koreader_version_min) {
-            env.stdout.write(`    koreader >= ${manifest.compat.koreader_version_min}\n`);
-        }
-        if (manifest.compat.koreader_version_max) {
-            env.stdout.write(`    koreader <= ${manifest.compat.koreader_version_max}\n`);
-        }
-        if (manifest.compat.device?.length) {
-            env.stdout.write(`    device: ${manifest.compat.device.join(", ")}\n`);
-        }
-        env.stdout.write(`    detected: koreader=${detected.version?.raw ?? "unknown"}, device=${detected.family}\n`);
-
-        for (const issue of result.unverifiable) {
-            warn(env, formatCompatIssue(issue));
-        }
-
-        if (result.blocking.length > 0) {
-            for (const issue of result.blocking) {
-                if (flags.force) warn(env, formatCompatIssue(issue));
-                else             env.stderr.write(`error: ${formatCompatIssue(issue)}\n`);
-            }
-            if (!flags.force) {
-                env.stderr.write(`\nSetup is not compatible with this device. Pass --force to import anyway.\n`);
-                return 1;
-            }
-            warn(env, "--force: proceeding despite compat mismatch.");
-        }
-    }
-
-    // Schema validation on the manifest's settings block. Runs before any
-    // device mutation; --strict aborts, default warns and proceeds. This
-    // is the layer that catches typos like `nightmode` (would have been
-    // flagged in the 2026-04-22 field test).
-    if (manifest.settings) {
-        const importReport = validateSettings(manifest.settings as Record<string, unknown>, loadSchema());
-        if (emitSchemaFindings(env, importReport, { strict: flags.strict, allowUnknownKeys: flags["allow-unknown-keys"] })) {
-            return 1;
-        }
-    }
-
-    // Inert-toggle warning. A manifest that lists `plugins.disabled: [calendar]`
-    // but the device has no `calendar.koplugin/` still gets its toggle
-    // stored in settings.reader.lua — KOReader just has nothing to toggle.
-    // Not blocking: disabling a plugin that may be installed later is a
-    // legitimate author intent.
-    const toggledNames: string[] = [
-        ...(manifest.plugins?.disabled ?? []),
-    ];
-    if (toggledNames.length > 0) {
-        const installed = listInstalledPluginFolders(mount.pluginsDir);
-        const inert = findInertToggles(toggledNames, installed);
-        if (inert.length > 0) {
-            warn(env, `${inert.length} plugin toggle(s) reference plugins not installed on this device — stored but inert:`);
-            for (const name of inert) {
-                env.stderr.write(`  - ${name}  (no ${name}.koplugin/ on device)\n`);
-            }
-        }
-    }
-
-    // Flatten + re-apply the secret denylist at the import boundary. A
-    // valid-looking manifest could still try to write pinpadlock_pin_code;
-    // we refuse to let that through regardless of what the manifest says.
-    const manifestFlat = flattenManifestForApply(manifest);
-    const { kept: safeFlat, droppedSecrets } = filterForYaml(manifestFlat, "full");
-
-    const onDeviceSrc = readFileSync(mount.settingsPath, "utf8");
-    const onDevice = parseSettingsFile(onDeviceSrc) as Record<string, LuaValue>;
-
-    const isReplace = manifest.apply_mode === "replace";
-
-    // In replace mode, preservedKeys tells the diff + merge which
-    // top-level on-device keys survive regardless of the manifest.
-    // Additive mode doesn't need this — nothing gets removed.
-    const preservedKeys: Set<string> = new Set();
-    if (isReplace) {
-        for (const k of Object.keys(onDevice)) {
-            const cls = classifyKey(k);
-            if (cls === "SECRET" || cls === "EPHEMERAL") preservedKeys.add(k);
-        }
-    }
-
-    const changes = isReplace
-        ? computeReplaceChanges(onDevice, safeFlat, preservedKeys)
-        : computeChanges(onDevice, safeFlat);
-
-    // Determine fat install gates up-front; the "no settings changes"
-    // shortcut must NOT fire if plugins/patches still need to land.
-    const willInstallPlugins = flags["accept-plugins"] && shippedPlugins.length > 0;
-    const willInstallPatches = flags["accept-patches"] && shippedPatches.length > 0;
-    const writeSettings = changes.length > 0;
-
-    if (!writeSettings && !willInstallPlugins && !willInstallPatches) {
-        info(env, "no changes needed — device already matches this setup.");
-        if (droppedSecrets.length > 0) {
-            info(env, dim(env, `  (${droppedSecrets.length} secret-key(s) in manifest were refused by denylist)`));
-        }
-        return 0;
-    }
-
-    if (writeSettings) {
-        if (isReplace) {
-            heading(env, `${changes.length} change(s) to apply (replace mode):`);
-            info(env, dim(env, `  replace mode: USER keys not declared in the manifest will be removed.`));
-            info(env, dim(env, `  secrets and ephemerals are preserved regardless.`));
-        } else {
-            heading(env, `${changes.length} change(s) to apply:`);
-        }
-        for (const c of changes) {
-            const p = c.path.join(".");
-            if (c.kind === "added") {
-                info(env, paint(env, "green", `  + ${p}`) + `  = ${fmtValue(c.next)}`);
-            } else if (c.kind === "changed") {
-                info(env, paint(env, "yellow", `  ~ ${p}`) + `  ${fmtValue(c.prev)} → ${fmtValue(c.next)}`);
-            } else {
-                info(env, paint(env, "red", `  - ${p}`) + `  (was ${fmtValue(c.prev)})`);
-            }
-        }
+        emitJson(env, "setup import", withMeta);
     } else {
-        info(env, dim(env, "settings already match; proceeding to plugin/patch install."));
-    }
-
-    if (droppedSecrets.length > 0) {
-        warn(env, `refused ${droppedSecrets.length} secret-named key(s) in manifest: ${droppedSecrets.join(", ")}`);
-    }
-
-    if (flags["dry-run"]) {
-        info(env, "");
-        info(env, dim(env, "(--dry-run — nothing written)"));
-        return 0;
-    }
-
-    // safeWrite (if needed) creates the timestamped backup dir. If we're
-    // skipping the settings write, we mint our own stamp for the fat
-    // snapshot so plugin/patch rollback has a home.
-    let snapshotDir: string | null = null;
-    if (writeSettings) {
-        const merged = isReplace
-            ? replaceYamlIntoLua(onDevice, safeFlat) as LuaTable
-            : mergeYamlIntoLua(onDevice, safeFlat) as LuaTable;
-        const newContent = dumpSettingsFile(merged, "./settings.reader.lua");
-
-        const backupDir = join(env.cwd, ".kindly", "pre-import");
-        const res = safeWrite(mount.settingsPath, newContent, {
-            backupDir,
-            verifyLua: true,
-            skipBackup: !flags["safety-snapshot"],
+        renderSetupImport(result, env, {
+            allowUnknownKeys: !!flags["allow-unknown-keys"],
+            strict: !!flags.strict,
+            force: !!flags.force,
         });
-
-        ok(env, `imported to ${mount.settingsPath}`);
-        if (res.backupPath) {
-            snapshotDir = dirname(res.backupPath);
-            info(env, dim(env, `  safety backup: ${res.backupPath}`));
-        } else if (!flags["safety-snapshot"]) {
-            info(env, dim(env, `  (safety backup skipped by --no-safety-snapshot; .old sibling preserved)`));
-        }
-    } else if (flags["safety-snapshot"] && (willInstallPlugins || willInstallPatches)) {
-        const stamp = env.now().toISOString().replace(/[:.]/g, "-");
-        snapshotDir = join(env.cwd, ".kindly", "pre-import", stamp);
-        mkdirSync(snapshotDir, { recursive: true });
     }
-
-    if (willInstallPlugins || willInstallPatches) {
-        if (snapshotDir && flags["safety-snapshot"]) {
-            snapshotFatTargets(mount.koreaderRoot, snapshotDir,
-                willInstallPlugins ? affectedPluginTargets(mount.pluginsDir, shippedPlugins) : [],
-                willInstallPatches ? affectedPatchTargets(mount.patchesDir, shippedPatches) : [],
-            );
-            info(env, dim(env, `  pre-install snapshot: ${join(snapshotDir, "plugins-patches.tar.gz")}`));
-        }
-
-        if (willInstallPlugins) {
-            installPluginFiles(mount.pluginsDir, shippedPlugins, files);
-            ok(env, `installed ${shippedPlugins.length} plugin file(s) → ${mount.pluginsDir}`);
-        }
-        if (willInstallPatches) {
-            installPatches(mount.patchesDir, shippedPatches, files);
-            ok(env, `installed ${shippedPatches.length} patch(es) → ${mount.patchesDir}`);
-        }
-    }
-    if (flags["skip-plugins"] && shippedPlugins.length > 0) {
-        info(env, dim(env, `  --skip-plugins: ${shippedPlugins.length} plugin file(s) NOT installed`));
-    }
-    if (flags["skip-patches"] && shippedPatches.length > 0) {
-        info(env, dim(env, `  --skip-patches: ${shippedPatches.length} patch(es) NOT installed`));
-    }
-
-    warn(env, "restart KOReader (or your Kindle) for changes to take effect.");
     return 0;
 }
 

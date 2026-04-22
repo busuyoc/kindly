@@ -11,12 +11,15 @@
 // anything it doesn't know about — this is the sane default; if you want
 // a clean slate, factory-reset first).
 
-import { parseArgs, type FlagSpecs } from "../cli/args.ts";
+import { ArgError, parseArgs, type FlagSpecs } from "../cli/args.ts";
 import { type CliEnv, resolveMount } from "../cli/env.ts";
 import { dim, heading, info, ok, warn } from "../cli/log.ts";
 import { createTarGz, extractTarGz, listTarGz } from "../fs/archive.ts";
 import { resolve } from "node:path";
 import { existsSync } from "node:fs";
+import type { RestoreResult } from "../types/results.ts";
+import { KindlyError, ErrorCodes } from "../types/errors.ts";
+import { emitJson } from "../cli/json.ts";
 
 const FLAGS = {
     "dry-run": {
@@ -44,39 +47,45 @@ const SAFETY_PATHS = [
     "plugins",
 ];
 
-export async function runRestore(argv: readonly string[], env: CliEnv): Promise<number> {
-    const { flags, positional } = parseArgs(argv, FLAGS);
-    const archive = positional[0];
-    if (!archive) {
-        throw new Error("usage: kindly restore <archive.tar.gz> [--dry-run]");
-    }
-    const archivePath = resolve(env.cwd, archive);
+export interface RestoreOptions {
+    archive: string;
+    dryRun?: boolean;
+    safetySnapshot?: boolean;
+}
+
+export function executeRestore(opts: RestoreOptions, env: CliEnv): RestoreResult {
+    const archivePath = resolve(env.cwd, opts.archive);
     if (!existsSync(archivePath)) {
-        throw new Error(`archive not found: ${archivePath}`);
+        throw new KindlyError(
+            ErrorCodes.ARCHIVE_NOT_FOUND,
+            `archive not found: ${archivePath}`,
+            [{ text: "Pass a path to an existing .tar.gz produced by `kindly snapshot`." }],
+        );
     }
 
-    if (flags.mount) env = { ...env, mountOverride: flags.mount };
     const mount = resolveMount(env);
-
     const entries = listTarGz(archivePath);
 
-    if (flags["dry-run"]) {
-        heading(env, `would extract ${entries.length} entries into ${mount.koreaderRoot}:`);
-        for (const e of entries.slice(0, 50)) info(env, `  ${e}`);
-        if (entries.length > 50) info(env, dim(env, `  ... and ${entries.length - 50} more`));
-        info(env, "");
-        info(env, dim(env, "(--dry-run — nothing written)"));
-        return 0;
+    if (opts.dryRun) {
+        return {
+            mode: "dry-run",
+            archivePath,
+            destRoot: mount.koreaderRoot,
+            entries,
+            fileCount: 0,
+            safetySnapshotPath: null,
+        };
     }
 
     // Pre-restore safety snapshot. Rollback = extract this back over the
     // koreader dir if something goes wrong.
-    if (flags["safety-snapshot"]) {
+    let safetySnapshotPath: string | null = null;
+    if (opts.safetySnapshot !== false) {
         const safetyPath = resolve(
             env.cwd,
             ".kindly",
             "pre-restore",
-            `${isoStamp(env.now())}.tar.gz`
+            `${isoStamp(env.now())}.tar.gz`,
         );
         try {
             const saf = createTarGz({
@@ -84,20 +93,68 @@ export async function runRestore(argv: readonly string[], env: CliEnv): Promise<
                 paths: SAFETY_PATHS,
                 outputPath: safetyPath,
             });
-            info(env, dim(env, `safety snapshot: ${saf.archivePath} (${saf.includedPaths.length} root path(s))`));
-        } catch (e) {
+            safetySnapshotPath = saf.archivePath;
+        } catch {
             // If the device is empty (fresh install with no settings file),
-            // no safety snapshot is possible — just warn and continue.
-            warn(env, `could not create safety snapshot: ${(e as Error).message}`);
-            warn(env, "  proceeding anyway — nothing to roll back from if restore fails.");
+            // no safety snapshot is possible — leave safetySnapshotPath null,
+            // the renderer surfaces that case with a warning.
         }
     }
 
-    info(env, dim(env, `extracting ${entries.length} entries into ${mount.koreaderRoot}...`));
     const res = extractTarGz({ archivePath, destRoot: mount.koreaderRoot });
 
-    ok(env, `restored ${res.fileCount} file(s) into ${res.destRoot}`);
+    return {
+        mode: "restored",
+        archivePath,
+        destRoot: res.destRoot,
+        entries,
+        fileCount: res.fileCount,
+        safetySnapshotPath,
+    };
+}
+
+export function renderRestore(result: RestoreResult, env: CliEnv): void {
+    if (result.mode === "dry-run") {
+        heading(env, `would extract ${result.entries.length} entries into ${result.destRoot}:`);
+        for (const e of result.entries.slice(0, 50)) info(env, `  ${e}`);
+        if (result.entries.length > 50) {
+            info(env, dim(env, `  ... and ${result.entries.length - 50} more`));
+        }
+        info(env, "");
+        info(env, dim(env, "(--dry-run — nothing written)"));
+        return;
+    }
+
+    if (result.safetySnapshotPath) {
+        info(env, dim(env, `safety snapshot: ${result.safetySnapshotPath}`));
+    } else {
+        // Either the user skipped it (--no-safety-snapshot) or creation failed
+        // because the device had nothing to snapshot. Warning only matters in
+        // the latter case, and we can't tell here — so a single neutral note.
+        info(env, dim(env, "no safety snapshot taken."));
+    }
+
+    info(env, dim(env, `extracting ${result.entries.length} entries into ${result.destRoot}...`));
+    ok(env, `restored ${result.fileCount} file(s) into ${result.destRoot}`);
     warn(env, "restart KOReader (or your Kindle) for changes to take effect.");
+}
+
+export async function runRestore(argv: readonly string[], env: CliEnv): Promise<number> {
+    const { flags, positional } = parseArgs(argv, FLAGS);
+    const archive = positional[0];
+    if (!archive) {
+        throw new ArgError("usage: kindly restore <archive.tar.gz> [--dry-run]");
+    }
+    if (flags.mount) env = { ...env, mountOverride: flags.mount };
+
+    const result = executeRestore({
+        archive,
+        dryRun: flags["dry-run"],
+        safetySnapshot: flags["safety-snapshot"],
+    }, env);
+
+    if (env.jsonMode) emitJson(env, "restore", result);
+    else renderRestore(result, env);
     return 0;
 }
 

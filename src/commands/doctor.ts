@@ -6,12 +6,16 @@
 //
 // Checks (in order):
 //   - Kindle mount detected
-//   - koreader/ directory present
-//   - settings.reader.lua readable
+//   - settings.reader.lua present + readable
 //   - settings.reader.lua parseable (no mid-file corruption)
 //   - .old sibling exists and is parseable (KOReader's own fallback)
-//   - list of secret keys present on-device (so user knows what they need
-//     to rescue to a password manager before a factory reset)
+//
+// Plus a list of on-device secret keys the user needs to rescue to a
+// password manager before a factory reset (doctor is transparent about
+// what kindly isn't tracking).
+//
+// Shape: executeDoctor() runs the checks and returns DoctorResult;
+// renderDoctor() prints; runDoctor() glues argv + exit code.
 
 import { existsSync, readFileSync } from "node:fs";
 import { parseArgs, type FlagSpecs } from "../cli/args.ts";
@@ -20,6 +24,8 @@ import { dim, info, paint } from "../cli/log.ts";
 import { parseSettingsFile, LuaParseError } from "../lua/reader.ts";
 import { classifyKey, isSecretPath } from "../schema/classify.ts";
 import type { LuaValue } from "../lua/writer.ts";
+import type { DoctorResult, DoctorCheck } from "../types/results.ts";
+import { emitJson } from "../cli/json.ts";
 
 const FLAGS = {
     mount: {
@@ -28,50 +34,60 @@ const FLAGS = {
     },
 } as const satisfies FlagSpecs;
 
-type Check = {
-    ok: boolean;
-    label: string;
-    detail?: string;
-};
+// Run all checks. Never throws — every failure is represented as an
+// { ok: false } check so consumers (JSON, GUI) see the same shape on
+// every invocation.
+export function executeDoctor(env: CliEnv): DoctorResult {
+    const checks: DoctorCheck[] = [];
 
-export async function runDoctor(argv: readonly string[], env: CliEnv): Promise<number> {
-    const { flags } = parseArgs(argv, FLAGS);
-    if (flags.mount) env = { ...env, mountOverride: flags.mount };
-
-    const checks: Check[] = [];
     let mount;
     try {
         mount = resolveMount(env);
-        checks.push({ ok: true, label: `Kindle mount: ${mount.root}` });
+        checks.push({ id: "mount", ok: true, label: `Kindle mount: ${mount.root}` });
     } catch (e) {
-        checks.push({ ok: false, label: "Kindle mount", detail: (e as Error).message });
-        renderChecks(env, checks);
-        return 1;
+        checks.push({
+            id: "mount",
+            ok: false,
+            label: "Kindle mount",
+            detail: (e as Error).message,
+        });
+        return { checks, secretsPresent: [], ok: false };
     }
 
     const settingsPath = mount.settingsPath;
     if (!existsSync(settingsPath)) {
         checks.push({
+            id: "settings_present",
             ok: false,
             label: "settings.reader.lua present",
             detail: `${settingsPath} not found — is KOReader installed?`,
         });
-        renderChecks(env, checks);
-        return 1;
+        return { checks, secretsPresent: [], ok: false };
     }
-    checks.push({ ok: true, label: `settings.reader.lua: ${settingsPath}` });
+    checks.push({
+        id: "settings_present",
+        ok: true,
+        label: `settings.reader.lua: ${settingsPath}`,
+    });
 
-    // Parse the main file.
     let parsed: Record<string, LuaValue>;
     try {
         parsed = parseSettingsFile(readFileSync(settingsPath, "utf8")) as Record<string, LuaValue>;
         const keyCount = Object.keys(parsed).length;
-        checks.push({ ok: true, label: `settings.reader.lua parseable (${keyCount} keys)` });
+        checks.push({
+            id: "settings_parseable",
+            ok: true,
+            label: `settings.reader.lua parseable (${keyCount} keys)`,
+        });
     } catch (e) {
         const detail = e instanceof LuaParseError ? e.message : (e as Error).message;
-        checks.push({ ok: false, label: "settings.reader.lua parseable", detail });
-        renderChecks(env, checks);
-        return 1;
+        checks.push({
+            id: "settings_parseable",
+            ok: false,
+            label: "settings.reader.lua parseable",
+            detail,
+        });
+        return { checks, secretsPresent: [], ok: false };
     }
 
     // Check .old sibling — it's KOReader's own recovery point and is only
@@ -81,9 +97,14 @@ export async function runDoctor(argv: readonly string[], env: CliEnv): Promise<n
     if (existsSync(oldPath)) {
         try {
             parseSettingsFile(readFileSync(oldPath, "utf8"));
-            checks.push({ ok: true, label: "settings.reader.lua.old parseable (KOReader fallback)" });
+            checks.push({
+                id: "old_parseable",
+                ok: true,
+                label: "settings.reader.lua.old parseable (KOReader fallback)",
+            });
         } catch (e) {
             checks.push({
+                id: "old_parseable",
                 ok: false,
                 label: "settings.reader.lua.old parseable",
                 detail: `KOReader's fallback copy is corrupt: ${(e as Error).message}`,
@@ -91,31 +112,50 @@ export async function runDoctor(argv: readonly string[], env: CliEnv): Promise<n
         }
     } else {
         checks.push({
+            id: "old_parseable",
             ok: true,
             label: "settings.reader.lua.old",
             detail: "absent (fine — KOReader creates it on first flush)",
         });
     }
 
-    // List secrets present on-device so the user knows what they need to
-    // preserve elsewhere. This is the whole point of doctor vs a silent
-    // "kindly pull" — transparency about what kindly isn't tracking.
     const secretsPresent = findSecrets(parsed);
-    renderChecks(env, checks);
-    info(env, "");
+    const allOk = checks.every((c) => c.ok);
+    return { checks, secretsPresent, ok: allOk };
+}
 
-    if (secretsPresent.length > 0) {
-        info(env, paint(env, "yellow",
-            `! ${secretsPresent.length} secret key(s) on device — kindly won't track these:`));
-        for (const k of secretsPresent) info(env, `    ${k}`);
-        info(env, dim(env,
-            "  Restore these via your password manager after a factory reset."));
-    } else {
-        info(env, paint(env, "green", "✓ no secret keys detected on device."));
+export function renderDoctor(result: DoctorResult, env: CliEnv): void {
+    for (const c of result.checks) {
+        const mark = c.ok ? paint(env, "green", "✓") : paint(env, "red", "✗");
+        let line = `${mark} ${c.label}`;
+        if (c.detail) line += "  " + dim(env, c.detail);
+        info(env, line);
     }
 
-    const anyFailed = checks.some((c) => !c.ok);
-    return anyFailed ? 1 : 0;
+    // Only show the secrets section when the main checks got far enough
+    // to have parsed the file. If the first check failed we bail early.
+    if (result.checks.some((c) => c.id === "settings_parseable" && c.ok)) {
+        info(env, "");
+        if (result.secretsPresent.length > 0) {
+            info(env, paint(env, "yellow",
+                `! ${result.secretsPresent.length} secret key(s) on device — kindly won't track these:`));
+            for (const k of result.secretsPresent) info(env, `    ${k}`);
+            info(env, dim(env,
+                "  Restore these via your password manager after a factory reset."));
+        } else {
+            info(env, paint(env, "green", "✓ no secret keys detected on device."));
+        }
+    }
+}
+
+export async function runDoctor(argv: readonly string[], env: CliEnv): Promise<number> {
+    const { flags } = parseArgs(argv, FLAGS);
+    if (flags.mount) env = { ...env, mountOverride: flags.mount };
+
+    const result = executeDoctor(env);
+    if (env.jsonMode) emitJson(env, "doctor", result);
+    else renderDoctor(result, env);
+    return result.ok ? 0 : 1;
 }
 
 function findSecrets(data: Record<string, LuaValue>): string[] {
@@ -129,15 +169,6 @@ function findSecrets(data: Record<string, LuaValue>): string[] {
         }
     }
     return out.sort();
-}
-
-function renderChecks(env: CliEnv, checks: Check[]): void {
-    for (const c of checks) {
-        const mark = c.ok ? paint(env, "green", "✓") : paint(env, "red", "✗");
-        let line = `${mark} ${c.label}`;
-        if (c.detail) line += "  " + dim(env, c.detail);
-        info(env, line);
-    }
 }
 
 export const doctorHelp = `

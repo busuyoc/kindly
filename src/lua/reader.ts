@@ -13,10 +13,15 @@
 // means we don't accidentally execute code from a settings file.
 
 import type { LuaTable, LuaValue } from "./writer.ts";
+import { KindlyError, ErrorCodes } from "../types/errors.ts";
 
-export class LuaParseError extends Error {
+export class LuaParseError extends KindlyError {
     constructor(msg: string, public pos: number, public src: string) {
-        super(`${msg} at pos ${pos}: ${JSON.stringify(src.slice(Math.max(0, pos - 20), pos + 20))}`);
+        super(
+            ErrorCodes.LUA_PARSE_FAILED,
+            `${msg} at pos ${pos}: ${JSON.stringify(src.slice(Math.max(0, pos - 20), pos + 20))}`,
+        );
+        this.name = "LuaParseError";
     }
 }
 

@@ -146,7 +146,9 @@ describe("restore", () => {
 
     test("errors when no archive positional given", async () => {
         const code = await main(["restore"], env);
-        expect(code).toBe(1);
+        // Exit 2 is the standard "argument error" code across the CLI;
+        // matches how pull/diff/apply treat missing flags.
+        expect(code).toBe(2);
         expect(stderr.value).toContain("usage");
     });
 

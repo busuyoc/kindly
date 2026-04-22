@@ -10,6 +10,7 @@ import { join } from "node:path";
 
 import type { KindleMount } from "../device/kindle.ts";
 import { detectKindleMount, kindleMountAt, isKindleMount } from "../device/kindle.ts";
+import { KindlyError, ErrorCodes } from "../types/errors.ts";
 
 export interface Writer {
     write(s: string): void;
@@ -40,6 +41,14 @@ export type CliEnv = {
     /** Where `setup export` writes by default and `setup list` reads from.
      * Undefined means "~/.kindly/setups". Tests override with a tmpdir. */
     setupsDir?: string;
+    /** When true, commands emit a JSON envelope to stdout instead of human
+     * text, and the dispatcher emits a JSON error envelope to stderr on
+     * failure. Set by the dispatcher when --json is present in argv. */
+    jsonMode?: boolean;
+    /** When true, the dispatcher appends a line to `.kindly/trace.jsonl`
+     * per invocation. Opt-in for Claudiu's own self-dogfooding; not
+     * telemetry. defaultEnv() reads `KINDLY_TRACE=1` from process.env. */
+    trace?: boolean;
 };
 
 export function resolveSetupsDir(env: CliEnv): string {
@@ -53,6 +62,7 @@ export function defaultEnv(): CliEnv {
         stderr: new StreamWriter(process.stderr),
         color: process.stdout.isTTY ?? false,
         now: () => new Date(),
+        trace: process.env.KINDLY_TRACE === "1",
     };
 }
 
@@ -61,17 +71,24 @@ export function defaultEnv(): CliEnv {
 export function resolveMount(env: CliEnv): KindleMount {
     if (env.mountOverride) {
         if (!isKindleMount(env.mountOverride)) {
-            throw new Error(
-                `--mount ${env.mountOverride} doesn't look like a Kindle (no koreader/ dir)`
+            throw new KindlyError(
+                ErrorCodes.MOUNT_INVALID,
+                `--mount ${env.mountOverride} doesn't look like a Kindle (no koreader/ dir)`,
+                [{ text: "Verify the path has a koreader/ directory, then retry." }],
             );
         }
         return kindleMountAt(env.mountOverride);
     }
     const m = detectKindleMount();
     if (!m) {
-        throw new Error(
+        throw new KindlyError(
+            ErrorCodes.MOUNT_NOT_FOUND,
             `No Kindle found. Plug in the Kindle, wait for it to mount, then try again. ` +
-            `(Or pass --mount <path> to point kindly at a specific directory.)`
+            `(Or pass --mount <path> to point kindly at a specific directory.)`,
+            [
+                { text: "Plug in the Kindle and wait for it to appear as a USB drive." },
+                { text: "Run device diagnostics.", command: "kindly doctor" },
+            ],
         );
     }
     return m;

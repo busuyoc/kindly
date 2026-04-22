@@ -26,7 +26,14 @@ export type ParsedArgs<F extends FlagSpecs> = {
     positional: string[];
 };
 
-export class ArgError extends Error {}
+import { KindlyError, ErrorCodes } from "../types/errors.ts";
+
+export class ArgError extends KindlyError {
+    constructor(message: string) {
+        super(ErrorCodes.ARG_INVALID, message);
+        this.name = "ArgError";
+    }
+}
 
 export function parseArgs<F extends FlagSpecs>(
     argv: readonly string[],

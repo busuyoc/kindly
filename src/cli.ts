@@ -7,6 +7,9 @@ import { ArgError } from "./cli/args.ts";
 import { LuaParseError } from "./lua/reader.ts";
 import { defaultEnv, type CliEnv } from "./cli/env.ts";
 import { errLine } from "./cli/log.ts";
+import { KindlyError } from "./types/errors.ts";
+import { emitJsonError } from "./cli/json.ts";
+import { writeTraceEntry, hashArgv } from "./cli/trace.ts";
 
 import { runPull, pullHelp } from "./commands/pull.ts";
 import { runApply, applyHelp } from "./commands/apply.ts";
@@ -69,6 +72,25 @@ Run \`kindly <command> --help\` (or \`kindly help <command>\`) for per-command o
 `.trim();
 
 export async function main(argv: readonly string[], env: CliEnv = defaultEnv()): Promise<number> {
+    const startMs = Date.now();
+    const code = await runMain(argv, env);
+    // Trace every invocation (including --help, --version, unknown command)
+    // so self-dogfooding counts reflect reality. Gated on env.trace; swallows
+    // its own failures in writeTraceEntry.
+    if (env.trace) {
+        writeTraceEntry(env, {
+            ts: env.now().toISOString(),
+            cmd: argv[0] ?? "",
+            argv_hash: hashArgv(argv),
+            duration_ms: Date.now() - startMs,
+            exit_code: code,
+            warnings_n: 0,
+        });
+    }
+    return code;
+}
+
+async function runMain(argv: readonly string[], env: CliEnv): Promise<number> {
     const [cmdName, ...rest] = argv;
 
     // `--version` / `-v`: print version and exit. Intentional early exit
@@ -117,9 +139,32 @@ export async function main(argv: readonly string[], env: CliEnv = defaultEnv()):
         return 0;
     }
 
+    // Universal --json flag: detected + stripped here so individual commands
+    // don't each have to declare it. When set, the command emits a JSON
+    // envelope to stdout instead of human text, and errors go to stderr as
+    // structured envelopes (not plain text + hint lines).
+    const jsonIdx = rest.indexOf("--json");
+    const jsonMode = jsonIdx >= 0;
+    const cmdArgv = jsonMode
+        ? [...rest.slice(0, jsonIdx), ...rest.slice(jsonIdx + 1)]
+        : rest;
+    if (jsonMode) env = { ...env, jsonMode: true };
+
     try {
-        return await cmd.run(rest, env);
+        return await cmd.run(cmdArgv, env);
     } catch (e) {
+        // In JSON mode, every error — including ArgError and LuaParseError —
+        // is a structured envelope on stderr. Consumers parse stderr to
+        // branch on code; no mixed text+JSON output.
+        if (jsonMode) {
+            emitJsonError(env, cmdName, e);
+            if (e instanceof ArgError) return 2;
+            return 1;
+        }
+
+        // ArgError and LuaParseError are both KindlyError subclasses, but
+        // they have custom rendering (help text / parse-prefix). Catch them
+        // first so the generic KindlyError block doesn't double-render.
         if (e instanceof ArgError) {
             errLine(env, e.message);
             env.stderr.write("\n" + cmd.help + "\n");
@@ -127,6 +172,14 @@ export async function main(argv: readonly string[], env: CliEnv = defaultEnv()):
         }
         if (e instanceof LuaParseError) {
             errLine(env, `settings.reader.lua failed to parse: ${e.message}`);
+            return 1;
+        }
+        if (e instanceof KindlyError) {
+            errLine(env, e.message);
+            for (const r of e.remediation) {
+                env.stderr.write(`  hint: ${r.text}\n`);
+                if (r.command) env.stderr.write(`  try:  ${r.command}\n`);
+            }
             return 1;
         }
         errLine(env, (e as Error).message ?? String(e));

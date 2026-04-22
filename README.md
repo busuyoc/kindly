@@ -127,11 +127,22 @@ Setup identity is a sha256 over the canonicalized manifest bytes —
 two exports of the same state produce the same id. Fat archives also
 embed per-file hashes so tampering is detectable at import time.
 
+**Schema validation (v0.5)** — every `setup export` and `setup import`
+validates its settings block against a **KOReader-derived schema** of
+557 keys (extracted from `G_reader_settings:*` call sites in the source
+tree, augmented with observed types from a live device). Unknown keys
+(typos, or plugin-scoped keys the schema hasn't catalogued) and type
+mismatches are warned on stderr by default. `--strict` converts warnings
+into a blocking error (exit 1); `--allow-unknown-keys` silences the
+unknown-key warning but still surfaces type mismatches.
+Regenerate the schema with `bun run scripts/extract-schema.ts <koreader-root>`.
+
 ## Status
 
-v0.4 in progress. Kindle-only. Solo project. 489 tests: byte-identical
+v0.5 in progress. Kindle-only. Solo project. 523 tests: byte-identical
 round-trip on a real 180-key `settings.reader.lua`, tar create/extract/list,
 full snapshot→mutate→restore→rollback coverage, Setup manifest
-export/import/templates across lean and fat formats, and compat gating
+export/import/templates across lean and fat formats, compat gating
 (version window + device family) at the import boundary with `--force`
-override. See `docs/` for design notes.
+override, and schema validation (typo + type-mismatch detection) against
+557 KOReader settings keys. See `docs/` for design notes.

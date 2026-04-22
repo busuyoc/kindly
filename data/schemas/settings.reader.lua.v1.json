@@ -1,0 +1,7873 @@
+{
+  "$schema_version": 1,
+  "extracted_from": {
+    "koreader_root": "../../../Volumes/Kindle/koreader",
+    "koreader_version": "v2026.03",
+    "lua_files_scanned": 525
+  },
+  "extracted_at": "2026-04-22T09:40:06.453Z",
+  "observed_from": [
+    "../../../Volumes/Kindle/koreader/settings.reader.lua"
+  ],
+  "stats": {
+    "total_keys": 557,
+    "by_type": {
+      "boolean": 249,
+      "number": 55,
+      "string": 59,
+      "table": 42,
+      "unknown": 152
+    },
+    "by_source": {
+      "method": 228,
+      "literal": 104,
+      "observed": 73,
+      "none": 152
+    },
+    "observed_keys_ingested": 180
+  },
+  "keys": {
+    "BookShortcuts_directory_action": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 7
+    },
+    "BookShortcuts_recursive_directory": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "LocalSend_accept_ext": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "LocalSend_auto_update_check": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "LocalSend_autostart": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "LocalSend_device_name": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "LocalSend_ext_dirs": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "LocalSend_last_update_check": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "number"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 2
+    },
+    "LocalSend_pin": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "LocalSend_port": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "LocalSend_routing_accept_all": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "LocalSend_routing_enabled": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [
+          "boolean"
+        ],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "LocalSend_save_dir": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 2
+    },
+    "LocalSend_update_check_interval_hours": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "LocalSend_use_https": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "LocalSend_use_webrtc": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "SSH_allow_no_password": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "SSH_autostart": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "SSH_key_only_auth": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "SSH_port": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "aaaProjectTitle_initial_default_setup_done2": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "activate_menu": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "has",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [],
+        "source": "literal"
+      },
+      "call_sites": 16
+    },
+    "additional_fallback_fonts": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "isFalse",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "android_ignore_back_button": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "android_ignore_volume_keys": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "android_screen_timeout": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "annotations_export_folder": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 5
+    },
+    "annotations_export_keep_all_on_import": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "annotations_export_on_closing": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "anti_alias_ui": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "auto_disable_wifi": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "auto_dismiss_wifi_scan": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "auto_restore_wifi": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "auto_save_settings_interval_minutes": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "nilOrFalse",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "auto_standby_timeout_seconds": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "auto_suspend_timeout_seconds": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "number"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 1
+    },
+    "autodim_duration_seconds": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "number"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 2
+    },
+    "autodim_fraction": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "number"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 2
+    },
+    "autodim_starttime_minutes": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 3
+    },
+    "autoremove_deleted_items_from_history": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 7
+    },
+    "autoshutdown_timeout_seconds": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "number"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 1
+    },
+    "autostart_profiles": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "has",
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "autoturn_distance": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 3
+    },
+    "autoturn_enabled": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "makeFalse",
+          "makeTrue"
+        ],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "autoturn_timeout_seconds": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 3
+    },
+    "autowarmth_activate": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "number"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 3
+    },
+    "autowarmth_altitude": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "autowarmth_control_nightmode": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "makeFalse",
+          "makeTrue",
+          "nilOrTrue",
+          "toggle"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 6
+    },
+    "autowarmth_control_warmth": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "makeFalse",
+          "makeTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "autowarmth_easy_mode": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "nilOrTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "autowarmth_fl_off_during_day": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "boolean"
+        ],
+        "observed": [],
+        "source": "literal"
+      },
+      "call_sites": 4
+    },
+    "autowarmth_fl_off_during_day_offset_s": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 4
+    },
+    "autowarmth_hide_nightmode_warning": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "makeTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "autowarmth_latitude": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "autowarmth_location": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "autowarmth_longitude": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "autowarmth_scheduler_times": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "autowarmth_timezone": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "number"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 3
+    },
+    "autowarmth_warmth": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "avoid_flashing_ui": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "back_in_filemanager": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 4
+    },
+    "back_in_reader": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 6
+    },
+    "back_to_exit": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 5
+    },
+    "backspace_as_back": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "block_start_time": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 6
+    },
+    "book_map_alt_theme": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipTrue",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "book_map_overview_tap_to_page_browser": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "isFalse",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "book_map_tap_to_page_browser": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "isFalse",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "book_map_ten_pages_markers": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 3
+    },
+    "bookmarks_items_font_size": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "number"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 6
+    },
+    "bookmarks_items_max_lines": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "bookmarks_items_multilines_show_more_text": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "bookmarks_items_per_page": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "number"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 9
+    },
+    "bookmarks_items_reverse_sorting": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "bookmarks_items_show_color": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 6
+    },
+    "bookmarks_items_show_color_default": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "bookmarks_items_show_separator": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "bookmarks_items_sorting": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 5
+    },
+    "bookmarks_items_text_type": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 4
+    },
+    "calibre_opds": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "calibre_search_": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "calibre_search_cache_metadata": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "calibre_search_case_insensitive": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "calibre_search_find_by_authors": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "calibre_search_find_by_path": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "toggle"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "calibre_search_find_by_series": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "toggle"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "calibre_search_find_by_tag": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "toggle"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "calibre_search_find_by_title": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "calibre_search_from_reader": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "toggle"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "calibre_wireless": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "calibre_wireless_default_format": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "calibre_wireless_password": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "calibre_wireless_url": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "has",
+          "hasNot",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "table"
+        ],
+        "observed": [],
+        "source": "literal"
+      },
+      "call_sites": 8
+    },
+    "closed_rotation_mode": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "number"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 2
+    },
+    "collate": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "has",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 13
+    },
+    "collate_mixed": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue",
+          "makeTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 6
+    },
+    "collection_show_mark": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "hasNot",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "color_rendering": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "has",
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "copt_": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "copt_block_rendering_mode": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "has",
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "copt_css": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "copt_fb2_css": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "copt_overlap_lines": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "cover_image_background": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [],
+        "source": "literal"
+      },
+      "call_sites": 3
+    },
+    "cover_image_cache_maxfiles": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [],
+        "source": "literal"
+      },
+      "call_sites": 1
+    },
+    "cover_image_cache_maxsize": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [],
+        "source": "literal"
+      },
+      "call_sites": 1
+    },
+    "cover_image_cache_path": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "cover_image_enabled": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "cover_image_fallback": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "cover_image_fallback_path": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "cover_image_format": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [],
+        "source": "literal"
+      },
+      "call_sites": 3
+    },
+    "cover_image_grayscale": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "cover_image_path": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "cover_image_quality": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [],
+        "source": "literal"
+      },
+      "call_sites": 1
+    },
+    "cover_image_rotate": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "boolean"
+        ],
+        "observed": [],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "cover_image_stretch_limit": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [],
+        "source": "literal"
+      },
+      "call_sites": 1
+    },
+    "coverbrowser_initial_default_setup_done": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "makeTrue"
+        ],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "cre_adjusted_fallback_font_sizes": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "cre_background_color": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "has",
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "cre_background_image": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "has",
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "cre_compress_cached_data": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 1
+    },
+    "cre_disk_cache_max_size": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "cre_font": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 5
+    },
+    "cre_font_family_fonts": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [
+          "table"
+        ],
+        "observed": [
+          "table"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 3
+    },
+    "cre_font_family_ignore_font_names": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "cre_fonts_recently_selected": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "table"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 3
+    },
+    "cre_header_author": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 1
+    },
+    "cre_header_auto_refresh": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "cre_header_battery": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 1
+    },
+    "cre_header_battery_percent": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "cre_header_chapter_marks": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 1
+    },
+    "cre_header_clock": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 1
+    },
+    "cre_header_page_count": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 1
+    },
+    "cre_header_page_number": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 1
+    },
+    "cre_header_reading_percent": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 1
+    },
+    "cre_header_status_font_size": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "has",
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "number"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 4
+    },
+    "cre_header_title": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 1
+    },
+    "cre_monospace_scaling": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "cre_partial_rerendering": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "makeFalse",
+          "makeTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "cre_show_progress": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isFalse"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 1
+    },
+    "cre_storage_size_factor": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "current_tries_number": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 6
+    },
+    "currently_blocked": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "makeFalse"
+        ],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "custom_screen_dpi": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "debug": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue",
+          "makeFalse",
+          "makeTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 6
+    },
+    "debug_verbose": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue",
+          "makeFalse",
+          "makeTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 10
+    },
+    "default_highlight_action": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 8
+    },
+    "dev_abort_on_crash": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "dev_no_c_blitter": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue",
+          "nilOrFalse"
+        ],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "dev_no_hw_dither": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "makeTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "dev_no_sw_dither": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "makeTrue",
+          "nilOrFalse",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "dev_reverse_ui_layout_mirroring": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "dev_reverse_ui_text_direction": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "dev_startup_no_fbdepth": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "device_id": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 5
+    },
+    "device_status_battery_alarm": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 6
+    },
+    "device_status_battery_interval_minutes": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "device_status_battery_threshold": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "device_status_battery_threshold_high": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "device_status_memory_alarm": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 7
+    },
+    "device_status_memory_auto_restart": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "device_status_memory_interval_minutes": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "device_status_memory_threshold": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "dict_font_size": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "dict_justify": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "dict_largewindow": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "dict_presets": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [
+          "table"
+        ],
+        "observed": [
+          "table"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "dict_presets_cycle_index": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "dicts_disabled": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "table"
+        ],
+        "observed": [
+          "table"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 4
+    },
+    "dicts_order": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "table"
+        ],
+        "observed": [
+          "table"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "dimension_units": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 6
+    },
+    "dimension_units_append_px": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "disable_android_fullscreen": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "disable_double_tap": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "disable_fuzzy_search": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "makeFalse",
+          "makeTrue",
+          "nilOrFalse"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 6
+    },
+    "disable_lookup_history": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "document_metadata_folder": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 13
+    },
+    "download_dir": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "duration_format": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 26
+    },
+    "emulator_fake_wifi_connected": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "enable_charging_led": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "end_document_action": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 3
+    },
+    "end_document_auto_mark": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "exporter": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "table"
+        ],
+        "observed": [
+          "table"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 8
+    },
+    "external_dict_lookup": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "external_dict_lookup_method": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "external_keyboard_otg_mode_on_start": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "extra_plugin_paths": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "table"
+        ],
+        "observed": [],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "fallback_font": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "file_ask_to_open": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "file_ext_assoc": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "filemanagermenu_tab_index": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "number"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 3
+    },
+    "flash_keyboard": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "nilOrTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "flash_ui": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "isFalse",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 10
+    },
+    "floating_punctuation": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "makeFalse",
+          "makeTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "fm_rotation_mode": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "focus_manager": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "child"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "folder_shortcuts": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "table"
+        ],
+        "observed": [
+          "table"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 3
+    },
+    "followed_link_marker": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "has",
+          "makeFalse",
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "font_menu_sort_by_recently_selected": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipTrue",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "font_menu_use_font_face": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "font_ui_fallbacks": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "has",
+          "readSetting"
+        ],
+        "literals": [
+          "table"
+        ],
+        "observed": [],
+        "source": "literal"
+      },
+      "call_sites": 7
+    },
+    "footer": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "child",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "table"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 8
+    },
+    "footer_presets": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [
+          "table"
+        ],
+        "observed": [
+          "table"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "footnote_link_in_popup": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [
+          "boolean"
+        ],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "footnote_popup_absolute_font_size": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "has",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 5
+    },
+    "footnote_popup_relative_font_size": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "footnote_popup_use_book_font": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "frontlight_auto_warmth": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "frontlight_intensity": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 7
+    },
+    "frontlight_max_warmth_hour": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "frontlight_warmth": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "full_refresh_count": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 6
+    },
+    "fulltext_search_find_all": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "fulltext_search_nb_context_words": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "fulltext_search_results_max_lines": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "fulltext_search_results_per_page": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "fulltext_search_zoom_to_page": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "ges_double_tap_interval_ms": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "ges_hold_interval_ms": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "ges_swipe_interval_ms": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "ges_tap_interval_ms": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "ges_tap_interval_on_keyboard_ms": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 4
+    },
+    "ges_two_finger_tap_duration_ms": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "gesture_fm": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "has"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "gesture_reader": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "has"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "gestures_migrated": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "isTrue",
+          "makeTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "haptic_feedback_override": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "header_font": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "hide_nonlinear_flows": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "highlight_action_on_single_word": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue",
+          "nilOrFalse"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "highlight_color": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "highlight_corner_scroll": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "highlight_dialog_position": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 4
+    },
+    "highlight_drawing_style": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "highlight_height_pct": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "highlight_lighten_factor": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 7
+    },
+    "highlight_long_hold_threshold_s": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 5
+    },
+    "highlight_non_touch_factor": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "highlight_non_touch_factor_dict": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "highlight_non_touch_interval": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "highlight_non_touch_spedup": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "highlight_note_marker": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "highlight_write_into_pdf": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "hasNot",
+          "isTrue",
+          "makeTrue",
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 8
+    },
+    "highlight_write_into_pdf_notify": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue",
+          "makeTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "history_datetime_short": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "history_filter": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "history_freeze_finished_books": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "history_size": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "hold_pan_rate": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 5
+    },
+    "home_dir": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "has",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 35
+    },
+    "http_proxy": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "http_proxy_enabled": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "makeFalse",
+          "makeTrue",
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "httpinspector_autostart": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "httpinspector_port": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "hyph_alg_default": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "hyph_alg_fallback": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "hyph_force_algorithmic": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "makeFalse",
+          "makeTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "hyph_left_hyphen_min": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "has",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 6
+    },
+    "hyph_right_hyphen_min": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "has",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 6
+    },
+    "hyph_soft_hyphens_only": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "makeFalse",
+          "makeTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "hyph_trust_soft_hyphens": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "makeFalse",
+          "makeTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "hyph_user_dict": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "makeFalse",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "hyphenation": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "makeFalse",
+          "makeTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "ignore_hold_corners": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "hasNot",
+          "isTrue",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 7
+    },
+    "ignore_open_sleepcover": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "makeFalse",
+          "toggle"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "ignore_power_sleepcover": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "makeFalse",
+          "toggle"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "imageviewer_rotate_auto_for_best_fit": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipTrue",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "imageviewer_rotation_landscape_invert": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "imageviewer_rotation_portrait_invert": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "inbox_dir": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 7
+    },
+    "inertial_scroll": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "nilOrTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "input_ignore_gsensor": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue",
+          "nilOrFalse"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 7
+    },
+    "input_invert_left_page_turn_keys": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue",
+          "makeFalse"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 10
+    },
+    "input_invert_page_turn_keys": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 12
+    },
+    "input_invert_right_page_turn_keys": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue",
+          "makeFalse"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 10
+    },
+    "input_lock_gsensor": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 6
+    },
+    "input_no_key_repeat": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue",
+          "makeFalse",
+          "makeTrue",
+          "nilOrFalse"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 8
+    },
+    "inverse_reading_order": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "makeFalse",
+          "makeTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "invert_ui_layout": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "makeFalse",
+          "makeTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 9
+    },
+    "is_frontlight_on": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 6
+    },
+    "items_font_size": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 6
+    },
+    "items_multilines_show_more_text": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "items_per_page": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 9
+    },
+    "keyboard_japanese_keitai_tap_interval": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "keyboard_key_bold": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "keyboard_key_border": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "nilOrTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "keyboard_key_compact": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "keyboard_key_font_size": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "number"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 3
+    },
+    "keyboard_layout": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 5
+    },
+    "keyboard_layout_default": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 5
+    },
+    "keyboard_layouts": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "table"
+        ],
+        "observed": [
+          "table"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 8
+    },
+    "keyboard_remember_layout": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "isFalse",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "keyboard_swipes_enabled": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "isFalse",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "keyvalues_per_page": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "keyvalues_per_page_landscape": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "kindle_hall_effect_sensor_enabled": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "has",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 3
+    },
+    "kopt_contrast": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "kopt_font_size": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "kopt_full_screen": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "kopt_page_gap_height": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "kopt_zoom_direction": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "kopt_zoom_factor": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "has",
+          "hasNot",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 5
+    },
+    "kopt_zoom_mode_genus": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "kopt_zoom_mode_type": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "kopt_zoom_overlap_h": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "kopt_zoom_overlap_v": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "kosync": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "table"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 5
+    },
+    "language": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 9
+    },
+    "language_japanese_text_conversions": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "language_japanese_text_scan_length": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "larger_tap_area_to_follow_links": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "last_migration_date": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "lastdir": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 6
+    },
+    "lastfile": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "has",
+          "hasNot",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 16
+    },
+    "left_right_keys_turn_pages": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue",
+          "nilOrFalse"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 6
+    },
+    "legacy_image_scaling": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "link_prefer_footnote": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "lock_home_folder": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue",
+          "nilOrFalse"
+        ],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 9
+    },
+    "lock_rotation": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue",
+          "nilOrFalse"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "low_pan_rate": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "has",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "mass_storage_confirmation_disabled": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "mass_storage_disabled": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "menu_search_string": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 2
+    },
+    "metric_length": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "has"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "monospace_font": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "multiswipes_enabled": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "makeFalse",
+          "makeTrue",
+          "toggle"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "mxcfb_bypass_wait_for": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "has",
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 7
+    },
+    "my_module_presets": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [
+          "table"
+        ],
+        "observed": [],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "my_module_presets_cycle_index": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "natural_light_config": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "navbar_bar_size": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 1
+    },
+    "navbar_bottombar_settings_on_hold": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "nilOrTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "navbar_cqa_": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "navbar_cqa_custom_qa_": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "navbar_cqa_custom_qa_1": {
+      "type": "table",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "table"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "navbar_cqa_custom_qa_2": {
+      "type": "table",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "table"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "navbar_custom_": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "navbar_custom_qa_list": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "table"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 2
+    },
+    "navbar_custom_qa_migrated_v1": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "boolean"
+        ],
+        "observed": [
+          "boolean"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "navbar_daily_reading_goal_secs": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "navbar_dotpager_always": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "nilOrTrue",
+          "saveSetting"
+        ],
+        "literals": [
+          "boolean"
+        ],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 9
+    },
+    "navbar_enabled": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "nilOrTrue",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "boolean"
+        ],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 11
+    },
+    "navbar_hide_separator": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "navbar_homescreen_collections": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "navbar_homescreen_currently": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "navbar_homescreen_enabled": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "nilOrTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "navbar_homescreen_flow_recent_fp": {
+      "type": "string",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "navbar_homescreen_header": {
+      "type": "string",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "navbar_homescreen_header_enabled": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "navbar_homescreen_module_order": {
+      "type": "table",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "table"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "navbar_homescreen_pagination_hidden": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [
+          "boolean"
+        ],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 8
+    },
+    "navbar_homescreen_quick_actions_1_enabled": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "navbar_homescreen_quick_actions_1_items": {
+      "type": "table",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "table"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "navbar_homescreen_quick_actions_2_enabled": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "navbar_homescreen_quick_actions_3_enabled": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "navbar_homescreen_quote_enabled": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "navbar_homescreen_reading_goals": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "navbar_homescreen_reading_stats_enabled": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "navbar_homescreen_recent": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "navbar_homescreen_settings_on_hold": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "nilOrTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "navbar_hs_return_to_book_folder": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "navbar_mode": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 3
+    },
+    "navbar_navpager_enabled": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [
+          "boolean"
+        ],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 9
+    },
+    "navbar_pagination_show_subtitle": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "navbar_pagination_size": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [],
+        "source": "literal"
+      },
+      "call_sites": 7
+    },
+    "navbar_pagination_visible": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "nilOrTrue",
+          "saveSetting"
+        ],
+        "literals": [
+          "boolean"
+        ],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 6
+    },
+    "navbar_reading_goal": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "navbar_reading_goal_physical": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "navbar_tabs": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "table"
+        ],
+        "observed": [
+          "table"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 9
+    },
+    "navbar_topbar_config": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "table"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 2
+    },
+    "navbar_topbar_custom_text": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "navbar_topbar_enabled": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "nilOrTrue",
+          "saveSetting"
+        ],
+        "literals": [
+          "boolean"
+        ],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 26
+    },
+    "navbar_topbar_settings_on_hold": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "nilOrTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "navbar_topbar_swipe_indicator": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "nilOrTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "navbar_topbar_wifi_hide_when_off": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "night_": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "night_full_refresh_count": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "night_mode": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 7
+    },
+    "no_cfa_post_processing": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "no_refresh_on_second_chapter_page": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "flipNilOrFalse",
+          "isTrue",
+          "makeTrue",
+          "nilOrFalse"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "notebook_file": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "notification_sources_to_show_mask": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "opds_servers": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 10
+    },
+    "open_last_menu_show_filename": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "opening_page_location_stack": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "ota_channel": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "ota_server": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "page_browser_nb_cols": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "page_browser_nb_rows": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "page_browser_preload_thumbnails": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipTrue",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "page_browser_thumbnails_pagenums": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "page_gap_color": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "page_overlap_enable": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "page_overlap_style": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "page_turns_disable_swipe": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "nilOrFalse"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 8
+    },
+    "page_turns_disable_tap": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "nilOrFalse"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 7
+    },
+    "page_turns_swipe_always_active": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "page_turns_tap_zone_backward_size_ratio": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "page_turns_tap_zone_forward_size_ratio": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "page_turns_tap_zones": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 7
+    },
+    "pagemap_chars_per_synthetic_page": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 7
+    },
+    "pagemap_label_font_size": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "pagemap_notify_document_provided": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "toggle"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "pagemap_show_page_labels": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "toggle"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "pagemap_synthetic_overrides": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "toggle"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "pagemap_use_page_labels": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "toggle"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "pageturn_power": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "panel_zoom_enabled": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "getSettingForExt",
+          "initializeExtSettings",
+          "saveSettingForExt"
+        ],
+        "literals": [],
+        "observed": [
+          "table"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 4
+    },
+    "panel_zoom_fallback_to_text_selection": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "getSettingForExt",
+          "initializeExtSettings",
+          "saveSettingForExt"
+        ],
+        "literals": [],
+        "observed": [
+          "table"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 3
+    },
+    "pb_ignore_b288_quirks": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue",
+          "nilOrFalse"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "pinpadlock_activated": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "isTrue",
+          "makeFalse",
+          "toggle"
+        ],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "pinpadlock_message": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 5
+    },
+    "pinpadlock_message_alignment": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 3
+    },
+    "pinpadlock_message_position": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 3
+    },
+    "pinpadlock_pin_code": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 6
+    },
+    "pinpadlock_show_message": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "isTrue",
+          "makeFalse",
+          "toggle"
+        ],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "plugins_disabled": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "table"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 3
+    },
+    "pm_debug_entry_failure": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "toggle"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 6
+    },
+    "profiles_autoexec": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [
+          "table"
+        ],
+        "observed": [
+          "table"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "provider": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [
+          "table"
+        ],
+        "observed": [
+          "table"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 4
+    },
+    "quickstart_shown_version": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "number"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 2
+    },
+    "quote_deck_count": {
+      "type": "number",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "number"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "quote_deck_order": {
+      "type": "string",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "quote_deck_pos": {
+      "type": "number",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "number"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "reader_footer_custom_text": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 3
+    },
+    "reader_footer_custom_text_repetitions": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 3
+    },
+    "reader_footer_mode": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "number"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 7
+    },
+    "reader_timer_remain_time": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "readtimer": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "table"
+        ],
+        "observed": [
+          "table"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "readtimer_show_value_in_footer": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "readtimer_show_value_in_header": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "refresh_on_chapter_boundaries": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "flipNilOrFalse",
+          "isTrue",
+          "makeTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 6
+    },
+    "refresh_on_pages_with_images": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "flipNilOrTrue",
+          "makeFalse",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "remarkable_hall_effect_sensor_enabled": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "has",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "reverse_collate": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "save_document": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "screen_dpi": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "screensaver_background": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "has",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [],
+        "source": "literal"
+      },
+      "call_sites": 4
+    },
+    "screensaver_cycle_images_alphabetically": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "screensaver_cycle_index": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "screensaver_delay": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 12
+    },
+    "screensaver_dir": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 3
+    },
+    "screensaver_document_cover": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 5
+    },
+    "screensaver_exclude_finished_books": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "screensaver_exclude_on_hold_books": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "screensaver_exit_message": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "screensaver_hide_cover_in_filemanager": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "screensaver_hide_fallback_msg": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "isFalse",
+          "isTrue",
+          "makeFalse",
+          "toggle"
+        ],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "screensaver_image": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "screensaver_img_background": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 4
+    },
+    "screensaver_max_files": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "screensaver_message": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "has",
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 3
+    },
+    "screensaver_message_alpha": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 6
+    },
+    "screensaver_message_container": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 3
+    },
+    "screensaver_message_vertical_position": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 6
+    },
+    "screensaver_msg_background": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 3
+    },
+    "screensaver_no_background": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "has",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "screensaver_rotate_auto_for_best_fit": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "hasNot",
+          "isTrue",
+          "makeFalse"
+        ],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 8
+    },
+    "screensaver_show_exit_message": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipFalse",
+          "has",
+          "hasNot"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "screensaver_show_message": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "isTrue",
+          "makeFalse",
+          "makeTrue",
+          "toggle"
+        ],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 10
+    },
+    "screensaver_stretch_images": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "isFalse",
+          "isTrue",
+          "makeFalse",
+          "makeTrue"
+        ],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 9
+    },
+    "screensaver_stretch_limit_percentage": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [],
+        "source": "literal"
+      },
+      "call_sites": 6
+    },
+    "screensaver_type": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 18
+    },
+    "screensaver_white_background": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "has",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "screenshot_dir": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "scroll_activation_delay": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "scroll_method": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 2
+    },
+    "sdl_window": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [
+          "table"
+        ],
+        "observed": [],
+        "source": "literal"
+      },
+      "call_sites": 1
+    },
+    "shorten_home_dir": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "show_advanced": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 1
+    },
+    "show_bottom_menu": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "show_file_in_bold": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "hasNot",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "boolean",
+          "string"
+        ],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 9
+    },
+    "show_filter": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "table"
+        ],
+        "observed": [
+          "table"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "show_finished": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "isFalse"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "show_hidden": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "readSetting"
+        ],
+        "literals": [
+          "boolean"
+        ],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "show_unsupported": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "readSetting"
+        ],
+        "literals": [
+          "boolean"
+        ],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 8
+    },
+    "simpleui_browsemeta_enabled": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "saveSetting"
+        ],
+        "literals": [
+          "boolean"
+        ],
+        "observed": [
+          "boolean"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 1
+    },
+    "simpleui_debug_button_bounds": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "simpleui_defaults_v1": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "boolean"
+        ],
+        "observed": [
+          "boolean"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "simpleui_defaults_v2": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "boolean"
+        ],
+        "observed": [
+          "boolean"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "simpleui_defaults_v3": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "boolean"
+        ],
+        "observed": [
+          "boolean"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "simpleui_enabled": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "nilOrTrue",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 8
+    },
+    "simpleui_loaded_version": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "simpleui_tb_fm_cfg": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "saveSetting"
+        ],
+        "literals": [
+          "table"
+        ],
+        "observed": [
+          "table"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "simpleui_tb_item_browse_button": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "saveSetting"
+        ],
+        "literals": [
+          "boolean"
+        ],
+        "observed": [
+          "boolean"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 1
+    },
+    "simpleui_tb_item_search_button": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "saveSetting"
+        ],
+        "literals": [
+          "boolean"
+        ],
+        "observed": [
+          "boolean"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 1
+    },
+    "skim_dialog_position": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 2
+    },
+    "start_with": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "string"
+        ],
+        "observed": [
+          "string"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 11
+    },
+    "statistics": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "table"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 3
+    },
+    "style_tweaks": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "table"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 3
+    },
+    "style_tweaks_in_dispatcher": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "table"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 2
+    },
+    "sui_tbr_list": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "saveSetting"
+        ],
+        "literals": [
+          "table"
+        ],
+        "observed": [
+          "table"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "swipe_animations": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "swipe_ignore_external_links": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "nilOrTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "swipe_link_footnote_popup": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "swipe_to_follow_nearest_link": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "swipe_to_go_back": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "swipe_to_jump_to_latest_bookmark": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "system_fonts": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "tap_ignore_external_links": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "tap_link_footnote_popup": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "tap_to_follow_links": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "isFalse",
+          "nilOrTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "terminal_buffer_size": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [
+          "number"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 4
+    },
+    "terminal_font_size": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [],
+        "source": "literal"
+      },
+      "call_sites": 4
+    },
+    "terminal_shell": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 6
+    },
+    "text_lang_default": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "has",
+          "hasNot",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 8
+    },
+    "text_lang_embedded_langs": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "makeFalse",
+          "makeTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "text_lang_fallback": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "has",
+          "hasNot",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 9
+    },
+    "textviewer_pinned_pages": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "readSetting"
+        ],
+        "literals": [
+          "table"
+        ],
+        "observed": [],
+        "source": "literal"
+      },
+      "call_sites": 6
+    },
+    "textviewer_text_types": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [
+          "table"
+        ],
+        "observed": [],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "toc_items_font_size": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 6
+    },
+    "toc_items_per_page": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "hasNot",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "number"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 8
+    },
+    "toc_items_show_chapter_length": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue",
+          "nilOrFalse"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "toc_items_with_dots": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "trans_server": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "translator_from_auto_detect": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "isFalse",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "translator_from_doc_lang": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipTrue",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 6
+    },
+    "translator_from_language": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "has",
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "translator_to_language": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "translator_with_romanizations": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipTrue",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "twelve_hour_clock": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 9
+    },
+    "txt_preformatted": {
+      "type": "number",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "has",
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "number"
+        ],
+        "observed": [],
+        "source": "literal"
+      },
+      "call_sites": 5
+    },
+    "ui_cursor_combine_regions": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 1
+    },
+    "ui_cursor_use_refresh_funcs": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 1
+    },
+    "use_bold_font_for_bold": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 1
+    },
+    "use_cre_call_cache": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 4
+    },
+    "use_cre_call_cache_log_stats": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "use_xtext": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "isFalse",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 6
+    },
+    "virtual_keyboard_enabled": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "hasNot",
+          "isTrue",
+          "makeTrue",
+          "nilOrFalse"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 12
+    },
+    "vocabulary_builder": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [
+          "table"
+        ],
+        "observed": [
+          "table"
+        ],
+        "source": "literal"
+      },
+      "call_sites": 2
+    },
+    "wf_level": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "wifi_disable_action": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 3
+    },
+    "wifi_enable_action": {
+      "type": "string",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 7
+    },
+    "wifi_was_on": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "makeFalse",
+          "makeTrue"
+        ],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 5
+    },
+    "wikipedia_disable_history": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "isTrue",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 2
+    },
+    "wikipedia_epub_highres_images": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "wikipedia_epub_include_images": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "wikipedia_languages": {
+      "type": "table",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [
+          "table"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 2
+    },
+    "wikipedia_last_language": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    },
+    "wikipedia_prettify": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 1
+    },
+    "wikipedia_save_dir": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting",
+          "saveSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "wikipedia_save_in_book_dir": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrFalse",
+          "isTrue"
+        ],
+        "literals": [],
+        "observed": [
+          "boolean"
+        ],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "wikipedia_show_image": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 6
+    },
+    "wikipedia_show_more_images": {
+      "type": "boolean",
+      "evidence": {
+        "methods": [
+          "flipNilOrTrue",
+          "nilOrTrue"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": "method"
+      },
+      "call_sites": 3
+    },
+    "xtext_alt_lang": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 1
+    },
+    "zlib_user_id": {
+      "type": "string",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "zlib_user_key": {
+      "type": "string",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "zlibrary_base_url": {
+      "type": "string",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "zlibrary_download_dir": {
+      "type": "string",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "zlibrary_password": {
+      "type": "string",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "zlibrary_search_extensions": {
+      "type": "table",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "table"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "zlibrary_search_languages": {
+      "type": "table",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "table"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "zlibrary_search_order": {
+      "type": "table",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "table"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "zlibrary_username": {
+      "type": "string",
+      "evidence": {
+        "methods": [],
+        "literals": [],
+        "observed": [
+          "string"
+        ],
+        "source": "observed"
+      },
+      "call_sites": 0
+    },
+    "zoom_factor": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "has"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 4
+    },
+    "zoom_mode": {
+      "type": "unknown",
+      "evidence": {
+        "methods": [
+          "delSetting",
+          "has",
+          "readSetting"
+        ],
+        "literals": [],
+        "observed": [],
+        "source": null
+      },
+      "call_sites": 3
+    }
+  }
+}

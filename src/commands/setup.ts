@@ -24,6 +24,8 @@ import { packSetup } from "../setup/pack.ts";
 import { unpackSetup } from "../setup/unpack.ts";
 import { checkCompat, formatCompatIssue } from "../setup/compat.ts";
 import { detectDeviceFamily, readKoreaderVersion } from "../device/version.ts";
+import { loadSchema } from "../schema/settings.ts";
+import { validateSettings, formatValidationReport, hasFindings, type ValidationReport } from "../schema/report.ts";
 import {
     affectedPatchTargets, affectedPluginTargets,
     collectPatches, collectPluginDirs,
@@ -95,6 +97,16 @@ const EXPORT_FLAGS = {
     "compat-device": {
         type: "string",
         description: "comma-separated device ids this Setup targets (e.g. kindle-pw5,kindle-oasis3)",
+    },
+    strict: {
+        type: "boolean",
+        default: false,
+        description: "fail (exit 1) if the settings block contains unknown keys or type mismatches against the KOReader schema",
+    },
+    "allow-unknown-keys": {
+        type: "boolean",
+        default: false,
+        description: "suppress warnings for setting keys not in the KOReader schema (type mismatches still warn)",
     },
 } as const satisfies FlagSpecs;
 
@@ -199,6 +211,16 @@ async function runSetupExport(argv: readonly string[], env: CliEnv): Promise<num
     // manifest.plugins.disabled. Better data shape for UI/diff; trivially
     // reversed on import.
     const { pluginsDisabled, settingsMinusPlugins } = liftPluginsDisabled(settings);
+
+    // Schema validation. Runs against the final settings shape that lands
+    // in the manifest. Unknown keys are almost always typos (nightmode vs
+    // night_mode) or plugin-scoped keys the schema doesn't know. Default
+    // is warn + proceed; --strict fails; --allow-unknown-keys suppresses
+    // unknown-key warnings (type mismatches always warn).
+    const exportReport = validateSettings(settingsMinusPlugins as Record<string, unknown>, loadSchema());
+    if (emitSchemaFindings(env, exportReport, { strict: flags.strict, allowUnknownKeys: flags["allow-unknown-keys"] })) {
+        return 1;
+    }
 
     // Fat collection — scan plugin dirs / patches if flagged. Empty
     // results are fine: the manifest just stays lean. Templates can be
@@ -647,6 +669,16 @@ const IMPORT_FLAGS = {
         default: false,
         description: "import even when the device fails the Setup's compat check",
     },
+    strict: {
+        type: "boolean",
+        default: false,
+        description: "fail (exit 1) if the manifest contains unknown settings keys or type mismatches against the KOReader schema",
+    },
+    "allow-unknown-keys": {
+        type: "boolean",
+        default: false,
+        description: "suppress warnings for setting keys not in the KOReader schema (type mismatches still warn)",
+    },
 } as const satisfies FlagSpecs;
 
 // Detect fat (.kset tar.gz) vs lean (.kset.yaml or .yaml) by extension.
@@ -701,6 +733,37 @@ function flattenManifestForApply(manifest: SetupManifest): Record<string, LuaVal
         out.plugins_disabled = pd;
     }
     return out;
+}
+
+// Emit schema-validation warnings per finding; return true iff --strict
+// and there were findings we should block on. --allow-unknown-keys
+// silences the unknown-key warnings (and the strict-block on them); type
+// mismatches always warn and always count for strict.
+function emitSchemaFindings(
+    env: CliEnv,
+    report: ValidationReport,
+    opts: { strict: boolean; allowUnknownKeys: boolean },
+): boolean {
+    const showUnknowns = !opts.allowUnknownKeys;
+    let blocking = false;
+    if (showUnknowns && report.unknownKeys.length > 0) {
+        warn(env, `schema: ${report.unknownKeys.length} unknown key(s) — likely typos or plugin-scoped:`);
+        for (const u of report.unknownKeys) {
+            env.stderr.write(`  - ${u.key}  (value is ${u.actualType})\n`);
+        }
+        if (opts.strict) blocking = true;
+    }
+    if (report.typeMismatches.length > 0) {
+        warn(env, `schema: ${report.typeMismatches.length} type mismatch(es):`);
+        for (const t of report.typeMismatches) {
+            env.stderr.write(`  - ${t.key}: expected ${t.expectedType}, got ${t.actualType}\n`);
+        }
+        if (opts.strict) blocking = true;
+    }
+    if (blocking) {
+        env.stderr.write(`\n--strict: aborting due to schema findings.\n`);
+    }
+    return blocking;
 }
 
 function fmtValue(v: unknown): string {
@@ -804,6 +867,17 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
                 return 1;
             }
             warn(env, "--force: proceeding despite compat mismatch.");
+        }
+    }
+
+    // Schema validation on the manifest's settings block. Runs before any
+    // device mutation; --strict aborts, default warns and proceeds. This
+    // is the layer that catches typos like `nightmode` (would have been
+    // flagged in the 2026-04-22 field test).
+    if (manifest.settings) {
+        const importReport = validateSettings(manifest.settings as Record<string, unknown>, loadSchema());
+        if (emitSchemaFindings(env, importReport, { strict: flags.strict, allowUnknownKeys: flags["allow-unknown-keys"] })) {
+            return 1;
         }
     }
 

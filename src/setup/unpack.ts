@@ -16,7 +16,7 @@
 // Any failure → throw SetupUnpackError with a specific message. Don't
 // leak partial state to the caller.
 
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, lstatSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { parse as yamlParse } from "yaml";
@@ -82,7 +82,11 @@ export function unpackSetup(archivePath: string): UnpackedSetup {
     try {
         extractTarGz({ archivePath, destRoot: stage });
 
-        const manifestBytes = readFileSync(join(stage, "manifest.yaml"));
+        const manifestAbs = join(stage, "manifest.yaml");
+        if (lstatSync(manifestAbs).isSymbolicLink()) {
+            throw new SetupUnpackError("manifest.yaml is a symlink");
+        }
+        const manifestBytes = readFileSync(manifestAbs);
         let manifest: SetupManifest;
         try {
             const raw = yamlParse(manifestBytes.toString("utf8"));
@@ -111,16 +115,24 @@ export function unpackSetup(archivePath: string): UnpackedSetup {
         }
 
         // Every declared file must exist on disk, with matching size + hash.
+        // lstatSync (not statSync) so symlinks aren't followed — a malicious
+        // archive could plant a symlink to read arbitrary host files.
         const files = new Map<string, Buffer>();
         for (const [fullPath, d] of declared.entries()) {
             const abs = join(stage, fullPath.split("/").join(sep));
             if (!existsSync(abs)) {
                 throw new SetupUnpackError(`manifest declares ${fullPath} but archive doesn't contain it`);
             }
-            const actualBytes = statSync(abs).size;
-            if (actualBytes !== d.bytes) {
+            const st = lstatSync(abs);
+            if (st.isSymbolicLink()) {
+                throw new SetupUnpackError(`archive contains symlink: ${fullPath}`);
+            }
+            if (!st.isFile()) {
+                throw new SetupUnpackError(`archive entry is not a regular file: ${fullPath}`);
+            }
+            if (st.size !== d.bytes) {
                 throw new SetupUnpackError(
-                    `${fullPath}: declared bytes=${d.bytes}, actual=${actualBytes}`
+                    `${fullPath}: declared bytes=${d.bytes}, actual=${st.size}`
                 );
             }
             const buf = readFileSync(abs);

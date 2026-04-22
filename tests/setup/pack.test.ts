@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import {
     existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
-    writeFileSync,
+    symlinkSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -358,6 +358,23 @@ describe("unpackSetup rejects malformed archives", () => {
         ]);
         expect(r.status).toBe(0);
         expect(() => unpackSetup(archive)).toThrow(/declared hash=.*actual=/);
+    });
+
+    test("rejects archive containing a symlink", () => {
+        const m = fatManifest();
+        const stage = join(workDir, "symlink");
+        mkdirSync(join(stage, "plugins", "SSH.koplugin"), { recursive: true });
+        mkdirSync(join(stage, "patches"), { recursive: true });
+        writeFileSync(join(stage, "manifest.yaml"), canonicalizeManifest(m));
+        symlinkSync("/etc/passwd", join(stage, "plugins", "SSH.koplugin", "main.lua"));
+        writeFileSync(join(stage, "patches", "2-autoflash.lua"), patchBytes());
+        const archive = join(workDir, "symlink.kset");
+        const r = spawnSync("tar", [
+            "-czf", archive, "-C", stage,
+            "manifest.yaml", "plugins", "patches",
+        ], { encoding: "utf8" });
+        expect(r.status).toBe(0);
+        expect(() => unpackSetup(archive)).toThrow(/symlink/);
     });
 
     test("rejects archive whose manifest.yaml fails schema validation", () => {

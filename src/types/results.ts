@@ -50,16 +50,21 @@ export interface DiffResult {
     yamlPath: string;
     /** Absolute path of the on-device settings.reader.lua. */
     settingsPath: string;
-    /** Changes that `apply` would make, in deterministic order. */
+    /** Changes that `apply` would make, in deterministic order.
+     *  When `filteredBy` is set, this is already scoped to that category. */
     changes: Change[];
     /** Same changes bucketed by taxonomy category, each entry enriched with
      *  label + severity + hint. Category keys appear in taxonomy-declared
      *  order; empty categories are omitted. Derivable from `changes` + the
      *  taxonomy, but pre-grouped here so JSON consumers (and the GUI) don't
-     *  need to re-apply the mapper. */
+     *  need to re-apply the mapper.
+     *  When `filteredBy` is set, holds at most one category bucket. */
     grouped: Record<string, DiffGroupEntry[]>;
-    /** Top-level on-device keys NOT present in the YAML. apply leaves them alone. */
+    /** Top-level on-device keys NOT present in the YAML. apply leaves them alone.
+     *  When `filteredBy` is set, only keys whose taxonomy category matches. */
     untrackedKeys: string[];
+    /** Category name passed via `--category <name>`; absent when no filter. */
+    filteredBy?: string;
 }
 
 export interface ApplyResult {

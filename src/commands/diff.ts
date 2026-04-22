@@ -15,7 +15,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { parseArgs, type FlagSpecs } from "../cli/args.ts";
+import { ArgError, parseArgs, type FlagSpecs } from "../cli/args.ts";
 import { type CliEnv, resolveMount } from "../cli/env.ts";
 import { dim, heading, info, paint } from "../cli/log.ts";
 import { parseSettingsFile } from "../lua/reader.ts";
@@ -26,6 +26,7 @@ import type { DiffResult } from "../types/results.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { emitJson } from "../cli/json.ts";
 import { groupChanges } from "../taxonomy/group.ts";
+import { categoryOf, loadTaxonomy } from "../taxonomy/mapper.ts";
 
 const FLAGS = {
     file: {
@@ -37,10 +38,16 @@ const FLAGS = {
         type: "string",
         description: "path to a mounted Kindle (auto-detected by default)",
     },
+    category: {
+        type: "string",
+        description: "narrow output to a single taxonomy category (e.g. fonts, display)",
+    },
 } as const satisfies FlagSpecs;
 
 export interface DiffOptions {
     file?: string;
+    /** Restrict output to this taxonomy category. Unknown names throw ArgError. */
+    category?: string;
 }
 
 // Compute the diff between YAML and the on-device settings. Returns data;
@@ -59,14 +66,30 @@ export function executeDiff(opts: DiffOptions, env: CliEnv): DiffResult {
     const onDevice = parseSettingsFile(readFileSync(mount.settingsPath, "utf8")) as Record<string, LuaValue>;
     const fromYaml = yamlToLua(readFileSync(yamlPath, "utf8")) as Record<string, LuaValue>;
 
-    const changes = computeChanges(onDevice, fromYaml);
+    const allChanges = computeChanges(onDevice, fromYaml);
 
     const yamlKeys = new Set(Object.keys(fromYaml));
-    const untrackedKeys = Object.keys(onDevice)
+    const allUntracked = Object.keys(onDevice)
         .filter((k) => !yamlKeys.has(k))
         .sort();
 
-    const grouped = groupChanges(changes);
+    // --category filter: restrict both changes and untrackedKeys to a single
+    // taxonomy bucket. The category must exist in the taxonomy (typos throw
+    // rather than silently returning an empty diff).
+    const tax = loadTaxonomy();
+    if (opts.category !== undefined && !tax.categories.includes(opts.category)) {
+        throw new ArgError(
+            `unknown category: "${opts.category}". Valid: ${tax.categories.join(", ")}`,
+        );
+    }
+
+    const changes = opts.category === undefined
+        ? allChanges
+        : allChanges.filter((c) => categoryOf(tax, c.path[0]!) === opts.category);
+    const untrackedKeys = opts.category === undefined
+        ? allUntracked
+        : allUntracked.filter((k) => categoryOf(tax, k) === opts.category);
+    const grouped = groupChanges(changes, tax);
 
     return {
         yamlPath,
@@ -74,15 +97,21 @@ export function executeDiff(opts: DiffOptions, env: CliEnv): DiffResult {
         changes,
         grouped,
         untrackedKeys,
+        ...(opts.category !== undefined ? { filteredBy: opts.category } : {}),
     };
 }
 
 
 export function renderDiff(result: DiffResult, env: CliEnv): void {
+    const scope = result.filteredBy ? ` in ${result.filteredBy}` : "";
     if (result.changes.length === 0) {
-        info(env, "no differences — device matches YAML for all keys in YAML.");
+        if (result.filteredBy) {
+            info(env, `no differences in ${result.filteredBy} — device matches YAML for that category.`);
+        } else {
+            info(env, "no differences — device matches YAML for all keys in YAML.");
+        }
     } else {
-        heading(env, `${result.changes.length} change(s) would be applied:`);
+        heading(env, `${result.changes.length} change(s)${scope} would be applied:`);
         for (const c of result.changes) {
             renderChange(env, c);
         }
@@ -93,7 +122,7 @@ export function renderDiff(result: DiffResult, env: CliEnv): void {
     if (result.untrackedKeys.length > 0) {
         info(env, "");
         info(env, dim(env,
-            `(${result.untrackedKeys.length} on-device key(s) not tracked by this YAML — apply will leave them unchanged.)`
+            `(${result.untrackedKeys.length} on-device key(s)${scope} not tracked by this YAML — apply will leave them unchanged.)`
         ));
     }
 }
@@ -102,7 +131,13 @@ export async function runDiff(argv: readonly string[], env: CliEnv): Promise<num
     const { flags } = parseArgs(argv, FLAGS);
     if (flags.mount) env = { ...env, mountOverride: flags.mount };
 
-    const result = executeDiff({ file: flags.file }, env);
+    const result = executeDiff(
+        {
+            file: flags.file,
+            ...(flags.category ? { category: flags.category } : {}),
+        },
+        env,
+    );
     if (env.jsonMode) emitJson(env, "diff", result);
     else renderDiff(result, env);
 
@@ -135,10 +170,12 @@ function fmt(v: unknown): string {
 export const diffHelp = `
 kindly diff — show what apply would change on the device.
 
-usage: kindly diff [--file <path>] [--mount <path>]
+usage: kindly diff [--file <path>] [--mount <path>] [--category <name>]
 
-  --file <path>   YAML to diff against (default: kindly.yaml)
-  --mount <path>  path to a mounted Kindle (auto-detected by default)
+  --file <path>      YAML to diff against (default: kindly.yaml)
+  --mount <path>     path to a mounted Kindle (auto-detected by default)
+  --category <name>  restrict output to a single taxonomy category
+                     (e.g. fonts, display, status_bar, reading)
 
 Exit code: 0 if no changes, 1 if changes present.
 `.trim();

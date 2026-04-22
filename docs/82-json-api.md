@@ -153,7 +153,8 @@ Preview what `apply` would do. No device writes.
       string,                  // category name, in taxonomy-declared order
       DiffGroupEntry[]
     >,
-    untrackedKeys: string[]     // on-device top-level keys not in YAML
+    untrackedKeys: string[],    // on-device top-level keys not in YAML
+    filteredBy?: string         // category name when --category <name> was passed
   }
 
   // DiffGroupEntry enriches each change with taxonomy-sourced metadata so
@@ -170,6 +171,9 @@ Preview what `apply` would do. No device writes.
   ```
   Empty categories are omitted. Nested paths (e.g. `footer.align`) inherit
   the category/label of their top-level key (`footer`).
+- **Flags affecting shape:** `--category <name>` narrows `changes`,
+  `grouped`, and `untrackedKeys` to a single taxonomy bucket and sets
+  `filteredBy`. Unknown category names yield `ARG_INVALID`.
 - **Errors:** `YAML_NOT_FOUND`, `MOUNT_*`, `SETTINGS_NOT_FOUND`, `LUA_PARSE_FAILED`, `ARG_INVALID`.
 
 ### 3.3 `apply`

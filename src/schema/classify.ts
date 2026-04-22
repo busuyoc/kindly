@@ -15,14 +15,16 @@ export type Classification = "SECRET" | "EPHEMERAL" | "USER";
 
 // Exact top-level key matches. See docs/30-decisions.md Secrets denylist.
 const SECRET_KEYS = new Set<string>([
+    "calibre_wireless_password",
+    "device_id",
+    "LocalSend_pin",
     "pinpadlock_pin_code",
     "pinpadlock_message",        // phone number in practice
-    "zlibrary_password",
-    "zlibrary_username",
+    "screensaver_message",       // phone number in practice
     "zlib_user_id",
     "zlib_user_key",
-    "device_id",
-    "screensaver_message",       // phone number in practice
+    "zlibrary_password",
+    "zlibrary_username",
 ]);
 
 // Nested secret paths: dotted key-within-key. Applied by filterLuaTable.

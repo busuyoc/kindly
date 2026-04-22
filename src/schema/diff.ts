@@ -33,7 +33,7 @@ export function computeChanges(
     const changes: Change[] = [];
     // Iterate in sorted order so output is deterministic across runs.
     for (const k of Object.keys(fromYaml).sort()) {
-        diffInto(changes, [k], onDevice[k], fromYaml[k]);
+        diffInto(changes, [k], onDevice[k], fromYaml[k]!);
     }
     return changes;
 }
@@ -55,7 +55,7 @@ export function computeReplaceChanges(
     const changes: Change[] = [];
     // Adds + changes first (sorted).
     for (const k of Object.keys(fromManifest).sort()) {
-        diffInto(changes, [k], onDevice[k], fromManifest[k]);
+        diffInto(changes, [k], onDevice[k], fromManifest[k]!);
     }
     // Removals: on-device USER keys not declared in the manifest.
     for (const k of Object.keys(onDevice).sort()) {

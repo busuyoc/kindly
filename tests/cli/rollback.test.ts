@@ -145,7 +145,7 @@ describe("rollback — settings-only snapshot", () => {
         expect(existsSync(preRollbackRoot)).toBe(true);
         const stamps = readdirSync(preRollbackRoot);
         expect(stamps.length).toBe(1);
-        expect(existsSync(join(preRollbackRoot, stamps[0], "settings.reader.lua"))).toBe(true);
+        expect(existsSync(join(preRollbackRoot, stamps[0]!, "settings.reader.lua"))).toBe(true);
     });
 });
 
@@ -203,7 +203,7 @@ describe("rollback — fat snapshot", () => {
         const preRoot = join(workdir, ".kindly", "pre-rollback");
         const stamps = readdirSync(preRoot);
         expect(stamps.length).toBe(1);
-        expect(existsSync(join(preRoot, stamps[0], "plugins-patches.tar.gz"))).toBe(true);
+        expect(existsSync(join(preRoot, stamps[0]!, "plugins-patches.tar.gz"))).toBe(true);
     });
 });
 

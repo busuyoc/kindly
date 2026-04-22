@@ -145,7 +145,12 @@ function main() {
     for (let i = 0; i < args.length; i++) {
         const a = args[i];
         if (a === "--observed") {
-            observedPaths.push(args[++i]);
+            const next = args[++i];
+            if (next === undefined) {
+                console.error("--observed requires a path argument");
+                process.exit(2);
+            }
+            observedPaths.push(next);
         } else if (!rawRoot) {
             rawRoot = a;
         } else if (!rawOut) {
@@ -179,7 +184,11 @@ function main() {
         CALL_RE.lastIndex = 0;
         let m: RegExpExecArray | null;
         while ((m = CALL_RE.exec(text)) !== null) {
-            const [, method, key, arg] = m;
+            // `method` and `key` are required capture groups — always strings
+            // when the regex matches. `arg` is optional.
+            const method = m[1]!;
+            const key = m[2]!;
+            const arg = m[3];
             const ev = evidence.get(key) ?? {
                 methods: new Set(), literals: new Set(), observed: new Set(), callSites: 0,
             };
@@ -212,7 +221,8 @@ function main() {
         const ev = evidence.get(k)!;
         const { type: t, source } = inferType(ev);
         typeCounts[t] += 1;
-        sourceCounts[source ?? "none"] += 1;
+        const sk = source ?? "none";
+        sourceCounts[sk] = (sourceCounts[sk] ?? 0) + 1;
         keys[k] = {
             type: t,
             evidence: {

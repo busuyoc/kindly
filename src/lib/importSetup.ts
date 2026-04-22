@@ -280,8 +280,11 @@ export function executeSetupImport(
     }
 
     const manifestFlat = flattenManifestForApply(manifest);
-    const { kept: safeFlat, droppedSecrets: refusedSecrets } =
+    const { kept: safeFlatRaw, droppedSecrets: refusedSecrets } =
         filterForYaml(manifestFlat, "full");
+    // filterForYaml returns Record<string, unknown>; values originate from
+    // the manifest (already LuaValue-compatible) — narrow for downstream.
+    const safeFlat = safeFlatRaw as Record<string, LuaValue>;
 
     const onDeviceSrc = readFileSync(mount.settingsPath, "utf8");
     const onDevice = parseSettingsFile(onDeviceSrc) as Record<string, LuaValue>;

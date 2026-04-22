@@ -36,13 +36,13 @@ describe("checkCompat — koreader version gate", () => {
     test("detected < min → blocks with too_old", () => {
         const r = checkCompat({ koreader_version_min: "2026.06" }, detected("v2026.03"));
         expect(r.blocking).toHaveLength(1);
-        expect(r.blocking[0].kind).toBe("koreader_too_old");
+        expect(r.blocking[0]!.kind).toBe("koreader_too_old");
     });
 
     test("detected > max → blocks with too_new", () => {
         const r = checkCompat({ koreader_version_max: "2024.11" }, detected("v2026.03"));
         expect(r.blocking).toHaveLength(1);
-        expect(r.blocking[0].kind).toBe("koreader_too_new");
+        expect(r.blocking[0]!.kind).toBe("koreader_too_new");
     });
 
     test("both bounds, detected in window → ok", () => {
@@ -57,20 +57,20 @@ describe("checkCompat — koreader version gate", () => {
         const r = checkCompat({ koreader_version_min: "2024.03" }, detected(null));
         expect(r.blocking).toEqual([]);
         expect(r.unverifiable).toHaveLength(1);
-        expect(r.unverifiable[0].kind).toBe("koreader_unknown");
+        expect(r.unverifiable[0]!.kind).toBe("koreader_unknown");
     });
 
     test("unparseable min in manifest → unverifiable, not blocking", () => {
         const r = checkCompat({ koreader_version_min: "not-a-version" }, detected("v2026.03"));
         expect(r.blocking).toEqual([]);
         expect(r.unverifiable).toHaveLength(1);
-        expect(r.unverifiable[0].kind).toBe("version_unparseable");
+        expect(r.unverifiable[0]!.kind).toBe("version_unparseable");
     });
 
     test("lexicographic trap guarded: v2024.9 < v2024.10", () => {
         const r = checkCompat({ koreader_version_min: "2024.10" }, detected("v2024.9"));
         expect(r.blocking).toHaveLength(1);
-        expect(r.blocking[0].kind).toBe("koreader_too_old");
+        expect(r.blocking[0]!.kind).toBe("koreader_too_old");
     });
 });
 
@@ -93,14 +93,14 @@ describe("checkCompat — device family gate", () => {
     test("no match → blocks", () => {
         const r = checkCompat({ device: ["kobo-libra", "kobo-clara"] }, detected("v2026.03", "kindle"));
         expect(r.blocking).toHaveLength(1);
-        expect(r.blocking[0].kind).toBe("device_mismatch");
+        expect(r.blocking[0]!.kind).toBe("device_mismatch");
     });
 
     test("detection failed → unverifiable, not blocking", () => {
         const r = checkCompat({ device: ["kindle"] }, detected("v2026.03", "unknown"));
         expect(r.blocking).toEqual([]);
         expect(r.unverifiable).toHaveLength(1);
-        expect(r.unverifiable[0].kind).toBe("device_unknown");
+        expect(r.unverifiable[0]!.kind).toBe("device_unknown");
     });
 
     test("empty device list → no check", () => {

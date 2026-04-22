@@ -1,0 +1,75 @@
+# Hand-curated category assignments for settings.reader.lua keys.
+#
+# Format: each entry is either a string (category name) or an object with
+# overrides (label, description, control_hint). The string form is the
+# compact case; the object form is for keys that benefit from a richer
+# human label or a refined control hint that the schema type can't infer.
+#
+# Declared categories are validated on build — adding a key with an
+# undeclared category name fails `scripts/build-taxonomy.ts`. The same
+# goes for stale keys (entries not present in the schema).
+#
+# This file is the W7 stub — 3 categories × ~6 keys each, enough to prove
+# the pipeline end-to-end. W8 fills out the full 10-category curation.
+# Unmapped schema keys fall into "uncategorized" and show up in the
+# build output's `stats.uncategorized_count`.
+
+categories:
+  - reading
+  - fonts
+  - status_bar
+
+keys:
+  # --- reading ---
+  avoid_flashing_ui: reading
+  home_dir: reading
+  lastfile: reading
+  screen_dpi:
+    category: reading
+    label: "Screen DPI"
+    description: "Device pixel density. Affects how ppi-sensitive sizes render."
+  copt_block_rendering_mode: reading
+  copt_overlap_lines: reading
+
+  # --- fonts ---
+  font_menu_sort_by_recently_selected:
+    category: fonts
+    label: "Sort font menu by recently selected"
+  font_menu_use_font_face:
+    category: fonts
+    label: "Show font names in their own typeface"
+  font_ui_fallbacks:
+    category: fonts
+    label: "UI font fallbacks"
+    description: "Ordered list of fonts KOReader falls back to for UI glyphs the primary font can't render."
+    control_hint: structured
+  copt_css:
+    category: fonts
+    label: "Stylesheet (CSS)"
+    control_hint: text
+  copt_fb2_css:
+    category: fonts
+    label: "FictionBook stylesheet"
+    control_hint: text
+
+  # --- status_bar ---
+  footer:
+    category: status_bar
+    label: "Footer config"
+    control_hint: structured
+  footer_presets:
+    category: status_bar
+    label: "Footer presets"
+    control_hint: structured
+  reader_footer_custom_text:
+    category: status_bar
+    label: "Custom footer text"
+  reader_footer_custom_text_repetitions:
+    category: status_bar
+    label: "Custom footer text repetitions"
+  reader_footer_mode:
+    category: status_bar
+    label: "Footer mode"
+  readtimer_show_value_in_footer:
+    category: status_bar
+    label: "Show read-timer value in footer"

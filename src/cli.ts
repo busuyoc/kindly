@@ -17,6 +17,9 @@ import { runSnapshot, snapshotHelp } from "./commands/snapshot.ts";
 import { runRestore, restoreHelp } from "./commands/restore.ts";
 import { runSetup, setupHelp } from "./commands/setup.ts";
 
+import pkg from "../package.json" with { type: "json" };
+const VERSION: string = pkg.version;
+
 type Command = {
     run: (argv: readonly string[], env: CliEnv) => Promise<number>;
     help: string;
@@ -38,24 +41,61 @@ kindly — declarative backup & restore for KOReader settings.
 
 usage: kindly <command> [options]
 
-Commands:
+Device state:
   pull       read settings.reader.lua from the Kindle → kindly.yaml
   apply      merge kindly.yaml → settings.reader.lua (safe-write + verify)
   diff       show what apply would change
+
+Bootstrap & health:
   init       write a starter kindly.yaml from a preset
   doctor     sanity-check the device
+
+Safety net:
   snapshot   tarball user-state (plugins, patches, history) for factory-reset insurance
   restore    extract a snapshot back into the Kindle
-  setup      create and manage shareable Setups (kindly setup --help)
 
-Run \`kindly <command> --help\` for per-command options.
+Shareable Setups:
+  setup      create, inspect, and apply curated Setup manifests
+             (see \`kindly setup --help\` for subcommands)
+
+Other:
+  help <cmd>   print that command's help
+  --version    print the kindly version and exit
+
+Run \`kindly <command> --help\` (or \`kindly help <command>\`) for per-command options.
 `.trim();
 
 export async function main(argv: readonly string[], env: CliEnv = defaultEnv()): Promise<number> {
     const [cmdName, ...rest] = argv;
 
-    if (!cmdName || cmdName === "--help" || cmdName === "-h" || cmdName === "help") {
+    // `--version` / `-v`: print version and exit. Intentional early exit
+    // before anything else so it works in any context (no mount, no args).
+    if (cmdName === "--version" || cmdName === "-v") {
+        env.stdout.write(`kindly ${VERSION}\n`);
+        return 0;
+    }
+
+    // Bare invocation → top-level help.
+    if (!cmdName || cmdName === "--help" || cmdName === "-h") {
         env.stdout.write(TOP_HELP + "\n");
+        return 0;
+    }
+
+    // Git-style `kindly help <cmd>` → show that command's help.
+    // Bare `kindly help` keeps the legacy behavior of the top-level overview.
+    if (cmdName === "help") {
+        const target = rest[0];
+        if (!target) {
+            env.stdout.write(TOP_HELP + "\n");
+            return 0;
+        }
+        const targetCmd = COMMANDS[target];
+        if (!targetCmd) {
+            errLine(env, `unknown command: ${target}`);
+            env.stderr.write("\n" + TOP_HELP + "\n");
+            return 2;
+        }
+        env.stdout.write(targetCmd.help + "\n");
         return 0;
     }
 

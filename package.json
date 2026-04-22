@@ -1,5 +1,6 @@
 {
   "name": "kindly",
+  "version": "0.3.0",
   "module": "src/cli.ts",
   "type": "module",
   "private": true,

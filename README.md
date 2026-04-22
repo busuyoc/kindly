@@ -18,9 +18,13 @@ kindly init minimal                      # start from a curated preset
 kindly doctor                            # sanity check
 kindly snapshot                          # tarball of plugins/patches/history
 kindly restore <archive>                 # extract a snapshot back to device
+
+kindly setup export my-config            # make a shareable Setup manifest
+kindly setup import my-config.kset.yaml  # apply someone's Setup to your device
+kindly setup templates                   # list curated starting points
 ```
 
-Sharing setups (Reddit-style) and SimpleUI typed schemas come later. v0.1–v0.2 is about not losing your config.
+v0.3 adds shareable Setups (see below). SimpleUI typed schemas still come later.
 
 ## How it works
 
@@ -72,8 +76,58 @@ archive are left alone (tar semantics). The safety snapshot lives at
 **Snapshots contain plaintext secrets** (copy of `settings.reader.lua`) —
 don't commit them; `.gitignore` already excludes `*.tar.gz`.
 
+## Setups (v0.3)
+
+`kindly.yaml` is **your device** (full pull, checked into your own repo).
+A **Setup** is a curated, shareable slice — "here's my night-reading
+config, try it" — with a stable identity and apply semantics.
+
+Two formats:
+- **Lean** `foo.kset.yaml` — just settings + optional `plugins.disabled`.
+  Diffable, readable, one file.
+- **Fat** `foo.kset` (tar.gz) — lean manifest plus user-installed plugin
+  directories and/or hand-written `patches/*.lua`. Use `--include-plugin-files`
+  and/or `--include-patches` on export.
+
+Apply modes:
+- **additive** (default) — merge declared keys, leave everything else alone.
+- **replace** — wipe non-declared USER keys, but always preserve secrets
+  and ephemerals. Use for a clean "this is the whole config" handoff.
+
+```bash
+kindly setup export my-config                  # device → my-config.kset.yaml
+kindly setup export my-config --include-plugin-files --include-patches
+                                                # → my-config.kset (fat)
+kindly setup inspect my-config.kset.yaml        # show id, keys, compat, hash
+kindly setup import my-config.kset.yaml         # apply to device (additive)
+kindly setup import my-config.kset.yaml --mode replace
+kindly setup import my-config.kset --dry-run    # preview fat import
+```
+
+**Templates** — pre-authored Setups bundled in the binary; no device
+required to export one:
+
+```bash
+kindly setup templates                          # list curated starts
+kindly setup export my-night --template night-reading
+kindly setup export my-min --template minimal-ui --keys reader_footer_mode
+```
+
+Current templates: `minimal-ui`, `night-reading`, `distraction-free`.
+All additive. CLI flags (`--keys`, `--tags`, `--compat-*`) layer on top.
+
+**Compat metadata** — `--compat-koreader-min/max` and
+`--compat-device` are stored in the manifest and shown on inspect/import.
+They are **informational in v0.3**; enforcement lands in v0.4.
+
+Setup identity is a sha256 over the canonicalized manifest bytes —
+two exports of the same state produce the same id. Fat archives also
+embed per-file hashes so tampering is detectable at import time.
+
 ## Status
 
-v0.2. Kindle-only. Solo project. 207 tests: byte-identical round-trip on a
-real 180-key `settings.reader.lua`, plus tar create/extract/list and full
-snapshot→mutate→restore→rollback coverage. See `docs/` for design notes.
+v0.3. Kindle-only. Solo project. 442 tests: byte-identical round-trip on a
+real 180-key `settings.reader.lua`, tar create/extract/list, full
+snapshot→mutate→restore→rollback coverage, plus Setup manifest
+export/import/templates/compat across lean and fat formats. See `docs/`
+for design notes.

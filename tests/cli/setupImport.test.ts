@@ -244,7 +244,7 @@ describe("setup import — compat is shown, not verified", () => {
 });
 
 describe("setup import — out-of-scope guards", () => {
-    test("refuses fat manifest (plugin files) with a clear message", async () => {
+    test("fat manifest (plugin files) without flags refuses with a clear message", async () => {
         writeManifestFile(manifestPath, makeManifest({
             plugins: {
                 disabled: [],
@@ -259,11 +259,11 @@ describe("setup import — out-of-scope guards", () => {
         const before = readFileSync(kindle.settingsPath, "utf8");
         const code = await main(["setup", "import", manifestPath], env);
         expect(code).toBe(1);
-        expect(stderr.value).toMatch(/fat setup/i);
+        expect(stderr.value).toMatch(/--accept-plugins|--skip-plugins/);
         expect(readFileSync(kindle.settingsPath, "utf8")).toBe(before);
     });
 
-    test("refuses fat manifest (patches) with a clear message", async () => {
+    test("fat manifest (patches) without flags refuses with a clear message", async () => {
         writeManifestFile(manifestPath, makeManifest({
             patches: [{
                 path: "2-custom.lua",
@@ -274,7 +274,7 @@ describe("setup import — out-of-scope guards", () => {
         }));
         const code = await main(["setup", "import", manifestPath], env);
         expect(code).toBe(1);
-        expect(stderr.value).toMatch(/fat setup/i);
+        expect(stderr.value).toMatch(/--accept-patches|--skip-patches/);
     });
 });
 

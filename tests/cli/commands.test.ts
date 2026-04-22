@@ -324,4 +324,56 @@ describe("top-level dispatcher", () => {
         expect(code).toBe(0);
         expect(stdout.value).toContain("kindly pull");
     });
+
+    test("--version prints the version and exits 0", async () => {
+        const code = await main(["--version"], env);
+        expect(code).toBe(0);
+        expect(stdout.value).toMatch(/^kindly \d+\.\d+\.\d+\s*$/);
+    });
+
+    test("-v is a short alias for --version", async () => {
+        const code = await main(["-v"], env);
+        expect(code).toBe(0);
+        expect(stdout.value).toMatch(/^kindly \d+\.\d+\.\d+/);
+    });
+
+    test("kindly help <cmd> prints that command's help", async () => {
+        const code = await main(["help", "pull"], env);
+        expect(code).toBe(0);
+        expect(stdout.value).toContain("kindly pull");
+        expect(stdout.value).toContain("--full");
+    });
+
+    test("kindly help <cmd> works for setup (subcommand dispatcher)", async () => {
+        const code = await main(["help", "setup"], env);
+        expect(code).toBe(0);
+        expect(stdout.value).toContain("kindly setup");
+        expect(stdout.value).toContain("export");
+        expect(stdout.value).toContain("import");
+    });
+
+    test("kindly help <unknown> exits 2 with top-level help", async () => {
+        const code = await main(["help", "nope"], env);
+        expect(code).toBe(2);
+        expect(stderr.value).toContain("unknown command");
+    });
+
+    test("bare kindly help falls back to top-level overview", async () => {
+        const code = await main(["help"], env);
+        expect(code).toBe(0);
+        expect(stdout.value).toContain("kindly");
+        expect(stdout.value).toContain("pull");
+    });
+
+    test("top-level help groups commands by category", async () => {
+        const code = await main(["--help"], env);
+        expect(code).toBe(0);
+        // All v0.3 commands still listed somewhere in the grouped output.
+        for (const cmd of ["pull", "apply", "diff", "init", "doctor", "snapshot", "restore", "setup"]) {
+            expect(stdout.value).toContain(cmd);
+        }
+        // The new categories are visible.
+        expect(stdout.value).toMatch(/Device state/);
+        expect(stdout.value).toMatch(/Shareable Setups/);
+    });
 });

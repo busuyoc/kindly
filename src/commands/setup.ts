@@ -2,8 +2,8 @@
 //
 // See docs/50-v0.3-setups.md for the data model and philosophy.
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 
 import { parse as yamlParse } from "yaml";
 
@@ -14,11 +14,23 @@ import { mergeYamlIntoLua, replaceYamlIntoLua } from "../schema/yaml.ts";
 import { classifyKey } from "../schema/classify.ts";
 import { computeChanges, computeReplaceChanges } from "../schema/diff.ts";
 import { safeWrite } from "../fs/safeWrite.ts";
+import { createTarGz } from "../fs/archive.ts";
 import { ArgError, parseArgs, type FlagSpecs } from "../cli/args.ts";
 import { type CliEnv, resolveMount, resolveSetupsDir } from "../cli/env.ts";
 import { dim, heading, info, ok, paint, warn } from "../cli/log.ts";
 import { canonicalizeManifest, hashBytes, manifestHash, shortId } from "../setup/canonical.ts";
-import { parseManifest, SetupSchemaError, type SetupManifest } from "../setup/schema.ts";
+import { parseManifest, SetupSchemaError, type EmbeddedFile, type SetupManifest } from "../setup/schema.ts";
+import { packSetup } from "../setup/pack.ts";
+import { unpackSetup } from "../setup/unpack.ts";
+import {
+    affectedPatchTargets, affectedPluginTargets,
+    collectPatches, collectPluginDirs,
+    installPatches, installPluginFiles,
+    summarizePluginsByDir, totalBytes,
+} from "../setup/files.ts";
+import {
+    getTemplate, listTemplates, templateKeyCount, type Template,
+} from "../setup/templates.ts";
 
 // ---- `kindly setup export` -------------------------------------------------
 
@@ -33,8 +45,11 @@ const EXPORT_FLAGS = {
     },
     "apply-mode": {
         type: "string",
-        default: "additive",
-        description: "'additive' (merge into existing) or 'replace' (wipe non-declared first)",
+        description: "'additive' (merge into existing) or 'replace' (wipe non-declared first; default: additive, or the template's mode when --template is set)",
+    },
+    template: {
+        type: "string",
+        description: "build the manifest from a curated template instead of reading the device (see `kindly setup templates`)",
     },
     description: {
         type: "string",
@@ -57,6 +72,28 @@ const EXPORT_FLAGS = {
         default: false,
         description: "overwrite output if it already exists",
     },
+    "include-plugin-files": {
+        type: "boolean",
+        default: false,
+        description: "pack .koplugin/ directories into the Setup (fat setup)",
+    },
+    "include-patches": {
+        type: "boolean",
+        default: false,
+        description: "pack patches/*.lua files into the Setup (fat setup)",
+    },
+    "compat-koreader-min": {
+        type: "string",
+        description: "minimum KOReader version this Setup is known to work on (e.g. 2024.03)",
+    },
+    "compat-koreader-max": {
+        type: "string",
+        description: "maximum KOReader version this Setup is known to work on",
+    },
+    "compat-device": {
+        type: "string",
+        description: "comma-separated device ids this Setup targets (e.g. kindle-pw5,kindle-oasis3)",
+    },
 } as const satisfies FlagSpecs;
 
 async function runSetupExport(argv: readonly string[], env: CliEnv): Promise<number> {
@@ -70,39 +107,87 @@ async function runSetupExport(argv: readonly string[], env: CliEnv): Promise<num
         throw new ArgError(`unexpected extra argument: ${positional[1]}`);
     }
 
-    if (flags["apply-mode"] !== "additive" && flags["apply-mode"] !== "replace") {
+    // --apply-mode: explicit CLI > template default > "additive". Template
+    // resolution happens below; we validate the raw flag here and pick the
+    // effective value once both sources are known.
+    if (flags["apply-mode"] !== undefined
+        && flags["apply-mode"] !== "additive"
+        && flags["apply-mode"] !== "replace") {
         throw new ArgError(
             `--apply-mode must be 'additive' or 'replace' (got ${JSON.stringify(flags["apply-mode"])})`
         );
     }
 
-    if (flags.mount) env = { ...env, mountOverride: flags.mount };
-    const mount = resolveMount(env);
+    // Resolve template first; it decides whether we need a mount for
+    // settings at all (templates bypass the device read).
+    const template: Template | undefined = flags.template
+        ? (getTemplate(flags.template) ?? throwUnknownTemplate(flags.template))
+        : undefined;
 
-    if (!existsSync(mount.settingsPath)) {
+    const effectiveApplyMode: "additive" | "replace" =
+        (flags["apply-mode"] as "additive" | "replace" | undefined)
+        ?? template?.apply_mode
+        ?? "additive";
+
+    // Mount is needed whenever we read settings from the device (no
+    // template) OR when augmenting a template with fat content
+    // (--include-plugin-files / --include-patches scan the live device).
+    const needsMount = !template || flags["include-plugin-files"] || flags["include-patches"];
+    const mount = needsMount
+        ? (flags.mount ? resolveMount({ ...env, mountOverride: flags.mount }) : resolveMount(env))
+        : null;
+
+    if (mount && !existsSync(mount.settingsPath) && !template) {
         throw new Error(
             `Kindle mount found at ${mount.root}, but ${mount.settingsPath} doesn't exist. ` +
             `Is KOReader installed on this Kindle?`
         );
     }
 
-    info(env, dim(env, `reading ${mount.settingsPath}`));
-    const raw = readFileSync(mount.settingsPath, "utf8");
-    const parsed = parseSettingsFile(raw) as Record<string, LuaValue>;
-
-    // Always filter in minimal mode for exported Setups — ephemerals
-    // (`lastfile`, migration markers) are personal state that wouldn't make
-    // sense in a shared Setup. Secrets are ALWAYS filtered regardless.
-    const { kept, droppedSecrets, droppedEphemerals } = filterForYaml(parsed, "minimal");
+    // Source of settings + plugins.disabled.
+    //
+    //   template set         → template's settings / plugins.disabled; no
+    //                          device read for settings (fat augment still
+    //                          reads the device below).
+    //   template NOT set     → existing flow: read device, filter, lift
+    //                          plugins_disabled.
+    //
+    // Secret filtering runs in both branches — templates shouldn't contain
+    // secrets, but `filterForYaml` is cheap defense-in-depth against a
+    // buggy template definition.
+    let sourceSettings: Record<string, LuaValue>;
+    let droppedSecrets: string[] = [];
+    let droppedEphemerals: string[] = [];
+    if (template) {
+        info(env, dim(env, `using template: ${template.id}`));
+        const templateSettings = { ...(template.settings ?? {}) } as Record<string, LuaValue>;
+        if (template.plugins?.disabled && template.plugins.disabled.length > 0) {
+            const pd: Record<string, LuaValue> = {};
+            for (const name of template.plugins.disabled) pd[name] = true;
+            templateSettings.plugins_disabled = pd;
+        }
+        const filtered = filterForYaml(templateSettings, "minimal");
+        sourceSettings = filtered.kept as Record<string, LuaValue>;
+        droppedSecrets = filtered.droppedSecrets;
+        droppedEphemerals = filtered.droppedEphemerals;
+    } else {
+        info(env, dim(env, `reading ${mount!.settingsPath}`));
+        const raw = readFileSync(mount!.settingsPath, "utf8");
+        const parsed = parseSettingsFile(raw) as Record<string, LuaValue>;
+        const filtered = filterForYaml(parsed, "minimal");
+        sourceSettings = filtered.kept as Record<string, LuaValue>;
+        droppedSecrets = filtered.droppedSecrets;
+        droppedEphemerals = filtered.droppedEphemerals;
+    }
 
     // Cherry-pick if --keys was passed. Warn per missing key, don't fail.
-    let settings: Record<string, LuaValue> = kept as Record<string, LuaValue>;
+    let settings: Record<string, LuaValue> = sourceSettings;
     const keysList = parseCsv(flags.keys);
     let skippedKeys = 0;
     if (keysList.length > 0) {
         const picked: Record<string, LuaValue> = {};
         for (const k of keysList) {
-            if (k in kept) picked[k] = kept[k] as LuaValue;
+            if (k in sourceSettings) picked[k] = sourceSettings[k] as LuaValue;
             else skippedKeys++;
         }
         settings = picked;
@@ -113,28 +198,50 @@ async function runSetupExport(argv: readonly string[], env: CliEnv): Promise<num
     // reversed on import.
     const { pluginsDisabled, settingsMinusPlugins } = liftPluginsDisabled(settings);
 
+    // Fat collection — scan plugin dirs / patches if flagged. Empty
+    // results are fine: the manifest just stays lean. Templates can be
+    // fat-augmented: we use the live device's plugin/patch directories
+    // regardless of whether settings came from a template.
+    const collectedPlugins = flags["include-plugin-files"]
+        ? collectPluginDirs(mount!.pluginsDir)
+        : { declared: [] as EmbeddedFile[], files: new Map<string, Buffer>() };
+    const collectedPatches = flags["include-patches"]
+        ? collectPatches(mount!.patchesDir)
+        : { declared: [] as EmbeddedFile[], files: new Map<string, Buffer>() };
+
     // Build + validate the manifest in one shot. If this throws, the bug is
     // in our construction logic (validated inputs should always pass).
+    const pluginsBlock = buildPluginsBlock(pluginsDisabled, collectedPlugins.declared);
+    const compatBlock = buildCompatBlock(
+        flags["compat-koreader-min"],
+        flags["compat-koreader-max"],
+        parseCsv(flags["compat-device"]),
+    );
+    // Description precedence: CLI --description > template description > none.
+    const effectiveDescription = flags.description ?? template?.description;
+
     const manifest = parseManifest({
         kindly_setup: "v1",
         meta: {
             name,
             ...(flags.author ? { author: flags.author } : {}),
-            ...(flags.description ? { description: flags.description } : {}),
+            ...(effectiveDescription ? { description: effectiveDescription } : {}),
             created_at: env.now().toISOString(),
             ...(parseCsv(flags.tags).length > 0 ? { tags: parseCsv(flags.tags) } : {}),
         },
-        apply_mode: flags["apply-mode"],
+        ...(compatBlock ? { compat: compatBlock } : {}),
+        apply_mode: effectiveApplyMode,
         ...(Object.keys(settingsMinusPlugins).length > 0 ? { settings: settingsMinusPlugins } : {}),
-        ...(pluginsDisabled.length > 0 ? { plugins: { disabled: pluginsDisabled } } : {}),
+        ...(pluginsBlock ? { plugins: pluginsBlock } : {}),
+        ...(collectedPatches.declared.length > 0 ? { patches: collectedPatches.declared } : {}),
     });
 
-    const canonical = canonicalizeManifest(manifest);
     const id = shortId(manifest);
+    const isFat = collectedPlugins.declared.length > 0 || collectedPatches.declared.length > 0;
 
     const outPath = flags.output
         ? resolve(env.cwd, flags.output)
-        : defaultOutputPath(env, id, name);
+        : defaultOutputPath(env, id, name, isFat);
 
     if (existsSync(outPath) && !flags.force) {
         throw new Error(
@@ -144,15 +251,38 @@ async function runSetupExport(argv: readonly string[], env: CliEnv): Promise<num
 
     const outDir = dirname(outPath);
     if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
-    writeFileSync(outPath, canonical);
+
+    let bytesWritten: number;
+    if (isFat) {
+        // Merge plugin + patch files into one Map for packSetup.
+        const allFiles = new Map<string, Buffer>();
+        for (const [k, v] of collectedPlugins.files) allFiles.set(k, v);
+        for (const [k, v] of collectedPatches.files) allFiles.set(k, v);
+        const r = packSetup({ manifest, files: allFiles }, outPath);
+        bytesWritten = r.bytesWritten;
+    } else {
+        const canonical = canonicalizeManifest(manifest);
+        writeFileSync(outPath, canonical);
+        bytesWritten = Buffer.byteLength(canonical);
+    }
 
     ok(env, `exported setup ${id} → ${outPath}`);
-    info(env, dim(env,
-        `  ${Buffer.byteLength(canonical)} bytes, ` +
-        `${Object.keys(settingsMinusPlugins).length} settings, ` +
-        `${pluginsDisabled.length} plugin toggle(s)`
-    ));
+    const summary: string[] = [
+        `${bytesWritten} bytes`,
+        `${Object.keys(settingsMinusPlugins).length} settings`,
+        `${pluginsDisabled.length} plugin toggle(s)`,
+    ];
+    if (collectedPlugins.declared.length > 0) {
+        summary.push(`${collectedPlugins.declared.length} plugin file(s)`);
+    }
+    if (collectedPatches.declared.length > 0) {
+        summary.push(`${collectedPatches.declared.length} patch(es)`);
+    }
+    info(env, dim(env, "  " + summary.join(", ")));
     info(env, dim(env, `  hash: ${manifestHash(manifest)}`));
+    if (isFat) {
+        info(env, dim(env, `  fat setup — ships ${totalBytes([...collectedPlugins.declared, ...collectedPatches.declared])} B of Lua`));
+    }
 
     if (droppedSecrets.length > 0) {
         info(env, dim(env, `  filtered ${droppedSecrets.length} secret(s) (never in shared Setups)`));
@@ -165,6 +295,44 @@ async function runSetupExport(argv: readonly string[], env: CliEnv): Promise<num
     }
 
     return 0;
+}
+
+// Shape the plugins block correctly, omitting empty sub-keys. Zod's
+// `.strict()` rejects empty arrays differently than missing fields for
+// downstream canonicalization (sort order), so we emit only what's
+// populated.
+function buildPluginsBlock(
+    disabled: readonly string[],
+    files: readonly EmbeddedFile[],
+): { disabled?: string[]; files?: EmbeddedFile[] } | undefined {
+    const block: { disabled?: string[]; files?: EmbeddedFile[] } = {};
+    if (disabled.length > 0) block.disabled = [...disabled];
+    if (files.length > 0) block.files = [...files];
+    return Object.keys(block).length > 0 ? block : undefined;
+}
+
+// Thrown when the user passes --template with an id that isn't in the
+// registry. We list the known ids so a typo is trivially recoverable.
+function throwUnknownTemplate(id: string): never {
+    const available = listTemplates().map((t) => t.id).join(", ");
+    throw new ArgError(
+        `unknown template: ${JSON.stringify(id)}. available: ${available || "(none)"}`
+    );
+}
+
+// Build a compat block from CLI flags, omitting empty fields. Returns
+// undefined if the block would be empty — an empty `compat: {}` wouldn't
+// round-trip cleanly through canonical YAML and conveys no information.
+function buildCompatBlock(
+    koMin: string | undefined,
+    koMax: string | undefined,
+    devices: readonly string[],
+): { koreader_version_min?: string; koreader_version_max?: string; device?: string[] } | undefined {
+    const block: { koreader_version_min?: string; koreader_version_max?: string; device?: string[] } = {};
+    if (koMin && koMin.length > 0) block.koreader_version_min = koMin;
+    if (koMax && koMax.length > 0) block.koreader_version_max = koMax;
+    if (devices.length > 0) block.device = [...devices];
+    return Object.keys(block).length > 0 ? block : undefined;
 }
 
 // ---- helpers ---------------------------------------------------------------
@@ -203,8 +371,9 @@ function slugify(s: string): string {
     return slug || "setup";
 }
 
-function defaultOutputPath(env: CliEnv, id: string, name: string): string {
-    return join(resolveSetupsDir(env), `${id}-${slugify(name)}.kset.yaml`);
+function defaultOutputPath(env: CliEnv, id: string, name: string, fat: boolean): string {
+    const ext = fat ? ".kset" : ".kset.yaml";
+    return join(resolveSetupsDir(env), `${id}-${slugify(name)}${ext}`);
 }
 
 // Load a .kset.yaml file from disk, validate it, and return both the raw
@@ -243,11 +412,12 @@ async function runSetupInspect(argv: readonly string[], env: CliEnv): Promise<nu
     }
 
     const path = resolve(env.cwd, fileArg);
-    const { raw, manifest } = loadManifestFile(path);
+    const { manifest, manifestBytes, isFat } = loadSetup(path);
 
-    const rawHash = hashBytes(raw);
+    const rawText = manifestBytes.toString("utf8");
+    const rawHash = hashBytes(manifestBytes);
     const canonicalBytes = canonicalizeManifest(manifest);
-    const isCanonical = raw === canonicalBytes;
+    const isCanonical = rawText === canonicalBytes;
     const id = shortId(rawHash);
 
     const settingsCount = manifest.settings ? Object.keys(manifest.settings).length : 0;
@@ -258,7 +428,13 @@ async function runSetupInspect(argv: readonly string[], env: CliEnv): Promise<nu
     heading(env, `${manifest.meta.name}  (${id})`);
     env.stdout.write(`  hash:         ${rawHash}\n`);
     env.stdout.write(`  file:         ${path}\n`);
-    env.stdout.write(`  bytes:        ${Buffer.byteLength(raw)}\n`);
+    env.stdout.write(`  format:       ${isFat ? "fat (.kset tar.gz)" : "lean (.kset.yaml)"}\n`);
+    if (isFat) {
+        env.stdout.write(`  bytes:        ${statSync(path).size}  (tarball)\n`);
+        env.stdout.write(`  manifest:     ${manifestBytes.length} bytes\n`);
+    } else {
+        env.stdout.write(`  bytes:        ${manifestBytes.length}\n`);
+    }
     env.stdout.write(`  apply_mode:   ${manifest.apply_mode}\n`);
     env.stdout.write(`  created_at:   ${manifest.meta.created_at}\n`);
     if (manifest.meta.author)      env.stdout.write(`  author:       ${manifest.meta.author}\n`);
@@ -352,6 +528,57 @@ async function runSetupList(argv: readonly string[], env: CliEnv): Promise<numbe
     return 0;
 }
 
+// ---- `kindly setup templates` ----------------------------------------------
+
+async function runSetupTemplates(argv: readonly string[], env: CliEnv): Promise<number> {
+    const { positional } = parseArgs(argv, {} as const satisfies FlagSpecs);
+    if (positional.length > 0) {
+        throw new ArgError(`unexpected argument: ${positional[0]}`);
+    }
+
+    const templates = listTemplates();
+    if (templates.length === 0) {
+        info(env, dim(env, "no templates bundled in this build"));
+        return 0;
+    }
+
+    type Row = { id: string; name: string; mode: string; keys: string; disabled: string };
+    const rows: Row[] = templates.map((t) => ({
+        id: t.id,
+        name: t.display_name,
+        mode: t.apply_mode,
+        keys: String(templateKeyCount(t)),
+        disabled: String(t.plugins?.disabled?.length ?? 0),
+    }));
+
+    const header = ["ID", "NAME", "MODE", "KEYS", "OFF"];
+    const widths = [
+        Math.max(header[0]!.length, ...rows.map((r) => r.id.length)),
+        Math.max(header[1]!.length, ...rows.map((r) => r.name.length)),
+        Math.max(header[2]!.length, ...rows.map((r) => r.mode.length)),
+        Math.max(header[3]!.length, ...rows.map((r) => r.keys.length)),
+        Math.max(header[4]!.length, ...rows.map((r) => r.disabled.length)),
+    ];
+    const pad = (s: string, w: number) => s + " ".repeat(w - s.length);
+    env.stdout.write(dim(env,
+        `${pad(header[0]!, widths[0]!)}  ${pad(header[1]!, widths[1]!)}  ${pad(header[2]!, widths[2]!)}  ${pad(header[3]!, widths[3]!)}  ${header[4]!}`
+    ) + "\n");
+    for (const r of rows) {
+        env.stdout.write(
+            `${pad(r.id, widths[0]!)}  ${pad(r.name, widths[1]!)}  ${pad(r.mode, widths[2]!)}  ${pad(r.keys, widths[3]!)}  ${r.disabled}\n`
+        );
+    }
+    // Description lines follow the table — don't crowd the row format.
+    env.stdout.write("\n");
+    for (const t of templates) {
+        env.stdout.write(dim(env, `  ${t.id}: `) + t.description + "\n");
+    }
+    info(env, "");
+    info(env, dim(env, `use: kindly setup export <name> --template <id>`));
+
+    return 0;
+}
+
 // ---- `kindly setup hash <file>` --------------------------------------------
 
 async function runSetupHash(argv: readonly string[], env: CliEnv): Promise<number> {
@@ -387,13 +614,67 @@ const IMPORT_FLAGS = {
     "safety-snapshot": {
         type: "boolean",
         default: true,
-        description: "keep a pre-write copy of settings.reader.lua (invert with --no-safety-snapshot)",
+        description: "keep a pre-write copy of affected files (invert with --no-safety-snapshot)",
+    },
+    "accept-plugins": {
+        type: "boolean",
+        default: false,
+        description: "install plugin directories shipped in the Setup (fat-only)",
+    },
+    "skip-plugins": {
+        type: "boolean",
+        default: false,
+        description: "do not install shipped plugin directories (apply settings only)",
+    },
+    "accept-patches": {
+        type: "boolean",
+        default: false,
+        description: "install patch files shipped in the Setup (fat-only)",
+    },
+    "skip-patches": {
+        type: "boolean",
+        default: false,
+        description: "do not install shipped patch files (apply settings only)",
     },
     mount: {
         type: "string",
         description: "path to a mounted Kindle (auto-detected by default)",
     },
 } as const satisfies FlagSpecs;
+
+// Detect fat (.kset tar.gz) vs lean (.kset.yaml or .yaml) by extension.
+// Loading a lean file through the fat path (tar extraction) would fail
+// noisily; we'd rather give a direct error.
+type LoadedSetup = {
+    manifest: SetupManifest;
+    manifestBytes: Buffer;       // for content-hash identity
+    files: Map<string, Buffer>;  // empty for lean
+    isFat: boolean;
+};
+
+function loadSetup(path: string): LoadedSetup {
+    if (!existsSync(path)) {
+        throw new Error(`setup file not found: ${path}`);
+    }
+    // .kset (no further extension) → tar.gz fat archive.
+    // Anything else (.kset.yaml, .yaml) → raw canonical manifest.
+    if (path.endsWith(".kset")) {
+        const r = unpackSetup(path);
+        return {
+            manifest: r.manifest,
+            manifestBytes: r.manifestBytes,
+            files: r.files,
+            isFat: true,
+        };
+    }
+    const { raw, manifest } = loadManifestFile(path);
+    return {
+        manifest,
+        manifestBytes: Buffer.from(raw, "utf8"),
+        files: new Map(),
+        isFat: false,
+    };
+}
 
 // Flatten a validated Setup manifest into a dict shaped like kindly.yaml's
 // top-level settings — ready to feed into mergeYamlIntoLua. Reverses the
@@ -430,18 +711,20 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
         throw new ArgError(`unexpected extra argument: ${positional[1]}`);
     }
 
-    const path = resolve(env.cwd, fileArg);
-    const { raw, manifest } = loadManifestFile(path);
-    const id = shortId(hashBytes(raw));
-
-    // Fat setups (plugin files / patches) still aren't supported at
-    // import time — that's step 8. Lean-only here, regardless of apply_mode.
-    if (manifest.plugins?.files?.length || manifest.patches?.length) {
-        throw new Error(
-            `this is a fat setup (ships plugin files or patches). ` +
-            `Current import only supports lean setups — plugin/patch unpacking lands in a later step.`
-        );
+    if (flags["accept-plugins"] && flags["skip-plugins"]) {
+        throw new ArgError("--accept-plugins and --skip-plugins are mutually exclusive");
     }
+    if (flags["accept-patches"] && flags["skip-patches"]) {
+        throw new ArgError("--accept-patches and --skip-patches are mutually exclusive");
+    }
+
+    const path = resolve(env.cwd, fileArg);
+    const loaded = loadSetup(path);
+    const { manifest, manifestBytes, files } = loaded;
+    const id = shortId(hashBytes(manifestBytes));
+
+    const shippedPlugins: readonly EmbeddedFile[] = manifest.plugins?.files ?? [];
+    const shippedPatches: readonly EmbeddedFile[] = manifest.patches ?? [];
 
     heading(env, `importing ${manifest.meta.name}  (${id})`);
     info(env, dim(env, `  from:   ${path}`));
@@ -454,6 +737,25 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
         if (manifest.compat.device?.length)       pieces.push(`device: ${manifest.compat.device.join(", ")}`);
         info(env, dim(env, `  requires: ${pieces.join("; ")}`));
         info(env, dim(env, `  (compat is NOT verified in this release — manifest claims shown above)`));
+    }
+
+    // Disclosure + gate for fat content. Print what the Setup ships
+    // BEFORE any device touch or flag check — the user needs this info
+    // to pick between --accept-X and --skip-X.
+    if (shippedPlugins.length > 0 || shippedPatches.length > 0) {
+        printFatDisclosure(env, shippedPlugins, shippedPatches);
+    }
+    if (shippedPlugins.length > 0 && !flags["accept-plugins"] && !flags["skip-plugins"]) {
+        throw new Error(
+            `this Setup ships ${shippedPlugins.length} plugin file(s) — Lua code that will execute on your Kindle. ` +
+            `Pass --accept-plugins to install, or --skip-plugins to apply settings only.`
+        );
+    }
+    if (shippedPatches.length > 0 && !flags["accept-patches"] && !flags["skip-patches"]) {
+        throw new Error(
+            `this Setup ships ${shippedPatches.length} patch file(s) — Lua code that will execute on your Kindle. ` +
+            `Pass --accept-patches to install, or --skip-patches to apply settings only.`
+        );
     }
 
     if (flags.mount) env = { ...env, mountOverride: flags.mount };
@@ -492,7 +794,13 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
         ? computeReplaceChanges(onDevice, safeFlat, preservedKeys)
         : computeChanges(onDevice, safeFlat);
 
-    if (changes.length === 0) {
+    // Determine fat install gates up-front; the "no settings changes"
+    // shortcut must NOT fire if plugins/patches still need to land.
+    const willInstallPlugins = flags["accept-plugins"] && shippedPlugins.length > 0;
+    const willInstallPatches = flags["accept-patches"] && shippedPatches.length > 0;
+    const writeSettings = changes.length > 0;
+
+    if (!writeSettings && !willInstallPlugins && !willInstallPatches) {
         info(env, "no changes needed — device already matches this setup.");
         if (droppedSecrets.length > 0) {
             info(env, dim(env, `  (${droppedSecrets.length} secret-key(s) in manifest were refused by denylist)`));
@@ -500,23 +808,28 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
         return 0;
     }
 
-    if (isReplace) {
-        heading(env, `${changes.length} change(s) to apply (replace mode):`);
-        info(env, dim(env, `  replace mode: USER keys not declared in the manifest will be removed.`));
-        info(env, dim(env, `  secrets and ephemerals are preserved regardless.`));
-    } else {
-        heading(env, `${changes.length} change(s) to apply:`);
-    }
-    for (const c of changes) {
-        const p = c.path.join(".");
-        if (c.kind === "added") {
-            info(env, paint(env, "green", `  + ${p}`) + `  = ${fmtValue(c.next)}`);
-        } else if (c.kind === "changed") {
-            info(env, paint(env, "yellow", `  ~ ${p}`) + `  ${fmtValue(c.prev)} → ${fmtValue(c.next)}`);
+    if (writeSettings) {
+        if (isReplace) {
+            heading(env, `${changes.length} change(s) to apply (replace mode):`);
+            info(env, dim(env, `  replace mode: USER keys not declared in the manifest will be removed.`));
+            info(env, dim(env, `  secrets and ephemerals are preserved regardless.`));
         } else {
-            info(env, paint(env, "red", `  - ${p}`) + `  (was ${fmtValue(c.prev)})`);
+            heading(env, `${changes.length} change(s) to apply:`);
         }
+        for (const c of changes) {
+            const p = c.path.join(".");
+            if (c.kind === "added") {
+                info(env, paint(env, "green", `  + ${p}`) + `  = ${fmtValue(c.next)}`);
+            } else if (c.kind === "changed") {
+                info(env, paint(env, "yellow", `  ~ ${p}`) + `  ${fmtValue(c.prev)} → ${fmtValue(c.next)}`);
+            } else {
+                info(env, paint(env, "red", `  - ${p}`) + `  (was ${fmtValue(c.prev)})`);
+            }
+        }
+    } else {
+        info(env, dim(env, "settings already match; proceeding to plugin/patch install."));
     }
+
     if (droppedSecrets.length > 0) {
         warn(env, `refused ${droppedSecrets.length} secret-named key(s) in manifest: ${droppedSecrets.join(", ")}`);
     }
@@ -527,26 +840,122 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
         return 0;
     }
 
-    const merged = isReplace
-        ? replaceYamlIntoLua(onDevice, safeFlat) as LuaTable
-        : mergeYamlIntoLua(onDevice, safeFlat) as LuaTable;
-    const newContent = dumpSettingsFile(merged, "./settings.reader.lua");
+    // safeWrite (if needed) creates the timestamped backup dir. If we're
+    // skipping the settings write, we mint our own stamp for the fat
+    // snapshot so plugin/patch rollback has a home.
+    let snapshotDir: string | null = null;
+    if (writeSettings) {
+        const merged = isReplace
+            ? replaceYamlIntoLua(onDevice, safeFlat) as LuaTable
+            : mergeYamlIntoLua(onDevice, safeFlat) as LuaTable;
+        const newContent = dumpSettingsFile(merged, "./settings.reader.lua");
 
-    const backupDir = join(env.cwd, ".kindly", "pre-import");
-    const res = safeWrite(mount.settingsPath, newContent, {
-        backupDir,
-        verifyLua: true,
-        skipBackup: !flags["safety-snapshot"],
-    });
+        const backupDir = join(env.cwd, ".kindly", "pre-import");
+        const res = safeWrite(mount.settingsPath, newContent, {
+            backupDir,
+            verifyLua: true,
+            skipBackup: !flags["safety-snapshot"],
+        });
 
-    ok(env, `imported to ${mount.settingsPath}`);
-    if (res.backupPath) {
-        info(env, dim(env, `  safety backup: ${res.backupPath}`));
-    } else if (!flags["safety-snapshot"]) {
-        info(env, dim(env, `  (safety backup skipped by --no-safety-snapshot; .old sibling preserved)`));
+        ok(env, `imported to ${mount.settingsPath}`);
+        if (res.backupPath) {
+            snapshotDir = dirname(res.backupPath);
+            info(env, dim(env, `  safety backup: ${res.backupPath}`));
+        } else if (!flags["safety-snapshot"]) {
+            info(env, dim(env, `  (safety backup skipped by --no-safety-snapshot; .old sibling preserved)`));
+        }
+    } else if (flags["safety-snapshot"] && (willInstallPlugins || willInstallPatches)) {
+        const stamp = env.now().toISOString().replace(/[:.]/g, "-");
+        snapshotDir = join(env.cwd, ".kindly", "pre-import", stamp);
+        mkdirSync(snapshotDir, { recursive: true });
     }
+
+    if (willInstallPlugins || willInstallPatches) {
+        if (snapshotDir && flags["safety-snapshot"]) {
+            snapshotFatTargets(mount.koreaderRoot, snapshotDir,
+                willInstallPlugins ? affectedPluginTargets(mount.pluginsDir, shippedPlugins) : [],
+                willInstallPatches ? affectedPatchTargets(mount.patchesDir, shippedPatches) : [],
+            );
+            info(env, dim(env, `  pre-install snapshot: ${join(snapshotDir, "plugins-patches.tar.gz")}`));
+        }
+
+        if (willInstallPlugins) {
+            installPluginFiles(mount.pluginsDir, shippedPlugins, files);
+            ok(env, `installed ${shippedPlugins.length} plugin file(s) → ${mount.pluginsDir}`);
+        }
+        if (willInstallPatches) {
+            installPatches(mount.patchesDir, shippedPatches, files);
+            ok(env, `installed ${shippedPatches.length} patch(es) → ${mount.patchesDir}`);
+        }
+    }
+    if (flags["skip-plugins"] && shippedPlugins.length > 0) {
+        info(env, dim(env, `  --skip-plugins: ${shippedPlugins.length} plugin file(s) NOT installed`));
+    }
+    if (flags["skip-patches"] && shippedPatches.length > 0) {
+        info(env, dim(env, `  --skip-patches: ${shippedPatches.length} patch(es) NOT installed`));
+    }
+
     warn(env, "restart KOReader (or your Kindle) for changes to take effect.");
     return 0;
+}
+
+// Archive the pre-install state of plugin dirs and patch files into
+// <snapshotDir>/plugins-patches.tar.gz. Paths are stored relative to
+// koreaderRoot so a bare `tar -xzf` into <koreaderRoot> restores them.
+// If none of the targets exist on disk yet, we skip the archive — there's
+// nothing to preserve.
+function snapshotFatTargets(
+    koreaderRoot: string,
+    snapshotDir: string,
+    pluginAbsPaths: readonly string[],
+    patchAbsPaths: readonly string[],
+): void {
+    const all = [...pluginAbsPaths, ...patchAbsPaths];
+    const existing = all.filter((p) => existsSync(p));
+    if (existing.length === 0) return;
+
+    // Make paths relative to koreaderRoot for tar.
+    const rels = existing.map((abs) => {
+        const prefix = koreaderRoot + "/";
+        if (!abs.startsWith(prefix)) {
+            throw new Error(`internal: snapshot target ${abs} is outside ${koreaderRoot}`);
+        }
+        return abs.slice(prefix.length);
+    });
+
+    createTarGz({
+        cwd: koreaderRoot,
+        paths: rels,
+        outputPath: join(snapshotDir, "plugins-patches.tar.gz"),
+    });
+}
+
+function fmtBytes(n: number): string {
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function printFatDisclosure(
+    env: CliEnv,
+    plugins: readonly EmbeddedFile[],
+    patches: readonly EmbeddedFile[],
+): void {
+    heading(env, "this Setup ships executable code:");
+    if (plugins.length > 0) {
+        info(env, `  plugins (${plugins.length} file(s), ${fmtBytes(totalBytes(plugins))}):`);
+        for (const p of summarizePluginsByDir(plugins)) {
+            info(env, `    ${p.dir}  (${p.fileCount} file(s), ${fmtBytes(p.bytes)})`);
+        }
+    }
+    if (patches.length > 0) {
+        info(env, `  patches (${patches.length} file(s), ${fmtBytes(totalBytes(patches))}):`);
+        for (const p of patches) {
+            info(env, `    ${p.path}  (${fmtBytes(p.bytes)})`);
+        }
+    }
+    info(env, dim(env, `  Lua code in plugins and patches will execute on your Kindle.`));
+    info(env, dim(env, `  Verify the author before accepting.`));
 }
 
 // ---- dispatcher ------------------------------------------------------------
@@ -563,21 +972,23 @@ export async function runSetup(argv: readonly string[], env: CliEnv): Promise<nu
     // `kindly setup <sub> --help` → subcommand help.
     if (rest[0] === "--help" || rest[0] === "-h") {
         switch (sub) {
-            case "export":  env.stdout.write(exportHelp + "\n");  return 0;
-            case "inspect": env.stdout.write(inspectHelp + "\n"); return 0;
-            case "list":    env.stdout.write(listHelp + "\n");    return 0;
-            case "hash":    env.stdout.write(hashHelp + "\n");    return 0;
-            case "import":  env.stdout.write(importHelp + "\n");  return 0;
+            case "export":    env.stdout.write(exportHelp + "\n");    return 0;
+            case "inspect":   env.stdout.write(inspectHelp + "\n");   return 0;
+            case "list":      env.stdout.write(listHelp + "\n");      return 0;
+            case "hash":      env.stdout.write(hashHelp + "\n");      return 0;
+            case "import":    env.stdout.write(importHelp + "\n");    return 0;
+            case "templates": env.stdout.write(templatesHelp + "\n"); return 0;
             default: break; // fall through — unknown sub yields below
         }
     }
 
     switch (sub) {
-        case "export":  return await runSetupExport(rest, env);
-        case "inspect": return await runSetupInspect(rest, env);
-        case "list":    return await runSetupList(rest, env);
-        case "hash":    return await runSetupHash(rest, env);
-        case "import":  return await runSetupImport(rest, env);
+        case "export":    return await runSetupExport(rest, env);
+        case "inspect":   return await runSetupInspect(rest, env);
+        case "list":      return await runSetupList(rest, env);
+        case "hash":      return await runSetupHash(rest, env);
+        case "import":    return await runSetupImport(rest, env);
+        case "templates": return await runSetupTemplates(rest, env);
         default:
             throw new ArgError(`unknown setup subcommand: ${sub}`);
     }
@@ -593,6 +1004,7 @@ Subcommands:
   import <file>   apply a Setup manifest to the mounted Kindle
   inspect <file>  print a manifest's summary (no device touch)
   list            list Setups in ~/.kindly/setups/
+  templates       list curated templates (use with export --template)
   hash <file>     print a Setup file's content hash
 
 Run \`kindly setup <sub> --help\` for per-subcommand flags.
@@ -632,15 +1044,38 @@ file isn't in canonical form, a warning also shows what the canonical
 hash would be. Use for pinning or verifying shared Setups.
 `.trim();
 
+const templatesHelp = `
+kindly setup templates — list curated templates bundled in kindly.
+
+usage: kindly setup templates
+
+Prints one row per template (id, display name, apply mode, settings
+count, plugin-toggle count), followed by a one-line description each.
+Templates are starting points, not finished configurations — pass
+\`--template <id>\` to \`kindly setup export\` to build a manifest from
+one, then edit the resulting file as needed.
+
+Templates don't read the device by default. Adding --include-plugin-files
+or --include-patches to a template-driven export augments it with the
+connected Kindle's plugin directories and patch files.
+
+See docs/51-templates.md for per-template rationale.
+`.trim();
+
 const importHelp = `
 kindly setup import <file> — merge a Setup manifest into the Kindle.
 
 usage: kindly setup import <file> [options]
 
   --dry-run             show what would change without writing
-  --no-safety-snapshot  skip the pre-write copy of settings.reader.lua
-                        (the .old sibling is still kept for KOReader's
-                        own fallback; default: safety snapshot is ON)
+  --no-safety-snapshot  skip the pre-write copy of affected files
+                        (the .old sibling of settings.reader.lua is
+                        still kept for KOReader's own fallback;
+                        default: safety snapshot is ON)
+  --accept-plugins      install plugin dirs shipped in the Setup (fat)
+  --skip-plugins        apply settings only; leave plugins untouched
+  --accept-patches      install patch files shipped in the Setup (fat)
+  --skip-patches        apply settings only; leave patches untouched
   --mount <path>        path to a mounted Kindle (auto-detect by default)
 
 Additive merge: keys in the manifest override; on-device keys not in the
@@ -657,9 +1092,13 @@ The manifest's apply_mode decides the merge strategy:
             preserved regardless. Known nested secrets (kosync.userkey
             etc.) are carried over.
 
-Fat setups (shipped plugin files / patches) are not yet supported —
-they land in a later step. The compat block is printed but not
-verified in this release.
+Fat setups ship executable Lua (plugin dirs and/or patch files). They
+are gated by --accept-plugins / --accept-patches per category; without
+either the accept or the skip flag, import refuses with a disclosure of
+what would execute. Existing plugin dirs are wiped-and-replaced (the
+safety snapshot keeps the original).
+
+The compat block is printed but not verified in this release.
 `.trim();
 
 const exportHelp = `
@@ -667,16 +1106,39 @@ kindly setup export <name> — scan device, filter, write a canonical Setup mani
 
 usage: kindly setup export <name> [options]
 
-  --output <path>       default: ~/.kindly/setups/<id>-<slug>.kset.yaml
-  --keys <k1,k2,...>    cherry-pick specific settings keys (default: all)
-  --apply-mode <mode>   additive (default) | replace
-  --description <text>  human-readable description
-  --author <name>       author label (free text, not verified)
-  --tags <t1,t2,...>    comma-separated tag list
-  --mount <path>        path to a mounted Kindle (auto-detect by default)
-  --force               overwrite output if it exists
+  --output <path>            default: ~/.kindly/setups/<id>-<slug>.kset[.yaml]
+  --keys <k1,k2,...>         cherry-pick specific settings keys (default: all)
+  --template <id>            build from a curated template; skips device read
+                             (see \`kindly setup templates\`)
+  --apply-mode <mode>        additive | replace  (default: additive, or the
+                             template's mode when --template is set)
+  --description <text>       human-readable description
+  --author <name>            author label (free text, not verified)
+  --tags <t1,t2,...>         comma-separated tag list
+  --include-plugin-files     pack <koreader>/plugins/*.koplugin/ (fat setup)
+  --include-patches          pack <koreader>/patches/*.lua (fat setup)
+  --compat-koreader-min <v>  minimum KOReader version (e.g. 2024.03)
+  --compat-koreader-max <v>  maximum KOReader version
+  --compat-device <d1,d2>    target device ids (e.g. kindle-pw5,kindle-oasis3)
+  --mount <path>             path to a mounted Kindle (auto-detect by default)
+  --force                    overwrite output if it exists
 
 Secrets (PIN, passwords, device IDs, phone numbers) are ALWAYS filtered.
 Ephemerals (lastfile, migration markers) are always filtered — shared
 Setups represent a configuration, not your device's current state.
+
+Lean setups (settings + plugin toggles only) ship as a single .kset.yaml
+file. Fat setups (with --include-plugin-files or --include-patches) ship
+as a .kset tar.gz containing manifest.yaml + declared files.
+
+Compat flags record the author's claim about what KOReader version / device
+the Setup targets. The values are displayed on import but NOT enforced in
+this release (v0.4 adds enforcement). Leave unset for portable Setups.
+
+--template builds the manifest from a curated key/value bundle rather than
+the device. CLI flags (--apply-mode, --description, --tags, --author,
+--compat-*, --keys) layer on top of the template; --keys narrows the
+template's settings to a subset. Fat flags (--include-plugin-files,
+--include-patches) are additive: they scan the live device even when the
+manifest's settings come from a template.
 `.trim();

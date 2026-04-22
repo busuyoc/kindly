@@ -16,6 +16,7 @@ export type KindleMount = {
     koreaderRoot: string;      // <root>/koreader
     settingsPath: string;      // <root>/koreader/settings.reader.lua
     pluginsDir: string;        // <root>/koreader/plugins
+    patchesDir: string;        // <root>/koreader/patches
 };
 
 const CANDIDATES_DARWIN = ["/Volumes/Kindle"];
@@ -50,6 +51,7 @@ export function kindleMountAt(root: string): KindleMount {
         koreaderRoot,
         settingsPath: join(koreaderRoot, "settings.reader.lua"),
         pluginsDir: join(koreaderRoot, "plugins"),
+        patchesDir: join(koreaderRoot, "patches"),
     };
 }
 

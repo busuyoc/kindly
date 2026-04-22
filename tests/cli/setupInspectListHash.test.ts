@@ -7,6 +7,7 @@ import { main } from "../../src/cli.ts";
 import { StringWriter, type CliEnv } from "../../src/cli/env.ts";
 import { canonicalizeManifest, hashBytes, manifestHash, shortId } from "../../src/setup/canonical.ts";
 import { parseManifest, type SetupManifest } from "../../src/setup/schema.ts";
+import { packSetup } from "../../src/setup/pack.ts";
 
 function makeEnv(cwd: string, setupsDir: string): { env: CliEnv; out: StringWriter; err: StringWriter } {
     const out = new StringWriter();
@@ -152,6 +153,31 @@ describe("kindly setup inspect", () => {
         const code = await main(["setup", "inspect", p, "extra"], env);
         expect(code).toBe(2);
         expect(stderr.value).toContain("unexpected extra argument");
+    });
+
+    test("unpacks a fat .kset and reports tarball + manifest sizes", async () => {
+        const body = Buffer.from("-- plugin body\nreturn {}\n");
+        const fileHash = hashBytes(body);
+        const fatManifest = parseManifest({
+            kindly_setup: "v1",
+            meta: { name: "fat-example", created_at: "2026-04-21T12:00:00Z" },
+            apply_mode: "additive",
+            plugins: {
+                files: [{ path: "Foo.koplugin/main.lua", bytes: body.length, hash: fileHash }],
+            },
+        });
+        const out = join(setupsDir, "fat.kset");
+        packSetup({ manifest: fatManifest, files: new Map([["Foo.koplugin/main.lua", body]]) }, out);
+
+        const code = await main(["setup", "inspect", out], env);
+        expect(code).toBe(0);
+        expect(stdout.value).toContain("format:       fat (.kset tar.gz)");
+        expect(stdout.value).toContain("(tarball)");
+        expect(stdout.value).toContain("manifest:");
+        expect(stdout.value).toContain("plugin files:    1");
+        // Identity is the canonical manifest hash — same whether served
+        // lean or fat.
+        expect(stdout.value).toContain(manifestHash(fatManifest));
     });
 });
 

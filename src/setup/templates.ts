@@ -22,6 +22,7 @@
 // docs/51-templates.md for per-template rationale.
 
 import type { LuaValue } from "../lua/writer.ts";
+import { loadPluginCatalog } from "../catalog/reader.ts";
 
 export type Template = {
     id: string;                                        // "night-reading"
@@ -99,11 +100,37 @@ const BY_ID: ReadonlyMap<string, Template> = new Map(
     TEMPLATES.map((t) => [t.id, t] as const),
 );
 
+// The `debloat-bundled` template is derived from the curated plugin catalog
+// at call time, not hardcoded — the catalog is the single source of truth for
+// which bundled plugins kindly considers worth disabling. Keeping it dynamic
+// means a catalog update automatically flows into the template; no drift.
+// Lazy (per-call) on purpose: the catalog reader is already cached, and
+// tests that call `reloadPluginCatalog()` get a fresh template.
+function buildDebloatBundledTemplate(): Template {
+    const catalog = loadPluginCatalog();
+    const disabled = catalog.plugins
+        .filter((p) => p.curation_opinion === "debloat")
+        .map((p) => p.name)
+        .sort();
+    return {
+        id: "debloat-bundled",
+        display_name: "Debloat bundled plugins",
+        description:
+            `Disable the ${disabled.length} bundled KOReader plugins kindly curates as "debloat" ` +
+            `(catalog ${catalog.catalog_version}). Additive: only adds entries to ` +
+            `plugins_disabled, never touches other settings. Niche plugins stay enabled — ` +
+            `edit the manifest after export to disable more.`,
+        apply_mode: "additive",
+        plugins: { disabled },
+    };
+}
+
 export function listTemplates(): readonly Template[] {
-    return TEMPLATES;
+    return [...TEMPLATES, buildDebloatBundledTemplate()];
 }
 
 export function getTemplate(id: string): Template | undefined {
+    if (id === "debloat-bundled") return buildDebloatBundledTemplate();
     return BY_ID.get(id);
 }
 

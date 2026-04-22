@@ -74,9 +74,14 @@ beforeEach(() => {
 // ---- registry --------------------------------------------------------------
 
 describe("templates registry", () => {
-    test("exposes the three v0.3 templates", () => {
+    test("exposes the v0.3 templates + v0.9 debloat-bundled", () => {
         const ids = listTemplates().map((t) => t.id).sort();
-        expect(ids).toEqual(["distraction-free", "minimal-ui", "night-reading"]);
+        expect(ids).toEqual([
+            "debloat-bundled",
+            "distraction-free",
+            "minimal-ui",
+            "night-reading",
+        ]);
     });
 
     test("every template has an id, display_name, description, apply_mode", () => {
@@ -98,6 +103,64 @@ describe("templates registry", () => {
 
     test("getTemplate returns undefined for an unknown id", () => {
         expect(getTemplate("nope")).toBeUndefined();
+    });
+});
+
+// ---- debloat-bundled (W23) ------------------------------------------------
+
+describe("debloat-bundled template", () => {
+    test("plugins.disabled is derived from the catalog (all debloat entries)", async () => {
+        const { loadPluginCatalog, reloadPluginCatalog } = await import(
+            "../../src/catalog/reader.ts"
+        );
+        reloadPluginCatalog();
+        const catalog = loadPluginCatalog();
+        const expected = catalog.plugins
+            .filter((p) => p.curation_opinion === "debloat")
+            .map((p) => p.name)
+            .sort();
+
+        const t = getTemplate("debloat-bundled")!;
+        expect(t).toBeDefined();
+        expect(t.apply_mode).toBe("additive");
+        expect(t.settings).toBeUndefined();
+        expect(t.plugins?.disabled).toEqual(expected);
+        expect(expected.length).toBeGreaterThan(0);
+    });
+
+    test("description mentions the concrete debloat count and catalog version", async () => {
+        const { loadPluginCatalog, reloadPluginCatalog } = await import(
+            "../../src/catalog/reader.ts"
+        );
+        reloadPluginCatalog();
+        const catalog = loadPluginCatalog();
+        const expectedCount = catalog.plugins
+            .filter((p) => p.curation_opinion === "debloat").length;
+
+        const t = getTemplate("debloat-bundled")!;
+        expect(t.description).toContain(String(expectedCount));
+        expect(t.description).toContain(catalog.catalog_version);
+    });
+
+    test("setup export --template debloat-bundled yields a manifest with plugins.disabled populated", async () => {
+        const outputPath = join(workdir, "debloat.kset.yaml");
+        const code = await main(
+            ["setup", "export", "my-debloat", "--template", "debloat-bundled", "--output", outputPath],
+            env,
+        );
+        expect(code).toBe(0);
+        expect(existsSync(outputPath)).toBe(true);
+
+        const raw = readFileSync(outputPath, "utf8");
+        const manifest = parseManifest(yamlParse(raw));
+        expect(manifest.apply_mode).toBe("additive");
+
+        const disabled = (manifest.plugins?.disabled ?? []).slice().sort();
+        const { loadPluginCatalog } = await import("../../src/catalog/reader.ts");
+        const expected = loadPluginCatalog().plugins
+            .filter((p) => p.curation_opinion === "debloat")
+            .map((p) => p.name).sort();
+        expect(disabled).toEqual(expected);
     });
 });
 

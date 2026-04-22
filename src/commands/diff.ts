@@ -9,24 +9,17 @@
 // be touched (this is the most common misunderstanding: kindly.yaml doesn't
 // track everything on the device unless you run `pull --full`).
 //
-// Shape: executeDiff() does the read + compute and returns DiffResult;
-// renderDiff() prints; runDiff() glues them via argv and maps to exit code.
-// Split enables JSON rendering (W3) and in-process consumers (GUI).
+// Pure logic lives in src/lib/diff.ts; this module is the CLI adapter.
 
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { ArgError, parseArgs, type FlagSpecs } from "../cli/args.ts";
-import { type CliEnv, resolveMount } from "../cli/env.ts";
+import { parseArgs, type FlagSpecs } from "../cli/args.ts";
+import type { CliEnv } from "../cli/env.ts";
 import { dim, heading, info, paint } from "../cli/log.ts";
-import { parseSettingsFile } from "../lua/reader.ts";
-import { yamlToLua } from "../schema/yaml.ts";
-import type { LuaValue } from "../lua/writer.ts";
-import { computeChanges, type Change } from "../schema/diff.ts";
+import type { Change } from "../schema/diff.ts";
 import type { DiffResult } from "../types/results.ts";
-import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { emitJson } from "../cli/json.ts";
-import { groupChanges } from "../taxonomy/group.ts";
-import { categoryOf, loadTaxonomy } from "../taxonomy/mapper.ts";
+import { executeDiff, type DiffOptions } from "../lib/diff.ts";
+
+export { executeDiff, type DiffOptions };
 
 const FLAGS = {
     file: {
@@ -43,64 +36,6 @@ const FLAGS = {
         description: "narrow output to a single taxonomy category (e.g. fonts, display)",
     },
 } as const satisfies FlagSpecs;
-
-export interface DiffOptions {
-    file?: string;
-    /** Restrict output to this taxonomy category. Unknown names throw ArgError. */
-    category?: string;
-}
-
-// Compute the diff between YAML and the on-device settings. Returns data;
-// does not print. Throws on missing YAML / mount.
-export function executeDiff(opts: DiffOptions, env: CliEnv): DiffResult {
-    const yamlPath = resolve(env.cwd, opts.file ?? "kindly.yaml");
-    if (!existsSync(yamlPath)) {
-        throw new KindlyError(
-            ErrorCodes.YAML_NOT_FOUND,
-            `${yamlPath} not found. Run \`kindly pull\` first?`,
-            [{ text: "Capture the device's current config.", command: "kindly pull" }],
-        );
-    }
-
-    const mount = resolveMount(env);
-    const onDevice = parseSettingsFile(readFileSync(mount.settingsPath, "utf8")) as Record<string, LuaValue>;
-    const fromYaml = yamlToLua(readFileSync(yamlPath, "utf8")) as Record<string, LuaValue>;
-
-    const allChanges = computeChanges(onDevice, fromYaml);
-
-    const yamlKeys = new Set(Object.keys(fromYaml));
-    const allUntracked = Object.keys(onDevice)
-        .filter((k) => !yamlKeys.has(k))
-        .sort();
-
-    // --category filter: restrict both changes and untrackedKeys to a single
-    // taxonomy bucket. The category must exist in the taxonomy (typos throw
-    // rather than silently returning an empty diff).
-    const tax = loadTaxonomy();
-    if (opts.category !== undefined && !tax.categories.includes(opts.category)) {
-        throw new ArgError(
-            `unknown category: "${opts.category}". Valid: ${tax.categories.join(", ")}`,
-        );
-    }
-
-    const changes = opts.category === undefined
-        ? allChanges
-        : allChanges.filter((c) => categoryOf(tax, c.path[0]!) === opts.category);
-    const untrackedKeys = opts.category === undefined
-        ? allUntracked
-        : allUntracked.filter((k) => categoryOf(tax, k) === opts.category);
-    const grouped = groupChanges(changes, tax);
-
-    return {
-        yamlPath,
-        settingsPath: mount.settingsPath,
-        changes,
-        grouped,
-        untrackedKeys,
-        ...(opts.category !== undefined ? { filteredBy: opts.category } : {}),
-    };
-}
-
 
 export function renderDiff(result: DiffResult, env: CliEnv): void {
     const scope = result.filteredBy ? ` in ${result.filteredBy}` : "";

@@ -6,32 +6,148 @@
 # human label or a refined control hint that the schema type can't infer.
 #
 # Declared categories are validated on build — adding a key with an
-# undeclared category name fails `scripts/build-taxonomy.ts`. The same
-# goes for stale keys (entries not present in the schema).
+# undeclared category name fails `scripts/build-taxonomy.ts`. Same for
+# stale keys (entries not present in the schema).
 #
-# This file is the W7 stub — 3 categories × ~6 keys each, enough to prove
-# the pipeline end-to-end. W8 fills out the full 10-category curation.
-# Unmapped schema keys fall into "uncategorized" and show up in the
-# build output's `stats.uncategorized_count`.
+# W8 (2026-04-22): expanded from 17-key stub to full 557-key coverage
+# across the 10-category target. See docs/83-taxonomy.md for per-bucket
+# rationale and the cluster worklist used to drive this.
 
 categories:
   - reading
   - fonts
   - status_bar
+  - menu
+  - progress
+  - screensaver
+  - gestures
+  - display
+  - plugins_bundled
+  - ephemeral
 
 keys:
-  # --- reading ---
-  avoid_flashing_ui: reading
+
+  # =============================================================
+  # reading — core reading/navigation, CR & KOpt engines, layout,
+  # annotations, search, panel/image, CR cache tuning.
+  # =============================================================
+  annotations_export_folder: reading
+  annotations_export_keep_all_on_import: reading
+  annotations_export_on_closing: reading
+  autoturn_distance: reading
+  autoturn_enabled: reading
+  autoturn_timeout_seconds: reading
+  book_map_alt_theme: reading
+  book_map_overview_tap_to_page_browser: reading
+  book_map_tap_to_page_browser: reading
+  book_map_ten_pages_markers: reading
+  copt_: reading
+  copt_block_rendering_mode: reading
+  copt_overlap_lines: reading
+  cre_background_color: reading
+  cre_background_image: reading
+  cre_compress_cached_data: reading
+  cre_disk_cache_max_size: reading
+  cre_partial_rerendering: reading
+  cre_show_progress: reading
+  cre_storage_size_factor: reading
+  default_highlight_action: reading
+  dimension_units: reading
+  dimension_units_append_px: reading
+  document_metadata_folder: reading
+  duration_format: reading
+  end_document_action: reading
+  end_document_auto_mark: reading
+  followed_link_marker: reading
+  footnote_link_in_popup: reading
+  footnote_popup_absolute_font_size: reading
+  footnote_popup_relative_font_size: reading
+  footnote_popup_use_book_font: reading
+  fulltext_search_find_all: reading
+  fulltext_search_nb_context_words: reading
+  fulltext_search_results_max_lines: reading
+  fulltext_search_results_per_page: reading
+  fulltext_search_zoom_to_page: reading
+  hide_nonlinear_flows: reading
+  highlight_action_on_single_word: reading
+  highlight_color: reading
+  highlight_corner_scroll: reading
+  highlight_dialog_position: reading
+  highlight_drawing_style: reading
+  highlight_height_pct: reading
+  highlight_lighten_factor: reading
+  highlight_long_hold_threshold_s: reading
+  highlight_non_touch_factor: reading
+  highlight_non_touch_factor_dict: reading
+  highlight_non_touch_interval: reading
+  highlight_non_touch_spedup: reading
+  highlight_note_marker: reading
+  highlight_write_into_pdf: reading
+  highlight_write_into_pdf_notify: reading
   home_dir: reading
-  lastfile: reading
+  imageviewer_rotate_auto_for_best_fit: reading
+  imageviewer_rotation_landscape_invert: reading
+  imageviewer_rotation_portrait_invert: reading
+  inverse_reading_order: reading
+  kopt_contrast: reading
+  kopt_font_size: reading
+  kopt_full_screen: reading
+  kopt_page_gap_height: reading
+  kopt_zoom_direction: reading
+  kopt_zoom_factor: reading
+  kopt_zoom_mode_genus: reading
+  kopt_zoom_mode_type: reading
+  kopt_zoom_overlap_h: reading
+  kopt_zoom_overlap_v: reading
+  link_prefer_footnote: reading
+  metric_length: reading
+  notebook_file: reading
+  page_gap_color: reading
+  page_overlap_enable: reading
+  page_overlap_style: reading
+  pagemap_chars_per_synthetic_page: reading
+  pagemap_label_font_size: reading
+  pagemap_notify_document_provided: reading
+  pagemap_show_page_labels: reading
+  pagemap_synthetic_overrides: reading
+  pagemap_use_page_labels: reading
+  panel_zoom_enabled: reading
+  panel_zoom_fallback_to_text_selection: reading
+  save_document: reading
   screen_dpi:
     category: reading
     label: "Screen DPI"
     description: "Device pixel density. Affects how ppi-sensitive sizes render."
-  copt_block_rendering_mode: reading
-  copt_overlap_lines: reading
+  textviewer_pinned_pages: reading
+  textviewer_text_types: reading
+  txt_preformatted: reading
+  use_cre_call_cache: reading
+  use_cre_call_cache_log_stats: reading
+  use_xtext: reading
+  zoom_factor: reading
+  zoom_mode: reading
 
-  # --- fonts ---
+  # =============================================================
+  # fonts — typography, font families, fallbacks, hyphenation,
+  # CSS, text language.
+  # =============================================================
+  additional_fallback_fonts: fonts
+  copt_css:
+    category: fonts
+    label: "Stylesheet (CSS)"
+    control_hint: text
+  copt_fb2_css:
+    category: fonts
+    label: "FictionBook stylesheet"
+    control_hint: text
+  cre_adjusted_fallback_font_sizes: fonts
+  cre_font: fonts
+  cre_font_family_fonts: fonts
+  cre_font_family_ignore_font_names: fonts
+  cre_fonts_recently_selected: fonts
+  cre_monospace_scaling: fonts
+  fallback_font: fonts
+  floating_punctuation: fonts
   font_menu_sort_by_recently_selected:
     category: fonts
     label: "Sort font menu by recently selected"
@@ -42,25 +158,71 @@ keys:
     category: fonts
     label: "UI font fallbacks"
     description: "Ordered list of fonts KOReader falls back to for UI glyphs the primary font can't render."
-    control_hint: structured
-  copt_css:
-    category: fonts
-    label: "Stylesheet (CSS)"
-    control_hint: text
-  copt_fb2_css:
-    category: fonts
-    label: "FictionBook stylesheet"
-    control_hint: text
+  hyph_alg_default: fonts
+  hyph_alg_fallback: fonts
+  hyph_force_algorithmic: fonts
+  hyph_left_hyphen_min: fonts
+  hyph_right_hyphen_min: fonts
+  hyph_soft_hyphens_only: fonts
+  hyph_trust_soft_hyphens: fonts
+  hyph_user_dict: fonts
+  hyphenation: fonts
+  language: fonts
+  language_japanese_text_conversions: fonts
+  language_japanese_text_scan_length: fonts
+  monospace_font: fonts
+  system_fonts: fonts
+  text_lang_default: fonts
+  text_lang_embedded_langs: fonts
+  text_lang_fallback: fonts
+  use_bold_font_for_bold: fonts
+  xtext_alt_lang: fonts
 
-  # --- status_bar ---
+  # =============================================================
+  # status_bar — bottom footer + CR engine top header.
+  # =============================================================
+  cre_header_author:
+    category: status_bar
+    label: "Show author in CR header"
+  cre_header_auto_refresh:
+    category: status_bar
+    label: "Auto-refresh CR header"
+  cre_header_battery:
+    category: status_bar
+    label: "Show battery in CR header"
+  cre_header_battery_percent:
+    category: status_bar
+    label: "Show battery percent in CR header"
+  cre_header_chapter_marks:
+    category: status_bar
+    label: "Show chapter marks in CR header"
+  cre_header_clock:
+    category: status_bar
+    label: "Show clock in CR header"
+  cre_header_page_count:
+    category: status_bar
+    label: "Show page count in CR header"
+  cre_header_page_number:
+    category: status_bar
+    label: "Show page number in CR header"
+  cre_header_reading_percent:
+    category: status_bar
+    label: "Show reading percent in CR header"
+  cre_header_status_font_size:
+    category: status_bar
+    label: "CR header status font size"
+  cre_header_title:
+    category: status_bar
+    label: "Show title in CR header"
   footer:
     category: status_bar
     label: "Footer config"
-    control_hint: structured
   footer_presets:
     category: status_bar
     label: "Footer presets"
-    control_hint: structured
+  header_font:
+    category: status_bar
+    label: "CR header font"
   reader_footer_custom_text:
     category: status_bar
     label: "Custom footer text"
@@ -70,6 +232,518 @@ keys:
   reader_footer_mode:
     category: status_bar
     label: "Footer mode"
+  reader_timer_remain_time: status_bar
   readtimer_show_value_in_footer:
     category: status_bar
     label: "Show read-timer value in footer"
+  readtimer_show_value_in_header: status_bar
+  twelve_hour_clock: status_bar
+
+  # =============================================================
+  # menu — file manager, TOC, bookmarks, history, keyboard UI,
+  # covers/thumbnails, search.
+  # =============================================================
+  activate_menu: menu
+  bookmarks_items_font_size: menu
+  bookmarks_items_max_lines: menu
+  bookmarks_items_multilines_show_more_text: menu
+  bookmarks_items_per_page: menu
+  bookmarks_items_reverse_sorting: menu
+  bookmarks_items_show_color: menu
+  bookmarks_items_show_color_default: menu
+  bookmarks_items_show_separator: menu
+  bookmarks_items_sorting: menu
+  bookmarks_items_text_type: menu
+  collate: menu
+  collate_mixed: menu
+  collection_show_mark: menu
+  cover_image_background: menu
+  cover_image_cache_maxfiles: menu
+  cover_image_cache_maxsize: menu
+  cover_image_cache_path: menu
+  cover_image_enabled: menu
+  cover_image_fallback: menu
+  cover_image_fallback_path: menu
+  cover_image_format: menu
+  cover_image_grayscale: menu
+  cover_image_path: menu
+  cover_image_quality: menu
+  cover_image_rotate: menu
+  cover_image_stretch_limit: menu
+  disable_fuzzy_search: menu
+  download_dir: menu
+  external_keyboard_otg_mode_on_start: menu
+  file_ask_to_open: menu
+  file_ext_assoc: menu
+  folder_shortcuts: menu
+  history_datetime_short: menu
+  history_filter: menu
+  history_freeze_finished_books: menu
+  history_size: menu
+  inbox_dir: menu
+  items_font_size: menu
+  items_multilines_show_more_text: menu
+  items_per_page: menu
+  keyboard_japanese_keitai_tap_interval: menu
+  keyboard_key_bold: menu
+  keyboard_key_border: menu
+  keyboard_key_compact: menu
+  keyboard_key_font_size: menu
+  keyboard_layout: menu
+  keyboard_layout_default: menu
+  keyboard_layouts: menu
+  keyboard_remember_layout: menu
+  keyboard_swipes_enabled: menu
+  keyvalues_per_page: menu
+  keyvalues_per_page_landscape: menu
+  lock_home_folder: menu
+  notification_sources_to_show_mask: menu
+  open_last_menu_show_filename: menu
+  page_browser_nb_cols: menu
+  page_browser_nb_rows: menu
+  page_browser_preload_thumbnails: menu
+  page_browser_thumbnails_pagenums: menu
+  reverse_collate: menu
+  screenshot_dir: menu
+  shorten_home_dir: menu
+  show_advanced: menu
+  show_bottom_menu: menu
+  show_file_in_bold: menu
+  show_filter: menu
+  show_finished: menu
+  show_hidden: menu
+  show_unsupported: menu
+  skim_dialog_position: menu
+  start_with: menu
+  toc_items_font_size: menu
+  toc_items_per_page: menu
+  toc_items_show_chapter_length: menu
+  toc_items_with_dots: menu
+  virtual_keyboard_enabled: menu
+
+  # =============================================================
+  # progress — reading stats, session tracking, end-of-book handling.
+  # =============================================================
+  autoremove_deleted_items_from_history: progress
+  readtimer: progress
+  statistics: progress
+
+  # =============================================================
+  # screensaver — all screensaver_* keys.
+  # =============================================================
+  screensaver_background: screensaver
+  screensaver_cycle_images_alphabetically: screensaver
+  screensaver_cycle_index: screensaver
+  screensaver_delay: screensaver
+  screensaver_dir: screensaver
+  screensaver_document_cover: screensaver
+  screensaver_exclude_finished_books: screensaver
+  screensaver_exclude_on_hold_books: screensaver
+  screensaver_exit_message: screensaver
+  screensaver_hide_cover_in_filemanager: screensaver
+  screensaver_hide_fallback_msg: screensaver
+  screensaver_image: screensaver
+  screensaver_img_background: screensaver
+  screensaver_max_files: screensaver
+  screensaver_message: screensaver
+  screensaver_message_alpha: screensaver
+  screensaver_message_container: screensaver
+  screensaver_message_vertical_position: screensaver
+  screensaver_msg_background: screensaver
+  screensaver_no_background: screensaver
+  screensaver_rotate_auto_for_best_fit: screensaver
+  screensaver_show_exit_message: screensaver
+  screensaver_show_message: screensaver
+  screensaver_stretch_images: screensaver
+  screensaver_stretch_limit_percentage: screensaver
+  screensaver_type: screensaver
+  screensaver_white_background: screensaver
+
+  # =============================================================
+  # gestures — tap zones, swipes, input keys, scroll, back/navigation.
+  # =============================================================
+  back_in_filemanager: gestures
+  back_in_reader: gestures
+  back_to_exit: gestures
+  backspace_as_back: gestures
+  disable_double_tap: gestures
+  ges_double_tap_interval_ms: gestures
+  ges_hold_interval_ms: gestures
+  ges_swipe_interval_ms: gestures
+  ges_tap_interval_ms: gestures
+  ges_tap_interval_on_keyboard_ms: gestures
+  ges_two_finger_tap_duration_ms: gestures
+  gesture_fm: gestures
+  gesture_reader: gestures
+  haptic_feedback_override: gestures
+  hold_pan_rate: gestures
+  ignore_hold_corners: gestures
+  inertial_scroll: gestures
+  input_ignore_gsensor: gestures
+  input_invert_left_page_turn_keys: gestures
+  input_invert_page_turn_keys: gestures
+  input_invert_right_page_turn_keys: gestures
+  input_lock_gsensor: gestures
+  input_no_key_repeat: gestures
+  larger_tap_area_to_follow_links: gestures
+  left_right_keys_turn_pages: gestures
+  low_pan_rate: gestures
+  multiswipes_enabled: gestures
+  page_turns_disable_swipe: gestures
+  page_turns_disable_tap: gestures
+  page_turns_swipe_always_active: gestures
+  page_turns_tap_zone_backward_size_ratio: gestures
+  page_turns_tap_zone_forward_size_ratio: gestures
+  page_turns_tap_zones: gestures
+  pageturn_power: gestures
+  scroll_activation_delay: gestures
+  scroll_method: gestures
+  swipe_animations: gestures
+  swipe_ignore_external_links: gestures
+  swipe_link_footnote_popup: gestures
+  swipe_to_follow_nearest_link: gestures
+  swipe_to_go_back: gestures
+  swipe_to_jump_to_latest_bookmark: gestures
+  tap_ignore_external_links: gestures
+  tap_link_footnote_popup: gestures
+  tap_to_follow_links: gestures
+
+  # =============================================================
+  # display — backlight, warmth, nightmode, rotation, power mgmt,
+  # WiFi, connectivity, refresh/rendering flags, OTA, dev flags.
+  # =============================================================
+  android_ignore_back_button: display
+  android_ignore_volume_keys: display
+  android_screen_timeout: display
+  anti_alias_ui: display
+  auto_disable_wifi: display
+  auto_dismiss_wifi_scan: display
+  auto_restore_wifi: display
+  auto_save_settings_interval_minutes: display
+  auto_standby_timeout_seconds: display
+  auto_suspend_timeout_seconds: display
+  autodim_duration_seconds: display
+  autodim_fraction: display
+  autodim_starttime_minutes: display
+  autoshutdown_timeout_seconds: display
+  autowarmth_activate: display
+  autowarmth_altitude: display
+  autowarmth_control_nightmode: display
+  autowarmth_control_warmth: display
+  autowarmth_easy_mode: display
+  autowarmth_fl_off_during_day: display
+  autowarmth_fl_off_during_day_offset_s: display
+  autowarmth_hide_nightmode_warning: display
+  autowarmth_latitude: display
+  autowarmth_location: display
+  autowarmth_longitude: display
+  autowarmth_scheduler_times: display
+  autowarmth_timezone: display
+  autowarmth_warmth: display
+  avoid_flashing_ui: display
+  closed_rotation_mode: display
+  color_rendering: display
+  custom_screen_dpi: display
+  dev_abort_on_crash:
+    category: display
+    label: "Developer: abort on crash"
+  dev_no_c_blitter:
+    category: display
+    label: "Developer: disable C blitter"
+  dev_no_hw_dither:
+    category: display
+    label: "Developer: disable hardware dither"
+  dev_no_sw_dither:
+    category: display
+    label: "Developer: disable software dither"
+  dev_reverse_ui_layout_mirroring:
+    category: display
+    label: "Developer: reverse UI layout mirroring"
+  dev_reverse_ui_text_direction:
+    category: display
+    label: "Developer: reverse UI text direction"
+  dev_startup_no_fbdepth:
+    category: display
+    label: "Developer: startup without fbdepth"
+  disable_android_fullscreen: display
+  enable_charging_led: display
+  flash_keyboard: display
+  flash_ui: display
+  fm_rotation_mode: display
+  frontlight_auto_warmth: display
+  frontlight_intensity: display
+  frontlight_max_warmth_hour: display
+  frontlight_warmth: display
+  full_refresh_count: display
+  http_proxy: display
+  http_proxy_enabled: display
+  ignore_open_sleepcover: display
+  ignore_power_sleepcover: display
+  invert_ui_layout: display
+  kindle_hall_effect_sensor_enabled: display
+  legacy_image_scaling: display
+  lock_rotation: display
+  mass_storage_confirmation_disabled: display
+  mass_storage_disabled: display
+  mxcfb_bypass_wait_for: display
+  natural_light_config: display
+  night_: display
+  night_full_refresh_count: display
+  night_mode: display
+  no_cfa_post_processing: display
+  no_refresh_on_second_chapter_page: display
+  ota_channel: display
+  ota_server: display
+  pb_ignore_b288_quirks: display
+  refresh_on_chapter_boundaries: display
+  refresh_on_pages_with_images: display
+  remarkable_hall_effect_sensor_enabled: display
+  ui_cursor_combine_regions: display
+  ui_cursor_use_refresh_funcs: display
+  wf_level: display
+  wifi_disable_action: display
+  wifi_enable_action: display
+
+  # =============================================================
+  # plugins_bundled — settings owned by shipped (or installed)
+  # plugins. Includes both stock KOReader plugins and community
+  # plugins on-device; plugin catalog (W19-W24) will re-layer these
+  # with per-plugin metadata.
+  # =============================================================
+
+  # --- BookShortcuts plugin ---
+  BookShortcuts_directory_action: plugins_bundled
+  BookShortcuts_recursive_directory: plugins_bundled
+
+  # --- Calibre integration ---
+  calibre_opds: plugins_bundled
+  calibre_search_: plugins_bundled
+  calibre_search_cache_metadata: plugins_bundled
+  calibre_search_case_insensitive: plugins_bundled
+  calibre_search_find_by_authors: plugins_bundled
+  calibre_search_find_by_path: plugins_bundled
+  calibre_search_find_by_series: plugins_bundled
+  calibre_search_find_by_tag: plugins_bundled
+  calibre_search_find_by_title: plugins_bundled
+  calibre_search_from_reader: plugins_bundled
+  calibre_wireless: plugins_bundled
+  calibre_wireless_default_format: plugins_bundled
+  calibre_wireless_password: plugins_bundled
+  calibre_wireless_url: plugins_bundled
+
+  # --- Cover browser ---
+  coverbrowser_initial_default_setup_done: plugins_bundled
+
+  # --- Device status plugin ---
+  device_status_battery_alarm: plugins_bundled
+  device_status_battery_interval_minutes: plugins_bundled
+  device_status_battery_threshold: plugins_bundled
+  device_status_battery_threshold_high: plugins_bundled
+  device_status_memory_alarm: plugins_bundled
+  device_status_memory_auto_restart: plugins_bundled
+  device_status_memory_interval_minutes: plugins_bundled
+  device_status_memory_threshold: plugins_bundled
+
+  # --- Dictionary ---
+  dict_font_size: plugins_bundled
+  dict_justify: plugins_bundled
+  dict_largewindow: plugins_bundled
+  dict_presets: plugins_bundled
+  dict_presets_cycle_index: plugins_bundled
+  dicts_disabled: plugins_bundled
+  dicts_order: plugins_bundled
+  disable_lookup_history: plugins_bundled
+  external_dict_lookup: plugins_bundled
+  external_dict_lookup_method: plugins_bundled
+
+  # --- Exporter ---
+  exporter: plugins_bundled
+
+  # --- HTTP inspector ---
+  httpinspector_autostart: plugins_bundled
+  httpinspector_port: plugins_bundled
+
+  # --- KOSync (progress sync) ---
+  kosync: plugins_bundled
+
+  # --- LocalSend ---
+  LocalSend_accept_ext: plugins_bundled
+  LocalSend_auto_update_check: plugins_bundled
+  LocalSend_autostart: plugins_bundled
+  LocalSend_device_name: plugins_bundled
+  LocalSend_ext_dirs: plugins_bundled
+  LocalSend_last_update_check: plugins_bundled
+  LocalSend_pin: plugins_bundled
+  LocalSend_port: plugins_bundled
+  LocalSend_routing_accept_all: plugins_bundled
+  LocalSend_routing_enabled: plugins_bundled
+  LocalSend_save_dir: plugins_bundled
+  LocalSend_update_check_interval_hours: plugins_bundled
+  LocalSend_use_https: plugins_bundled
+  LocalSend_use_webrtc: plugins_bundled
+
+  # --- navbar (community plugin) ---
+  navbar_bar_size: plugins_bundled
+  navbar_bottombar_settings_on_hold: plugins_bundled
+  navbar_cqa_: plugins_bundled
+  navbar_cqa_custom_qa_: plugins_bundled
+  navbar_cqa_custom_qa_1: plugins_bundled
+  navbar_cqa_custom_qa_2: plugins_bundled
+  navbar_custom_: plugins_bundled
+  navbar_custom_qa_list: plugins_bundled
+  navbar_custom_qa_migrated_v1: plugins_bundled
+  navbar_daily_reading_goal_secs: plugins_bundled
+  navbar_dotpager_always: plugins_bundled
+  navbar_enabled: plugins_bundled
+  navbar_hide_separator: plugins_bundled
+  navbar_homescreen_collections: plugins_bundled
+  navbar_homescreen_currently: plugins_bundled
+  navbar_homescreen_enabled: plugins_bundled
+  navbar_homescreen_flow_recent_fp: plugins_bundled
+  navbar_homescreen_header: plugins_bundled
+  navbar_homescreen_header_enabled: plugins_bundled
+  navbar_homescreen_module_order: plugins_bundled
+  navbar_homescreen_pagination_hidden: plugins_bundled
+  navbar_homescreen_quick_actions_1_enabled: plugins_bundled
+  navbar_homescreen_quick_actions_1_items: plugins_bundled
+  navbar_homescreen_quick_actions_2_enabled: plugins_bundled
+  navbar_homescreen_quick_actions_3_enabled: plugins_bundled
+  navbar_homescreen_quote_enabled: plugins_bundled
+  navbar_homescreen_reading_goals: plugins_bundled
+  navbar_homescreen_reading_stats_enabled: plugins_bundled
+  navbar_homescreen_recent: plugins_bundled
+  navbar_homescreen_settings_on_hold: plugins_bundled
+  navbar_hs_return_to_book_folder: plugins_bundled
+  navbar_mode: plugins_bundled
+  navbar_navpager_enabled: plugins_bundled
+  navbar_pagination_show_subtitle: plugins_bundled
+  navbar_pagination_size: plugins_bundled
+  navbar_pagination_visible: plugins_bundled
+  navbar_reading_goal: plugins_bundled
+  navbar_reading_goal_physical: plugins_bundled
+  navbar_tabs: plugins_bundled
+  navbar_topbar_config: plugins_bundled
+  navbar_topbar_custom_text: plugins_bundled
+  navbar_topbar_enabled: plugins_bundled
+  navbar_topbar_settings_on_hold: plugins_bundled
+  navbar_topbar_swipe_indicator: plugins_bundled
+  navbar_topbar_wifi_hide_when_off: plugins_bundled
+
+  # --- OPDS / reading sources ---
+  opds_servers: plugins_bundled
+
+  # --- PinPadLock ---
+  block_start_time: plugins_bundled
+  current_tries_number: plugins_bundled
+  pinpadlock_activated: plugins_bundled
+  pinpadlock_message: plugins_bundled
+  pinpadlock_message_alignment: plugins_bundled
+  pinpadlock_message_position: plugins_bundled
+  pinpadlock_pin_code: plugins_bundled
+  pinpadlock_show_message: plugins_bundled
+
+  # --- Profiles (autostart + exec) ---
+  autostart_profiles: plugins_bundled
+  profiles_autoexec: plugins_bundled
+
+  # --- simpleui (community plugin) ---
+  aaaProjectTitle_initial_default_setup_done2:
+    category: plugins_bundled
+    label: "(user mod) initial default setup sentinel"
+    description: "Prefix-hacked key name to force top sort in settings.reader.lua — likely community/user mod sentinel."
+  my_module_presets: plugins_bundled
+  my_module_presets_cycle_index: plugins_bundled
+  simpleui_browsemeta_enabled: plugins_bundled
+  simpleui_debug_button_bounds: plugins_bundled
+  simpleui_defaults_v1: plugins_bundled
+  simpleui_defaults_v2: plugins_bundled
+  simpleui_defaults_v3: plugins_bundled
+  simpleui_enabled: plugins_bundled
+  simpleui_loaded_version: plugins_bundled
+  simpleui_tb_fm_cfg: plugins_bundled
+  simpleui_tb_item_browse_button: plugins_bundled
+  simpleui_tb_item_search_button: plugins_bundled
+  sui_tbr_list: plugins_bundled
+
+  # --- SSH ---
+  SSH_allow_no_password: plugins_bundled
+  SSH_autostart: plugins_bundled
+  SSH_key_only_auth: plugins_bundled
+  SSH_port: plugins_bundled
+
+  # --- Style tweaks ---
+  style_tweaks: plugins_bundled
+  style_tweaks_in_dispatcher: plugins_bundled
+
+  # --- Terminal ---
+  terminal_buffer_size: plugins_bundled
+  terminal_font_size: plugins_bundled
+  terminal_shell: plugins_bundled
+
+  # --- Translator ---
+  trans_server: plugins_bundled
+  translator_from_auto_detect: plugins_bundled
+  translator_from_doc_lang: plugins_bundled
+  translator_from_language: plugins_bundled
+  translator_to_language: plugins_bundled
+  translator_with_romanizations: plugins_bundled
+
+  # --- Quote deck (appears to be community plugin) ---
+  quote_deck_count: plugins_bundled
+  quote_deck_order: plugins_bundled
+  quote_deck_pos: plugins_bundled
+
+  # --- Vocabulary builder ---
+  vocabulary_builder: plugins_bundled
+
+  # --- Wikipedia ---
+  wikipedia_disable_history: plugins_bundled
+  wikipedia_epub_highres_images: plugins_bundled
+  wikipedia_epub_include_images: plugins_bundled
+  wikipedia_languages: plugins_bundled
+  wikipedia_last_language: plugins_bundled
+  wikipedia_prettify: plugins_bundled
+  wikipedia_save_dir: plugins_bundled
+  wikipedia_save_in_book_dir: plugins_bundled
+  wikipedia_show_image: plugins_bundled
+  wikipedia_show_more_images: plugins_bundled
+
+  # --- Z-Library ---
+  zlib_user_id: plugins_bundled
+  zlib_user_key: plugins_bundled
+  zlibrary_base_url: plugins_bundled
+  zlibrary_download_dir: plugins_bundled
+  zlibrary_password: plugins_bundled
+  zlibrary_search_extensions: plugins_bundled
+  zlibrary_search_languages: plugins_bundled
+  zlibrary_search_order: plugins_bundled
+  zlibrary_username: plugins_bundled
+
+  # --- Plugin meta ---
+  extra_plugin_paths: plugins_bundled
+  plugins_disabled: plugins_bundled
+  provider: plugins_bundled
+
+  # =============================================================
+  # ephemeral — runtime state KOReader persists but that
+  # doesn't belong in a portable settings snapshot. Surfaced in
+  # the GUI but not applied by `setup import` unless explicit.
+  # =============================================================
+  currently_blocked: ephemeral
+  debug: ephemeral
+  debug_verbose: ephemeral
+  device_id: ephemeral
+  emulator_fake_wifi_connected: ephemeral
+  filemanagermenu_tab_index: ephemeral
+  focus_manager: ephemeral
+  gestures_migrated: ephemeral
+  is_frontlight_on: ephemeral
+  last_migration_date: ephemeral
+  lastdir: ephemeral
+  lastfile: ephemeral
+  menu_search_string: ephemeral
+  opening_page_location_stack: ephemeral
+  pm_debug_entry_failure: ephemeral
+  quickstart_shown_version: ephemeral
+  sdl_window: ephemeral
+  wifi_was_on: ephemeral

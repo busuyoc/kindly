@@ -1,18 +1,24 @@
 {
   "$schema_version": 1,
-  "generated_at": "2026-04-22T12:48:56.826Z",
+  "generated_at": "2026-04-22T13:08:57.242Z",
   "source": {
     "schema": "data/schemas/settings.reader.lua.v1.json",
     "categories": "data/taxonomy/settings.v1.categories.yaml"
   },
   "stats": {
     "total_keys": 557,
-    "uncategorized_count": 540,
+    "uncategorized_count": 0,
     "by_category": {
-      "uncategorized": 540,
-      "reading": 6,
-      "fonts": 5,
-      "status_bar": 6
+      "plugins_bundled": 164,
+      "menu": 77,
+      "fonts": 33,
+      "display": 77,
+      "reading": 92,
+      "progress": 3,
+      "gestures": 45,
+      "status_bar": 21,
+      "ephemeral": 18,
+      "screensaver": 27
     },
     "by_control_hint": {
       "text": 211,
@@ -25,501 +31,508 @@
     "reading",
     "fonts",
     "status_bar",
-    "uncategorized"
+    "menu",
+    "progress",
+    "screensaver",
+    "gestures",
+    "display",
+    "plugins_bundled",
+    "ephemeral"
   ],
   "keys": {
     "BookShortcuts_directory_action": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "BookShortcuts directory action",
       "control_hint": "text"
     },
     "BookShortcuts_recursive_directory": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "BookShortcuts recursive directory",
       "control_hint": "toggle"
     },
     "LocalSend_accept_ext": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "LocalSend accept ext",
       "control_hint": "text"
     },
     "LocalSend_auto_update_check": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "LocalSend auto update check",
       "control_hint": "toggle"
     },
     "LocalSend_autostart": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "LocalSend autostart",
       "control_hint": "toggle"
     },
     "LocalSend_device_name": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "LocalSend device name",
       "control_hint": "text"
     },
     "LocalSend_ext_dirs": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "LocalSend ext dirs",
       "control_hint": "text"
     },
     "LocalSend_last_update_check": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "LocalSend last update check",
       "control_hint": "number"
     },
     "LocalSend_pin": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "LocalSend pin",
       "control_hint": "text"
     },
     "LocalSend_port": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "LocalSend port",
       "control_hint": "text"
     },
     "LocalSend_routing_accept_all": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "LocalSend routing accept all",
       "control_hint": "toggle"
     },
     "LocalSend_routing_enabled": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "LocalSend routing enabled",
       "control_hint": "toggle"
     },
     "LocalSend_save_dir": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "LocalSend save dir",
       "control_hint": "text"
     },
     "LocalSend_update_check_interval_hours": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "LocalSend update check interval hours",
       "control_hint": "text"
     },
     "LocalSend_use_https": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "LocalSend use https",
       "control_hint": "toggle"
     },
     "LocalSend_use_webrtc": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "LocalSend use webrtc",
       "control_hint": "toggle"
     },
     "SSH_allow_no_password": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "SSH allow no password",
       "control_hint": "toggle"
     },
     "SSH_autostart": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "SSH autostart",
       "control_hint": "toggle"
     },
     "SSH_key_only_auth": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "SSH key only auth",
       "control_hint": "toggle"
     },
     "SSH_port": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "SSH port",
       "control_hint": "text"
     },
     "aaaProjectTitle_initial_default_setup_done2": {
-      "category": "uncategorized",
-      "label": "AaaProjectTitle initial default setup done2",
-      "control_hint": "toggle"
+      "category": "plugins_bundled",
+      "label": "(user mod) initial default setup sentinel",
+      "control_hint": "toggle",
+      "description": "Prefix-hacked key name to force top sort in settings.reader.lua — likely community/user mod sentinel."
     },
     "activate_menu": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Activate menu",
       "control_hint": "text"
     },
     "additional_fallback_fonts": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Additional fallback fonts",
       "control_hint": "toggle"
     },
     "android_ignore_back_button": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Android ignore back button",
       "control_hint": "toggle"
     },
     "android_ignore_volume_keys": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Android ignore volume keys",
       "control_hint": "toggle"
     },
     "android_screen_timeout": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Android screen timeout",
       "control_hint": "text"
     },
     "annotations_export_folder": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Annotations export folder",
       "control_hint": "text"
     },
     "annotations_export_keep_all_on_import": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Annotations export keep all on import",
       "control_hint": "toggle"
     },
     "annotations_export_on_closing": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Annotations export on closing",
       "control_hint": "toggle"
     },
     "anti_alias_ui": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Anti alias ui",
       "control_hint": "toggle"
     },
     "auto_disable_wifi": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Auto disable wifi",
       "control_hint": "toggle"
     },
     "auto_dismiss_wifi_scan": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Auto dismiss wifi scan",
       "control_hint": "toggle"
     },
     "auto_restore_wifi": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Auto restore wifi",
       "control_hint": "toggle"
     },
     "auto_save_settings_interval_minutes": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Auto save settings interval minutes",
       "control_hint": "toggle"
     },
     "auto_standby_timeout_seconds": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Auto standby timeout seconds",
       "control_hint": "number"
     },
     "auto_suspend_timeout_seconds": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Auto suspend timeout seconds",
       "control_hint": "number"
     },
     "autodim_duration_seconds": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Autodim duration seconds",
       "control_hint": "number"
     },
     "autodim_fraction": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Autodim fraction",
       "control_hint": "number"
     },
     "autodim_starttime_minutes": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Autodim starttime minutes",
       "control_hint": "number"
     },
     "autoremove_deleted_items_from_history": {
-      "category": "uncategorized",
+      "category": "progress",
       "label": "Autoremove deleted items from history",
       "control_hint": "toggle"
     },
     "autoshutdown_timeout_seconds": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Autoshutdown timeout seconds",
       "control_hint": "number"
     },
     "autostart_profiles": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Autostart profiles",
       "control_hint": "text"
     },
     "autoturn_distance": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Autoturn distance",
       "control_hint": "number"
     },
     "autoturn_enabled": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Autoturn enabled",
       "control_hint": "toggle"
     },
     "autoturn_timeout_seconds": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Autoturn timeout seconds",
       "control_hint": "number"
     },
     "autowarmth_activate": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Autowarmth activate",
       "control_hint": "number"
     },
     "autowarmth_altitude": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Autowarmth altitude",
       "control_hint": "text"
     },
     "autowarmth_control_nightmode": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Autowarmth control nightmode",
       "control_hint": "toggle"
     },
     "autowarmth_control_warmth": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Autowarmth control warmth",
       "control_hint": "toggle"
     },
     "autowarmth_easy_mode": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Autowarmth easy mode",
       "control_hint": "toggle"
     },
     "autowarmth_fl_off_during_day": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Autowarmth fl off during day",
       "control_hint": "toggle"
     },
     "autowarmth_fl_off_during_day_offset_s": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Autowarmth fl off during day offset s",
       "control_hint": "number"
     },
     "autowarmth_hide_nightmode_warning": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Autowarmth hide nightmode warning",
       "control_hint": "toggle"
     },
     "autowarmth_latitude": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Autowarmth latitude",
       "control_hint": "text"
     },
     "autowarmth_location": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Autowarmth location",
       "control_hint": "text"
     },
     "autowarmth_longitude": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Autowarmth longitude",
       "control_hint": "text"
     },
     "autowarmth_scheduler_times": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Autowarmth scheduler times",
       "control_hint": "text"
     },
     "autowarmth_timezone": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Autowarmth timezone",
       "control_hint": "number"
     },
     "autowarmth_warmth": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Autowarmth warmth",
       "control_hint": "text"
     },
     "avoid_flashing_ui": {
-      "category": "reading",
+      "category": "display",
       "label": "Avoid flashing ui",
       "control_hint": "toggle"
     },
     "back_in_filemanager": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Back in filemanager",
       "control_hint": "text"
     },
     "back_in_reader": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Back in reader",
       "control_hint": "text"
     },
     "back_to_exit": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Back to exit",
       "control_hint": "text"
     },
     "backspace_as_back": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Backspace as back",
       "control_hint": "toggle"
     },
     "block_start_time": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Block start time",
       "control_hint": "number"
     },
     "book_map_alt_theme": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Book map alt theme",
       "control_hint": "toggle"
     },
     "book_map_overview_tap_to_page_browser": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Book map overview tap to page browser",
       "control_hint": "toggle"
     },
     "book_map_tap_to_page_browser": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Book map tap to page browser",
       "control_hint": "toggle"
     },
     "book_map_ten_pages_markers": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Book map ten pages markers",
       "control_hint": "number"
     },
     "bookmarks_items_font_size": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Bookmarks items font size",
       "control_hint": "number"
     },
     "bookmarks_items_max_lines": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Bookmarks items max lines",
       "control_hint": "text"
     },
     "bookmarks_items_multilines_show_more_text": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Bookmarks items multilines show more text",
       "control_hint": "toggle"
     },
     "bookmarks_items_per_page": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Bookmarks items per page",
       "control_hint": "number"
     },
     "bookmarks_items_reverse_sorting": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Bookmarks items reverse sorting",
       "control_hint": "toggle"
     },
     "bookmarks_items_show_color": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Bookmarks items show color",
       "control_hint": "toggle"
     },
     "bookmarks_items_show_color_default": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Bookmarks items show color default",
       "control_hint": "toggle"
     },
     "bookmarks_items_show_separator": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Bookmarks items show separator",
       "control_hint": "toggle"
     },
     "bookmarks_items_sorting": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Bookmarks items sorting",
       "control_hint": "text"
     },
     "bookmarks_items_text_type": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Bookmarks items text type",
       "control_hint": "text"
     },
     "calibre_opds": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Calibre opds",
       "control_hint": "text"
     },
     "calibre_search_": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Calibre search",
       "control_hint": "toggle"
     },
     "calibre_search_cache_metadata": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Calibre search cache metadata",
       "control_hint": "toggle"
     },
     "calibre_search_case_insensitive": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Calibre search case insensitive",
       "control_hint": "toggle"
     },
     "calibre_search_find_by_authors": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Calibre search find by authors",
       "control_hint": "toggle"
     },
     "calibre_search_find_by_path": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Calibre search find by path",
       "control_hint": "toggle"
     },
     "calibre_search_find_by_series": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Calibre search find by series",
       "control_hint": "toggle"
     },
     "calibre_search_find_by_tag": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Calibre search find by tag",
       "control_hint": "toggle"
     },
     "calibre_search_find_by_title": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Calibre search find by title",
       "control_hint": "toggle"
     },
     "calibre_search_from_reader": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Calibre search from reader",
       "control_hint": "toggle"
     },
     "calibre_wireless": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Calibre wireless",
       "control_hint": "toggle"
     },
     "calibre_wireless_default_format": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Calibre wireless default format",
       "control_hint": "text"
     },
     "calibre_wireless_password": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Calibre wireless password",
       "control_hint": "text"
     },
     "calibre_wireless_url": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Calibre wireless url",
       "control_hint": "structured"
     },
     "closed_rotation_mode": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Closed rotation mode",
       "control_hint": "number"
     },
     "collate": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Collate",
       "control_hint": "text"
     },
     "collate_mixed": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Collate mixed",
       "control_hint": "toggle"
     },
     "collection_show_mark": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Collection show mark",
       "control_hint": "toggle"
     },
     "color_rendering": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Color rendering",
       "control_hint": "toggle"
     },
     "copt_": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Copt",
       "control_hint": "text"
     },
@@ -544,482 +557,482 @@
       "control_hint": "text"
     },
     "cover_image_background": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Cover image background",
       "control_hint": "text"
     },
     "cover_image_cache_maxfiles": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Cover image cache maxfiles",
       "control_hint": "number"
     },
     "cover_image_cache_maxsize": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Cover image cache maxsize",
       "control_hint": "number"
     },
     "cover_image_cache_path": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Cover image cache path",
       "control_hint": "text"
     },
     "cover_image_enabled": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Cover image enabled",
       "control_hint": "toggle"
     },
     "cover_image_fallback": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Cover image fallback",
       "control_hint": "toggle"
     },
     "cover_image_fallback_path": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Cover image fallback path",
       "control_hint": "text"
     },
     "cover_image_format": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Cover image format",
       "control_hint": "text"
     },
     "cover_image_grayscale": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Cover image grayscale",
       "control_hint": "toggle"
     },
     "cover_image_path": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Cover image path",
       "control_hint": "text"
     },
     "cover_image_quality": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Cover image quality",
       "control_hint": "number"
     },
     "cover_image_rotate": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Cover image rotate",
       "control_hint": "toggle"
     },
     "cover_image_stretch_limit": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Cover image stretch limit",
       "control_hint": "number"
     },
     "coverbrowser_initial_default_setup_done": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Coverbrowser initial default setup done",
       "control_hint": "toggle"
     },
     "cre_adjusted_fallback_font_sizes": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Cre adjusted fallback font sizes",
       "control_hint": "toggle"
     },
     "cre_background_color": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Cre background color",
       "control_hint": "text"
     },
     "cre_background_image": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Cre background image",
       "control_hint": "text"
     },
     "cre_compress_cached_data": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Cre compress cached data",
       "control_hint": "toggle"
     },
     "cre_disk_cache_max_size": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Cre disk cache max size",
       "control_hint": "text"
     },
     "cre_font": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Cre font",
       "control_hint": "text"
     },
     "cre_font_family_fonts": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Cre font family fonts",
       "control_hint": "structured"
     },
     "cre_font_family_ignore_font_names": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Cre font family ignore font names",
       "control_hint": "toggle"
     },
     "cre_fonts_recently_selected": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Cre fonts recently selected",
       "control_hint": "structured"
     },
     "cre_header_author": {
-      "category": "uncategorized",
-      "label": "Cre header author",
+      "category": "status_bar",
+      "label": "Show author in CR header",
       "control_hint": "number"
     },
     "cre_header_auto_refresh": {
-      "category": "uncategorized",
-      "label": "Cre header auto refresh",
+      "category": "status_bar",
+      "label": "Auto-refresh CR header",
       "control_hint": "number"
     },
     "cre_header_battery": {
-      "category": "uncategorized",
-      "label": "Cre header battery",
+      "category": "status_bar",
+      "label": "Show battery in CR header",
       "control_hint": "number"
     },
     "cre_header_battery_percent": {
-      "category": "uncategorized",
-      "label": "Cre header battery percent",
+      "category": "status_bar",
+      "label": "Show battery percent in CR header",
       "control_hint": "number"
     },
     "cre_header_chapter_marks": {
-      "category": "uncategorized",
-      "label": "Cre header chapter marks",
+      "category": "status_bar",
+      "label": "Show chapter marks in CR header",
       "control_hint": "number"
     },
     "cre_header_clock": {
-      "category": "uncategorized",
-      "label": "Cre header clock",
+      "category": "status_bar",
+      "label": "Show clock in CR header",
       "control_hint": "number"
     },
     "cre_header_page_count": {
-      "category": "uncategorized",
-      "label": "Cre header page count",
+      "category": "status_bar",
+      "label": "Show page count in CR header",
       "control_hint": "number"
     },
     "cre_header_page_number": {
-      "category": "uncategorized",
-      "label": "Cre header page number",
+      "category": "status_bar",
+      "label": "Show page number in CR header",
       "control_hint": "number"
     },
     "cre_header_reading_percent": {
-      "category": "uncategorized",
-      "label": "Cre header reading percent",
+      "category": "status_bar",
+      "label": "Show reading percent in CR header",
       "control_hint": "number"
     },
     "cre_header_status_font_size": {
-      "category": "uncategorized",
-      "label": "Cre header status font size",
+      "category": "status_bar",
+      "label": "CR header status font size",
       "control_hint": "number"
     },
     "cre_header_title": {
-      "category": "uncategorized",
-      "label": "Cre header title",
+      "category": "status_bar",
+      "label": "Show title in CR header",
       "control_hint": "number"
     },
     "cre_monospace_scaling": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Cre monospace scaling",
       "control_hint": "text"
     },
     "cre_partial_rerendering": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Cre partial rerendering",
       "control_hint": "toggle"
     },
     "cre_show_progress": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Cre show progress",
       "control_hint": "toggle"
     },
     "cre_storage_size_factor": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Cre storage size factor",
       "control_hint": "text"
     },
     "current_tries_number": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Current tries number",
       "control_hint": "number"
     },
     "currently_blocked": {
-      "category": "uncategorized",
+      "category": "ephemeral",
       "label": "Currently blocked",
       "control_hint": "toggle"
     },
     "custom_screen_dpi": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Custom screen dpi",
       "control_hint": "text"
     },
     "debug": {
-      "category": "uncategorized",
+      "category": "ephemeral",
       "label": "Debug",
       "control_hint": "toggle"
     },
     "debug_verbose": {
-      "category": "uncategorized",
+      "category": "ephemeral",
       "label": "Debug verbose",
       "control_hint": "toggle"
     },
     "default_highlight_action": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Default highlight action",
       "control_hint": "text"
     },
     "dev_abort_on_crash": {
-      "category": "uncategorized",
-      "label": "Dev abort on crash",
+      "category": "display",
+      "label": "Developer: abort on crash",
       "control_hint": "toggle"
     },
     "dev_no_c_blitter": {
-      "category": "uncategorized",
-      "label": "Dev no c blitter",
+      "category": "display",
+      "label": "Developer: disable C blitter",
       "control_hint": "toggle"
     },
     "dev_no_hw_dither": {
-      "category": "uncategorized",
-      "label": "Dev no hw dither",
+      "category": "display",
+      "label": "Developer: disable hardware dither",
       "control_hint": "toggle"
     },
     "dev_no_sw_dither": {
-      "category": "uncategorized",
-      "label": "Dev no sw dither",
+      "category": "display",
+      "label": "Developer: disable software dither",
       "control_hint": "toggle"
     },
     "dev_reverse_ui_layout_mirroring": {
-      "category": "uncategorized",
-      "label": "Dev reverse ui layout mirroring",
+      "category": "display",
+      "label": "Developer: reverse UI layout mirroring",
       "control_hint": "toggle"
     },
     "dev_reverse_ui_text_direction": {
-      "category": "uncategorized",
-      "label": "Dev reverse ui text direction",
+      "category": "display",
+      "label": "Developer: reverse UI text direction",
       "control_hint": "toggle"
     },
     "dev_startup_no_fbdepth": {
-      "category": "uncategorized",
-      "label": "Dev startup no fbdepth",
+      "category": "display",
+      "label": "Developer: startup without fbdepth",
       "control_hint": "toggle"
     },
     "device_id": {
-      "category": "uncategorized",
+      "category": "ephemeral",
       "label": "Device id",
       "control_hint": "text"
     },
     "device_status_battery_alarm": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Device status battery alarm",
       "control_hint": "toggle"
     },
     "device_status_battery_interval_minutes": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Device status battery interval minutes",
       "control_hint": "number"
     },
     "device_status_battery_threshold": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Device status battery threshold",
       "control_hint": "number"
     },
     "device_status_battery_threshold_high": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Device status battery threshold high",
       "control_hint": "number"
     },
     "device_status_memory_alarm": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Device status memory alarm",
       "control_hint": "toggle"
     },
     "device_status_memory_auto_restart": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Device status memory auto restart",
       "control_hint": "toggle"
     },
     "device_status_memory_interval_minutes": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Device status memory interval minutes",
       "control_hint": "number"
     },
     "device_status_memory_threshold": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Device status memory threshold",
       "control_hint": "number"
     },
     "dict_font_size": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Dict font size",
       "control_hint": "text"
     },
     "dict_justify": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Dict justify",
       "control_hint": "toggle"
     },
     "dict_largewindow": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Dict largewindow",
       "control_hint": "toggle"
     },
     "dict_presets": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Dict presets",
       "control_hint": "structured"
     },
     "dict_presets_cycle_index": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Dict presets cycle index",
       "control_hint": "text"
     },
     "dicts_disabled": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Dicts disabled",
       "control_hint": "structured"
     },
     "dicts_order": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Dicts order",
       "control_hint": "structured"
     },
     "dimension_units": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Dimension units",
       "control_hint": "text"
     },
     "dimension_units_append_px": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Dimension units append px",
       "control_hint": "toggle"
     },
     "disable_android_fullscreen": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Disable android fullscreen",
       "control_hint": "toggle"
     },
     "disable_double_tap": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Disable double tap",
       "control_hint": "toggle"
     },
     "disable_fuzzy_search": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Disable fuzzy search",
       "control_hint": "toggle"
     },
     "disable_lookup_history": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Disable lookup history",
       "control_hint": "toggle"
     },
     "document_metadata_folder": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Document metadata folder",
       "control_hint": "text"
     },
     "download_dir": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Download dir",
       "control_hint": "text"
     },
     "duration_format": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Duration format",
       "control_hint": "text"
     },
     "emulator_fake_wifi_connected": {
-      "category": "uncategorized",
+      "category": "ephemeral",
       "label": "Emulator fake wifi connected",
       "control_hint": "toggle"
     },
     "enable_charging_led": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Enable charging led",
       "control_hint": "toggle"
     },
     "end_document_action": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "End document action",
       "control_hint": "text"
     },
     "end_document_auto_mark": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "End document auto mark",
       "control_hint": "toggle"
     },
     "exporter": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Exporter",
       "control_hint": "structured"
     },
     "external_dict_lookup": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "External dict lookup",
       "control_hint": "toggle"
     },
     "external_dict_lookup_method": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "External dict lookup method",
       "control_hint": "text"
     },
     "external_keyboard_otg_mode_on_start": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "External keyboard otg mode on start",
       "control_hint": "toggle"
     },
     "extra_plugin_paths": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Extra plugin paths",
       "control_hint": "structured"
     },
     "fallback_font": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Fallback font",
       "control_hint": "text"
     },
     "file_ask_to_open": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "File ask to open",
       "control_hint": "toggle"
     },
     "file_ext_assoc": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "File ext assoc",
       "control_hint": "text"
     },
     "filemanagermenu_tab_index": {
-      "category": "uncategorized",
+      "category": "ephemeral",
       "label": "Filemanagermenu tab index",
       "control_hint": "number"
     },
     "flash_keyboard": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Flash keyboard",
       "control_hint": "toggle"
     },
     "flash_ui": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Flash ui",
       "control_hint": "toggle"
     },
     "floating_punctuation": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Floating punctuation",
       "control_hint": "toggle"
     },
     "fm_rotation_mode": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Fm rotation mode",
       "control_hint": "text"
     },
     "focus_manager": {
-      "category": "uncategorized",
+      "category": "ephemeral",
       "label": "Focus manager",
       "control_hint": "text"
     },
     "folder_shortcuts": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Folder shortcuts",
       "control_hint": "structured"
     },
     "followed_link_marker": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Followed link marker",
       "control_hint": "toggle"
     },
@@ -1050,232 +1063,232 @@
       "control_hint": "structured"
     },
     "footnote_link_in_popup": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Footnote link in popup",
       "control_hint": "toggle"
     },
     "footnote_popup_absolute_font_size": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Footnote popup absolute font size",
       "control_hint": "text"
     },
     "footnote_popup_relative_font_size": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Footnote popup relative font size",
       "control_hint": "text"
     },
     "footnote_popup_use_book_font": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Footnote popup use book font",
       "control_hint": "toggle"
     },
     "frontlight_auto_warmth": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Frontlight auto warmth",
       "control_hint": "text"
     },
     "frontlight_intensity": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Frontlight intensity",
       "control_hint": "text"
     },
     "frontlight_max_warmth_hour": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Frontlight max warmth hour",
       "control_hint": "text"
     },
     "frontlight_warmth": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Frontlight warmth",
       "control_hint": "text"
     },
     "full_refresh_count": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Full refresh count",
       "control_hint": "text"
     },
     "fulltext_search_find_all": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Fulltext search find all",
       "control_hint": "toggle"
     },
     "fulltext_search_nb_context_words": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Fulltext search nb context words",
       "control_hint": "text"
     },
     "fulltext_search_results_max_lines": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Fulltext search results max lines",
       "control_hint": "text"
     },
     "fulltext_search_results_per_page": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Fulltext search results per page",
       "control_hint": "text"
     },
     "fulltext_search_zoom_to_page": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Fulltext search zoom to page",
       "control_hint": "toggle"
     },
     "ges_double_tap_interval_ms": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Ges double tap interval ms",
       "control_hint": "text"
     },
     "ges_hold_interval_ms": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Ges hold interval ms",
       "control_hint": "text"
     },
     "ges_swipe_interval_ms": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Ges swipe interval ms",
       "control_hint": "text"
     },
     "ges_tap_interval_ms": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Ges tap interval ms",
       "control_hint": "text"
     },
     "ges_tap_interval_on_keyboard_ms": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Ges tap interval on keyboard ms",
       "control_hint": "number"
     },
     "ges_two_finger_tap_duration_ms": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Ges two finger tap duration ms",
       "control_hint": "text"
     },
     "gesture_fm": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Gesture fm",
       "control_hint": "text"
     },
     "gesture_reader": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Gesture reader",
       "control_hint": "text"
     },
     "gestures_migrated": {
-      "category": "uncategorized",
+      "category": "ephemeral",
       "label": "Gestures migrated",
       "control_hint": "toggle"
     },
     "haptic_feedback_override": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Haptic feedback override",
       "control_hint": "toggle"
     },
     "header_font": {
-      "category": "uncategorized",
-      "label": "Header font",
+      "category": "status_bar",
+      "label": "CR header font",
       "control_hint": "text"
     },
     "hide_nonlinear_flows": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Hide nonlinear flows",
       "control_hint": "toggle"
     },
     "highlight_action_on_single_word": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Highlight action on single word",
       "control_hint": "toggle"
     },
     "highlight_color": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Highlight color",
       "control_hint": "text"
     },
     "highlight_corner_scroll": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Highlight corner scroll",
       "control_hint": "toggle"
     },
     "highlight_dialog_position": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Highlight dialog position",
       "control_hint": "text"
     },
     "highlight_drawing_style": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Highlight drawing style",
       "control_hint": "text"
     },
     "highlight_height_pct": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Highlight height pct",
       "control_hint": "text"
     },
     "highlight_lighten_factor": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Highlight lighten factor",
       "control_hint": "number"
     },
     "highlight_long_hold_threshold_s": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Highlight long hold threshold s",
       "control_hint": "text"
     },
     "highlight_non_touch_factor": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Highlight non touch factor",
       "control_hint": "text"
     },
     "highlight_non_touch_factor_dict": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Highlight non touch factor dict",
       "control_hint": "text"
     },
     "highlight_non_touch_interval": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Highlight non touch interval",
       "control_hint": "text"
     },
     "highlight_non_touch_spedup": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Highlight non touch spedup",
       "control_hint": "toggle"
     },
     "highlight_note_marker": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Highlight note marker",
       "control_hint": "text"
     },
     "highlight_write_into_pdf": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Highlight write into pdf",
       "control_hint": "toggle"
     },
     "highlight_write_into_pdf_notify": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Highlight write into pdf notify",
       "control_hint": "toggle"
     },
     "history_datetime_short": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "History datetime short",
       "control_hint": "toggle"
     },
     "history_filter": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "History filter",
       "control_hint": "text"
     },
     "history_freeze_finished_books": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "History freeze finished books",
       "control_hint": "toggle"
     },
     "history_size": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "History size",
       "control_hint": "text"
     },
     "hold_pan_rate": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Hold pan rate",
       "control_hint": "text"
     },
@@ -1285,872 +1298,872 @@
       "control_hint": "text"
     },
     "http_proxy": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Http proxy",
       "control_hint": "text"
     },
     "http_proxy_enabled": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Http proxy enabled",
       "control_hint": "toggle"
     },
     "httpinspector_autostart": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Httpinspector autostart",
       "control_hint": "toggle"
     },
     "httpinspector_port": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Httpinspector port",
       "control_hint": "text"
     },
     "hyph_alg_default": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Hyph alg default",
       "control_hint": "text"
     },
     "hyph_alg_fallback": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Hyph alg fallback",
       "control_hint": "text"
     },
     "hyph_force_algorithmic": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Hyph force algorithmic",
       "control_hint": "toggle"
     },
     "hyph_left_hyphen_min": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Hyph left hyphen min",
       "control_hint": "text"
     },
     "hyph_right_hyphen_min": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Hyph right hyphen min",
       "control_hint": "text"
     },
     "hyph_soft_hyphens_only": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Hyph soft hyphens only",
       "control_hint": "toggle"
     },
     "hyph_trust_soft_hyphens": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Hyph trust soft hyphens",
       "control_hint": "toggle"
     },
     "hyph_user_dict": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Hyph user dict",
       "control_hint": "toggle"
     },
     "hyphenation": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Hyphenation",
       "control_hint": "toggle"
     },
     "ignore_hold_corners": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Ignore hold corners",
       "control_hint": "toggle"
     },
     "ignore_open_sleepcover": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Ignore open sleepcover",
       "control_hint": "toggle"
     },
     "ignore_power_sleepcover": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Ignore power sleepcover",
       "control_hint": "toggle"
     },
     "imageviewer_rotate_auto_for_best_fit": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Imageviewer rotate auto for best fit",
       "control_hint": "toggle"
     },
     "imageviewer_rotation_landscape_invert": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Imageviewer rotation landscape invert",
       "control_hint": "toggle"
     },
     "imageviewer_rotation_portrait_invert": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Imageviewer rotation portrait invert",
       "control_hint": "toggle"
     },
     "inbox_dir": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Inbox dir",
       "control_hint": "text"
     },
     "inertial_scroll": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Inertial scroll",
       "control_hint": "toggle"
     },
     "input_ignore_gsensor": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Input ignore gsensor",
       "control_hint": "toggle"
     },
     "input_invert_left_page_turn_keys": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Input invert left page turn keys",
       "control_hint": "toggle"
     },
     "input_invert_page_turn_keys": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Input invert page turn keys",
       "control_hint": "toggle"
     },
     "input_invert_right_page_turn_keys": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Input invert right page turn keys",
       "control_hint": "toggle"
     },
     "input_lock_gsensor": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Input lock gsensor",
       "control_hint": "toggle"
     },
     "input_no_key_repeat": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Input no key repeat",
       "control_hint": "toggle"
     },
     "inverse_reading_order": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Inverse reading order",
       "control_hint": "toggle"
     },
     "invert_ui_layout": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Invert ui layout",
       "control_hint": "toggle"
     },
     "is_frontlight_on": {
-      "category": "uncategorized",
+      "category": "ephemeral",
       "label": "Is frontlight on",
       "control_hint": "text"
     },
     "items_font_size": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Items font size",
       "control_hint": "text"
     },
     "items_multilines_show_more_text": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Items multilines show more text",
       "control_hint": "toggle"
     },
     "items_per_page": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Items per page",
       "control_hint": "text"
     },
     "keyboard_japanese_keitai_tap_interval": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Keyboard japanese keitai tap interval",
       "control_hint": "text"
     },
     "keyboard_key_bold": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Keyboard key bold",
       "control_hint": "toggle"
     },
     "keyboard_key_border": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Keyboard key border",
       "control_hint": "toggle"
     },
     "keyboard_key_compact": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Keyboard key compact",
       "control_hint": "toggle"
     },
     "keyboard_key_font_size": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Keyboard key font size",
       "control_hint": "number"
     },
     "keyboard_layout": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Keyboard layout",
       "control_hint": "text"
     },
     "keyboard_layout_default": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Keyboard layout default",
       "control_hint": "text"
     },
     "keyboard_layouts": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Keyboard layouts",
       "control_hint": "structured"
     },
     "keyboard_remember_layout": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Keyboard remember layout",
       "control_hint": "toggle"
     },
     "keyboard_swipes_enabled": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Keyboard swipes enabled",
       "control_hint": "toggle"
     },
     "keyvalues_per_page": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Keyvalues per page",
       "control_hint": "text"
     },
     "keyvalues_per_page_landscape": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Keyvalues per page landscape",
       "control_hint": "text"
     },
     "kindle_hall_effect_sensor_enabled": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Kindle hall effect sensor enabled",
       "control_hint": "toggle"
     },
     "kopt_contrast": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Kopt contrast",
       "control_hint": "text"
     },
     "kopt_font_size": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Kopt font size",
       "control_hint": "text"
     },
     "kopt_full_screen": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Kopt full screen",
       "control_hint": "text"
     },
     "kopt_page_gap_height": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Kopt page gap height",
       "control_hint": "text"
     },
     "kopt_zoom_direction": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Kopt zoom direction",
       "control_hint": "text"
     },
     "kopt_zoom_factor": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Kopt zoom factor",
       "control_hint": "text"
     },
     "kopt_zoom_mode_genus": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Kopt zoom mode genus",
       "control_hint": "text"
     },
     "kopt_zoom_mode_type": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Kopt zoom mode type",
       "control_hint": "text"
     },
     "kopt_zoom_overlap_h": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Kopt zoom overlap h",
       "control_hint": "text"
     },
     "kopt_zoom_overlap_v": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Kopt zoom overlap v",
       "control_hint": "text"
     },
     "kosync": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Kosync",
       "control_hint": "structured"
     },
     "language": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Language",
       "control_hint": "text"
     },
     "language_japanese_text_conversions": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Language japanese text conversions",
       "control_hint": "text"
     },
     "language_japanese_text_scan_length": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Language japanese text scan length",
       "control_hint": "text"
     },
     "larger_tap_area_to_follow_links": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Larger tap area to follow links",
       "control_hint": "toggle"
     },
     "last_migration_date": {
-      "category": "uncategorized",
+      "category": "ephemeral",
       "label": "Last migration date",
       "control_hint": "number"
     },
     "lastdir": {
-      "category": "uncategorized",
+      "category": "ephemeral",
       "label": "Lastdir",
       "control_hint": "text"
     },
     "lastfile": {
-      "category": "reading",
+      "category": "ephemeral",
       "label": "Lastfile",
       "control_hint": "text"
     },
     "left_right_keys_turn_pages": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Left right keys turn pages",
       "control_hint": "toggle"
     },
     "legacy_image_scaling": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Legacy image scaling",
       "control_hint": "toggle"
     },
     "link_prefer_footnote": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Link prefer footnote",
       "control_hint": "toggle"
     },
     "lock_home_folder": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Lock home folder",
       "control_hint": "toggle"
     },
     "lock_rotation": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Lock rotation",
       "control_hint": "toggle"
     },
     "low_pan_rate": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Low pan rate",
       "control_hint": "text"
     },
     "mass_storage_confirmation_disabled": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Mass storage confirmation disabled",
       "control_hint": "toggle"
     },
     "mass_storage_disabled": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Mass storage disabled",
       "control_hint": "toggle"
     },
     "menu_search_string": {
-      "category": "uncategorized",
+      "category": "ephemeral",
       "label": "Menu search string",
       "control_hint": "text"
     },
     "metric_length": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Metric length",
       "control_hint": "text"
     },
     "monospace_font": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Monospace font",
       "control_hint": "text"
     },
     "multiswipes_enabled": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Multiswipes enabled",
       "control_hint": "toggle"
     },
     "mxcfb_bypass_wait_for": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Mxcfb bypass wait for",
       "control_hint": "toggle"
     },
     "my_module_presets": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "My module presets",
       "control_hint": "structured"
     },
     "my_module_presets_cycle_index": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "My module presets cycle index",
       "control_hint": "text"
     },
     "natural_light_config": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Natural light config",
       "control_hint": "text"
     },
     "navbar_bar_size": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar bar size",
       "control_hint": "text"
     },
     "navbar_bottombar_settings_on_hold": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar bottombar settings on hold",
       "control_hint": "toggle"
     },
     "navbar_cqa_": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar cqa",
       "control_hint": "text"
     },
     "navbar_cqa_custom_qa_": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar cqa custom qa",
       "control_hint": "text"
     },
     "navbar_cqa_custom_qa_1": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar cqa custom qa 1",
       "control_hint": "structured"
     },
     "navbar_cqa_custom_qa_2": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar cqa custom qa 2",
       "control_hint": "structured"
     },
     "navbar_custom_": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar custom",
       "control_hint": "text"
     },
     "navbar_custom_qa_list": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar custom qa list",
       "control_hint": "structured"
     },
     "navbar_custom_qa_migrated_v1": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar custom qa migrated v1",
       "control_hint": "toggle"
     },
     "navbar_daily_reading_goal_secs": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar daily reading goal secs",
       "control_hint": "text"
     },
     "navbar_dotpager_always": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar dotpager always",
       "control_hint": "toggle"
     },
     "navbar_enabled": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar enabled",
       "control_hint": "toggle"
     },
     "navbar_hide_separator": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar hide separator",
       "control_hint": "toggle"
     },
     "navbar_homescreen_collections": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar homescreen collections",
       "control_hint": "toggle"
     },
     "navbar_homescreen_currently": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar homescreen currently",
       "control_hint": "toggle"
     },
     "navbar_homescreen_enabled": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar homescreen enabled",
       "control_hint": "toggle"
     },
     "navbar_homescreen_flow_recent_fp": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar homescreen flow recent fp",
       "control_hint": "text"
     },
     "navbar_homescreen_header": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar homescreen header",
       "control_hint": "text"
     },
     "navbar_homescreen_header_enabled": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar homescreen header enabled",
       "control_hint": "toggle"
     },
     "navbar_homescreen_module_order": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar homescreen module order",
       "control_hint": "structured"
     },
     "navbar_homescreen_pagination_hidden": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar homescreen pagination hidden",
       "control_hint": "toggle"
     },
     "navbar_homescreen_quick_actions_1_enabled": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar homescreen quick actions 1 enabled",
       "control_hint": "toggle"
     },
     "navbar_homescreen_quick_actions_1_items": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar homescreen quick actions 1 items",
       "control_hint": "structured"
     },
     "navbar_homescreen_quick_actions_2_enabled": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar homescreen quick actions 2 enabled",
       "control_hint": "toggle"
     },
     "navbar_homescreen_quick_actions_3_enabled": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar homescreen quick actions 3 enabled",
       "control_hint": "toggle"
     },
     "navbar_homescreen_quote_enabled": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar homescreen quote enabled",
       "control_hint": "toggle"
     },
     "navbar_homescreen_reading_goals": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar homescreen reading goals",
       "control_hint": "toggle"
     },
     "navbar_homescreen_reading_stats_enabled": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar homescreen reading stats enabled",
       "control_hint": "toggle"
     },
     "navbar_homescreen_recent": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar homescreen recent",
       "control_hint": "toggle"
     },
     "navbar_homescreen_settings_on_hold": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar homescreen settings on hold",
       "control_hint": "toggle"
     },
     "navbar_hs_return_to_book_folder": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar hs return to book folder",
       "control_hint": "toggle"
     },
     "navbar_mode": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar mode",
       "control_hint": "text"
     },
     "navbar_navpager_enabled": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar navpager enabled",
       "control_hint": "toggle"
     },
     "navbar_pagination_show_subtitle": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar pagination show subtitle",
       "control_hint": "toggle"
     },
     "navbar_pagination_size": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar pagination size",
       "control_hint": "text"
     },
     "navbar_pagination_visible": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar pagination visible",
       "control_hint": "toggle"
     },
     "navbar_reading_goal": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar reading goal",
       "control_hint": "text"
     },
     "navbar_reading_goal_physical": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar reading goal physical",
       "control_hint": "text"
     },
     "navbar_tabs": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar tabs",
       "control_hint": "structured"
     },
     "navbar_topbar_config": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar topbar config",
       "control_hint": "structured"
     },
     "navbar_topbar_custom_text": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar topbar custom text",
       "control_hint": "text"
     },
     "navbar_topbar_enabled": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar topbar enabled",
       "control_hint": "toggle"
     },
     "navbar_topbar_settings_on_hold": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar topbar settings on hold",
       "control_hint": "toggle"
     },
     "navbar_topbar_swipe_indicator": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar topbar swipe indicator",
       "control_hint": "toggle"
     },
     "navbar_topbar_wifi_hide_when_off": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Navbar topbar wifi hide when off",
       "control_hint": "toggle"
     },
     "night_": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Night",
       "control_hint": "text"
     },
     "night_full_refresh_count": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Night full refresh count",
       "control_hint": "text"
     },
     "night_mode": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Night mode",
       "control_hint": "toggle"
     },
     "no_cfa_post_processing": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "No cfa post processing",
       "control_hint": "toggle"
     },
     "no_refresh_on_second_chapter_page": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "No refresh on second chapter page",
       "control_hint": "toggle"
     },
     "notebook_file": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Notebook file",
       "control_hint": "text"
     },
     "notification_sources_to_show_mask": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Notification sources to show mask",
       "control_hint": "text"
     },
     "opds_servers": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Opds servers",
       "control_hint": "text"
     },
     "open_last_menu_show_filename": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Open last menu show filename",
       "control_hint": "toggle"
     },
     "opening_page_location_stack": {
-      "category": "uncategorized",
+      "category": "ephemeral",
       "label": "Opening page location stack",
       "control_hint": "toggle"
     },
     "ota_channel": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Ota channel",
       "control_hint": "text"
     },
     "ota_server": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Ota server",
       "control_hint": "text"
     },
     "page_browser_nb_cols": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Page browser nb cols",
       "control_hint": "text"
     },
     "page_browser_nb_rows": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Page browser nb rows",
       "control_hint": "text"
     },
     "page_browser_preload_thumbnails": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Page browser preload thumbnails",
       "control_hint": "toggle"
     },
     "page_browser_thumbnails_pagenums": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Page browser thumbnails pagenums",
       "control_hint": "text"
     },
     "page_gap_color": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Page gap color",
       "control_hint": "text"
     },
     "page_overlap_enable": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Page overlap enable",
       "control_hint": "toggle"
     },
     "page_overlap_style": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Page overlap style",
       "control_hint": "text"
     },
     "page_turns_disable_swipe": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Page turns disable swipe",
       "control_hint": "toggle"
     },
     "page_turns_disable_tap": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Page turns disable tap",
       "control_hint": "toggle"
     },
     "page_turns_swipe_always_active": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Page turns swipe always active",
       "control_hint": "toggle"
     },
     "page_turns_tap_zone_backward_size_ratio": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Page turns tap zone backward size ratio",
       "control_hint": "text"
     },
     "page_turns_tap_zone_forward_size_ratio": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Page turns tap zone forward size ratio",
       "control_hint": "text"
     },
     "page_turns_tap_zones": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Page turns tap zones",
       "control_hint": "text"
     },
     "pagemap_chars_per_synthetic_page": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Pagemap chars per synthetic page",
       "control_hint": "text"
     },
     "pagemap_label_font_size": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Pagemap label font size",
       "control_hint": "text"
     },
     "pagemap_notify_document_provided": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Pagemap notify document provided",
       "control_hint": "toggle"
     },
     "pagemap_show_page_labels": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Pagemap show page labels",
       "control_hint": "toggle"
     },
     "pagemap_synthetic_overrides": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Pagemap synthetic overrides",
       "control_hint": "toggle"
     },
     "pagemap_use_page_labels": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Pagemap use page labels",
       "control_hint": "toggle"
     },
     "pageturn_power": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Pageturn power",
       "control_hint": "toggle"
     },
     "panel_zoom_enabled": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Panel zoom enabled",
       "control_hint": "structured"
     },
     "panel_zoom_fallback_to_text_selection": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Panel zoom fallback to text selection",
       "control_hint": "structured"
     },
     "pb_ignore_b288_quirks": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Pb ignore b288 quirks",
       "control_hint": "toggle"
     },
     "pinpadlock_activated": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Pinpadlock activated",
       "control_hint": "toggle"
     },
     "pinpadlock_message": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Pinpadlock message",
       "control_hint": "text"
     },
     "pinpadlock_message_alignment": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Pinpadlock message alignment",
       "control_hint": "text"
     },
     "pinpadlock_message_position": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Pinpadlock message position",
       "control_hint": "text"
     },
     "pinpadlock_pin_code": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Pinpadlock pin code",
       "control_hint": "text"
     },
     "pinpadlock_show_message": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Pinpadlock show message",
       "control_hint": "toggle"
     },
     "plugins_disabled": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Plugins disabled",
       "control_hint": "structured"
     },
     "pm_debug_entry_failure": {
-      "category": "uncategorized",
+      "category": "ephemeral",
       "label": "Pm debug entry failure",
       "control_hint": "toggle"
     },
     "profiles_autoexec": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Profiles autoexec",
       "control_hint": "structured"
     },
     "provider": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Provider",
       "control_hint": "structured"
     },
     "quickstart_shown_version": {
-      "category": "uncategorized",
+      "category": "ephemeral",
       "label": "Quickstart shown version",
       "control_hint": "number"
     },
     "quote_deck_count": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Quote deck count",
       "control_hint": "number"
     },
     "quote_deck_order": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Quote deck order",
       "control_hint": "text"
     },
     "quote_deck_pos": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Quote deck pos",
       "control_hint": "number"
     },
@@ -2170,12 +2183,12 @@
       "control_hint": "number"
     },
     "reader_timer_remain_time": {
-      "category": "uncategorized",
+      "category": "status_bar",
       "label": "Reader timer remain time",
       "control_hint": "text"
     },
     "readtimer": {
-      "category": "uncategorized",
+      "category": "progress",
       "label": "Readtimer",
       "control_hint": "structured"
     },
@@ -2185,32 +2198,32 @@
       "control_hint": "text"
     },
     "readtimer_show_value_in_header": {
-      "category": "uncategorized",
+      "category": "status_bar",
       "label": "Readtimer show value in header",
       "control_hint": "text"
     },
     "refresh_on_chapter_boundaries": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Refresh on chapter boundaries",
       "control_hint": "toggle"
     },
     "refresh_on_pages_with_images": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Refresh on pages with images",
       "control_hint": "toggle"
     },
     "remarkable_hall_effect_sensor_enabled": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Remarkable hall effect sensor enabled",
       "control_hint": "text"
     },
     "reverse_collate": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Reverse collate",
       "control_hint": "toggle"
     },
     "save_document": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Save document",
       "control_hint": "text"
     },
@@ -2221,597 +2234,597 @@
       "description": "Device pixel density. Affects how ppi-sensitive sizes render."
     },
     "screensaver_background": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver background",
       "control_hint": "text"
     },
     "screensaver_cycle_images_alphabetically": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver cycle images alphabetically",
       "control_hint": "toggle"
     },
     "screensaver_cycle_index": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver cycle index",
       "control_hint": "number"
     },
     "screensaver_delay": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver delay",
       "control_hint": "text"
     },
     "screensaver_dir": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver dir",
       "control_hint": "text"
     },
     "screensaver_document_cover": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver document cover",
       "control_hint": "text"
     },
     "screensaver_exclude_finished_books": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver exclude finished books",
       "control_hint": "toggle"
     },
     "screensaver_exclude_on_hold_books": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver exclude on hold books",
       "control_hint": "toggle"
     },
     "screensaver_exit_message": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver exit message",
       "control_hint": "text"
     },
     "screensaver_hide_cover_in_filemanager": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver hide cover in filemanager",
       "control_hint": "toggle"
     },
     "screensaver_hide_fallback_msg": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver hide fallback msg",
       "control_hint": "toggle"
     },
     "screensaver_image": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver image",
       "control_hint": "text"
     },
     "screensaver_img_background": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver img background",
       "control_hint": "text"
     },
     "screensaver_max_files": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver max files",
       "control_hint": "text"
     },
     "screensaver_message": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver message",
       "control_hint": "text"
     },
     "screensaver_message_alpha": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver message alpha",
       "control_hint": "number"
     },
     "screensaver_message_container": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver message container",
       "control_hint": "text"
     },
     "screensaver_message_vertical_position": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver message vertical position",
       "control_hint": "number"
     },
     "screensaver_msg_background": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver msg background",
       "control_hint": "text"
     },
     "screensaver_no_background": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver no background",
       "control_hint": "toggle"
     },
     "screensaver_rotate_auto_for_best_fit": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver rotate auto for best fit",
       "control_hint": "toggle"
     },
     "screensaver_show_exit_message": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver show exit message",
       "control_hint": "toggle"
     },
     "screensaver_show_message": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver show message",
       "control_hint": "toggle"
     },
     "screensaver_stretch_images": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver stretch images",
       "control_hint": "toggle"
     },
     "screensaver_stretch_limit_percentage": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver stretch limit percentage",
       "control_hint": "number"
     },
     "screensaver_type": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver type",
       "control_hint": "text"
     },
     "screensaver_white_background": {
-      "category": "uncategorized",
+      "category": "screensaver",
       "label": "Screensaver white background",
       "control_hint": "toggle"
     },
     "screenshot_dir": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Screenshot dir",
       "control_hint": "text"
     },
     "scroll_activation_delay": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Scroll activation delay",
       "control_hint": "text"
     },
     "scroll_method": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Scroll method",
       "control_hint": "text"
     },
     "sdl_window": {
-      "category": "uncategorized",
+      "category": "ephemeral",
       "label": "Sdl window",
       "control_hint": "structured"
     },
     "shorten_home_dir": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Shorten home dir",
       "control_hint": "toggle"
     },
     "show_advanced": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Show advanced",
       "control_hint": "toggle"
     },
     "show_bottom_menu": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Show bottom menu",
       "control_hint": "toggle"
     },
     "show_file_in_bold": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Show file in bold",
       "control_hint": "text"
     },
     "show_filter": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Show filter",
       "control_hint": "structured"
     },
     "show_finished": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Show finished",
       "control_hint": "toggle"
     },
     "show_hidden": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Show hidden",
       "control_hint": "toggle"
     },
     "show_unsupported": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Show unsupported",
       "control_hint": "toggle"
     },
     "simpleui_browsemeta_enabled": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Simpleui browsemeta enabled",
       "control_hint": "toggle"
     },
     "simpleui_debug_button_bounds": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Simpleui debug button bounds",
       "control_hint": "toggle"
     },
     "simpleui_defaults_v1": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Simpleui defaults v1",
       "control_hint": "toggle"
     },
     "simpleui_defaults_v2": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Simpleui defaults v2",
       "control_hint": "toggle"
     },
     "simpleui_defaults_v3": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Simpleui defaults v3",
       "control_hint": "toggle"
     },
     "simpleui_enabled": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Simpleui enabled",
       "control_hint": "toggle"
     },
     "simpleui_loaded_version": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Simpleui loaded version",
       "control_hint": "text"
     },
     "simpleui_tb_fm_cfg": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Simpleui tb fm cfg",
       "control_hint": "structured"
     },
     "simpleui_tb_item_browse_button": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Simpleui tb item browse button",
       "control_hint": "toggle"
     },
     "simpleui_tb_item_search_button": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Simpleui tb item search button",
       "control_hint": "toggle"
     },
     "skim_dialog_position": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Skim dialog position",
       "control_hint": "text"
     },
     "start_with": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Start with",
       "control_hint": "text"
     },
     "statistics": {
-      "category": "uncategorized",
+      "category": "progress",
       "label": "Statistics",
       "control_hint": "structured"
     },
     "style_tweaks": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Style tweaks",
       "control_hint": "structured"
     },
     "style_tweaks_in_dispatcher": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Style tweaks in dispatcher",
       "control_hint": "structured"
     },
     "sui_tbr_list": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Sui tbr list",
       "control_hint": "structured"
     },
     "swipe_animations": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Swipe animations",
       "control_hint": "toggle"
     },
     "swipe_ignore_external_links": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Swipe ignore external links",
       "control_hint": "toggle"
     },
     "swipe_link_footnote_popup": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Swipe link footnote popup",
       "control_hint": "toggle"
     },
     "swipe_to_follow_nearest_link": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Swipe to follow nearest link",
       "control_hint": "toggle"
     },
     "swipe_to_go_back": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Swipe to go back",
       "control_hint": "toggle"
     },
     "swipe_to_jump_to_latest_bookmark": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Swipe to jump to latest bookmark",
       "control_hint": "toggle"
     },
     "system_fonts": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "System fonts",
       "control_hint": "toggle"
     },
     "tap_ignore_external_links": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Tap ignore external links",
       "control_hint": "toggle"
     },
     "tap_link_footnote_popup": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Tap link footnote popup",
       "control_hint": "toggle"
     },
     "tap_to_follow_links": {
-      "category": "uncategorized",
+      "category": "gestures",
       "label": "Tap to follow links",
       "control_hint": "toggle"
     },
     "terminal_buffer_size": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Terminal buffer size",
       "control_hint": "number"
     },
     "terminal_font_size": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Terminal font size",
       "control_hint": "number"
     },
     "terminal_shell": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Terminal shell",
       "control_hint": "text"
     },
     "text_lang_default": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Text lang default",
       "control_hint": "text"
     },
     "text_lang_embedded_langs": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Text lang embedded langs",
       "control_hint": "toggle"
     },
     "text_lang_fallback": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Text lang fallback",
       "control_hint": "text"
     },
     "textviewer_pinned_pages": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Textviewer pinned pages",
       "control_hint": "structured"
     },
     "textviewer_text_types": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Textviewer text types",
       "control_hint": "structured"
     },
     "toc_items_font_size": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Toc items font size",
       "control_hint": "text"
     },
     "toc_items_per_page": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Toc items per page",
       "control_hint": "number"
     },
     "toc_items_show_chapter_length": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Toc items show chapter length",
       "control_hint": "toggle"
     },
     "toc_items_with_dots": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Toc items with dots",
       "control_hint": "toggle"
     },
     "trans_server": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Trans server",
       "control_hint": "text"
     },
     "translator_from_auto_detect": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Translator from auto detect",
       "control_hint": "toggle"
     },
     "translator_from_doc_lang": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Translator from doc lang",
       "control_hint": "toggle"
     },
     "translator_from_language": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Translator from language",
       "control_hint": "text"
     },
     "translator_to_language": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Translator to language",
       "control_hint": "text"
     },
     "translator_with_romanizations": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Translator with romanizations",
       "control_hint": "toggle"
     },
     "twelve_hour_clock": {
-      "category": "uncategorized",
+      "category": "status_bar",
       "label": "Twelve hour clock",
       "control_hint": "toggle"
     },
     "txt_preformatted": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Txt preformatted",
       "control_hint": "number"
     },
     "ui_cursor_combine_regions": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Ui cursor combine regions",
       "control_hint": "toggle"
     },
     "ui_cursor_use_refresh_funcs": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Ui cursor use refresh funcs",
       "control_hint": "toggle"
     },
     "use_bold_font_for_bold": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Use bold font for bold",
       "control_hint": "toggle"
     },
     "use_cre_call_cache": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Use cre call cache",
       "control_hint": "toggle"
     },
     "use_cre_call_cache_log_stats": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Use cre call cache log stats",
       "control_hint": "toggle"
     },
     "use_xtext": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Use xtext",
       "control_hint": "toggle"
     },
     "virtual_keyboard_enabled": {
-      "category": "uncategorized",
+      "category": "menu",
       "label": "Virtual keyboard enabled",
       "control_hint": "toggle"
     },
     "vocabulary_builder": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Vocabulary builder",
       "control_hint": "structured"
     },
     "wf_level": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Wf level",
       "control_hint": "text"
     },
     "wifi_disable_action": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Wifi disable action",
       "control_hint": "text"
     },
     "wifi_enable_action": {
-      "category": "uncategorized",
+      "category": "display",
       "label": "Wifi enable action",
       "control_hint": "text"
     },
     "wifi_was_on": {
-      "category": "uncategorized",
+      "category": "ephemeral",
       "label": "Wifi was on",
       "control_hint": "toggle"
     },
     "wikipedia_disable_history": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Wikipedia disable history",
       "control_hint": "toggle"
     },
     "wikipedia_epub_highres_images": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Wikipedia epub highres images",
       "control_hint": "text"
     },
     "wikipedia_epub_include_images": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Wikipedia epub include images",
       "control_hint": "text"
     },
     "wikipedia_languages": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Wikipedia languages",
       "control_hint": "structured"
     },
     "wikipedia_last_language": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Wikipedia last language",
       "control_hint": "text"
     },
     "wikipedia_prettify": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Wikipedia prettify",
       "control_hint": "toggle"
     },
     "wikipedia_save_dir": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Wikipedia save dir",
       "control_hint": "text"
     },
     "wikipedia_save_in_book_dir": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Wikipedia save in book dir",
       "control_hint": "toggle"
     },
     "wikipedia_show_image": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Wikipedia show image",
       "control_hint": "toggle"
     },
     "wikipedia_show_more_images": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Wikipedia show more images",
       "control_hint": "toggle"
     },
     "xtext_alt_lang": {
-      "category": "uncategorized",
+      "category": "fonts",
       "label": "Xtext alt lang",
       "control_hint": "text"
     },
     "zlib_user_id": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Zlib user id",
       "control_hint": "text"
     },
     "zlib_user_key": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Zlib user key",
       "control_hint": "text"
     },
     "zlibrary_base_url": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Zlibrary base url",
       "control_hint": "text"
     },
     "zlibrary_download_dir": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Zlibrary download dir",
       "control_hint": "text"
     },
     "zlibrary_password": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Zlibrary password",
       "control_hint": "text"
     },
     "zlibrary_search_extensions": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Zlibrary search extensions",
       "control_hint": "structured"
     },
     "zlibrary_search_languages": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Zlibrary search languages",
       "control_hint": "structured"
     },
     "zlibrary_search_order": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Zlibrary search order",
       "control_hint": "structured"
     },
     "zlibrary_username": {
-      "category": "uncategorized",
+      "category": "plugins_bundled",
       "label": "Zlibrary username",
       "control_hint": "text"
     },
     "zoom_factor": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Zoom factor",
       "control_hint": "text"
     },
     "zoom_mode": {
-      "category": "uncategorized",
+      "category": "reading",
       "label": "Zoom mode",
       "control_hint": "text"
     }

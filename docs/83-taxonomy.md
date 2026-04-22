@@ -19,8 +19,50 @@ version independently.
 ## Status
 
 - **W7 (shipped 2026-04-22):** builder + validation + 3-category stub (17 keys)
-- **W8 (in progress):** expand to the 10-category target below, using the
-  cluster analysis from the 2026-04-22 device hit-rate run as the worklist
+- **W8 (shipped 2026-04-22):** full 10-category curation across all 557
+  schema keys. Zero uncategorized. 100% hit rate against a real-world
+  180-key device.
+
+### Distribution (schema-wide, 557 keys)
+
+| Category | Keys | % |
+|---|---:|---:|
+| `plugins_bundled` | 164 | 29.4% |
+| `reading` | 92 | 16.5% |
+| `menu` | 77 | 13.8% |
+| `display` | 77 | 13.8% |
+| `gestures` | 45 | 8.1% |
+| `fonts` | 33 | 5.9% |
+| `screensaver` | 27 | 4.8% |
+| `status_bar` | 21 | 3.8% |
+| `ephemeral` | 18 | 3.2% |
+| `progress` | 3 | 0.5% |
+
+`plugins_bundled` dominates the schema — a third of all keys are
+plugin-scoped. Plugin catalog (W19-W24) is where those get the
+per-plugin metadata (owner, description, upstream URL) that makes
+them navigable. Until then, they're one flat bucket.
+
+### Distribution (real-device, 180 user-set keys)
+
+The device test shows users actually *set* a different mix than the
+schema's uniform distribution:
+
+| Category | Keys on device | % of device |
+|---|---:|---:|
+| `plugins_bundled` | 80 | 44.4% |
+| `display` | 19 | 10.6% |
+| `status_bar` | 16 | 8.9% |
+| `menu` | 15 | 8.3% |
+| `reading` | 14 | 7.8% |
+| `screensaver` | 14 | 7.8% |
+| `ephemeral` | 9 | 5.0% |
+| `gestures` | 7 | 3.9% |
+| `progress` | 3 | 1.7% |
+| `fonts` | 3 | 1.7% |
+
+Near-half of a real user's config is plugin-owned — confirming W19-W24
+catalog is the next big value unlock after taxonomy.
 
 ---
 
@@ -46,39 +88,60 @@ expand/collapse to find common settings.
 
 ---
 
-## Cluster findings from device audit (2026-04-22)
+## W8 notes — non-obvious categorization calls
 
-Ran `scripts/taxonomy-hitrate.ts` against a real-world device with 180 set
-keys. 0 schema misses, 95.6% uncategorized at stub time. The uncategorized
-set clusters cleanly — this is the W8 worklist.
+A few decisions worth surfacing so future curators don't second-guess them:
 
-### Natural clusters, sized by device-observed count
+1. **Community plugins land in `plugins_bundled`.** `navbar_*` (45 keys),
+   `simpleui_*` (10), `aaaProjectTitle_*` (1) are clearly third-party, but
+   the roadmap fixes the bucket at 10 categories. Keeping them in
+   `plugins_bundled` (mislabeled for stock-only) is the pragmatic call;
+   plugin catalog (W19-W24) will re-layer by plugin identity. Don't
+   rename the bucket to `plugins` — consumer contracts already reference
+   `plugins_bundled`.
 
-| Cluster | Count on device | Target category | Notes |
-|---|---|---|---|
-| `screensaver_*` | ~14 | `screensaver` | Own bucket — large and coherent. |
-| `navbar_*` | ~18 | `plugins_community` (new?) or `plugins_bundled` | **Community plugin**, not stock KOReader. Could also be deferred to plugin catalog (W19+). |
-| `cre_header_*` | ~12 | `status_bar` | Stub missed these — fix in W8. Same bucket as `reader_footer_*`. |
-| `autowarmth_*` + `autodim_*` + `night_mode` + `kindle_hall_effect_sensor_enabled` | ~10 | `display` | Screen-warmth + brightness automation. |
-| `autoturn_*` + `auto_standby_*` + `auto_suspend_*` + `autoshutdown_*` | ~6 | `display` | Power-management lives with display. |
-| `bookmarks_*` + `toc_items_per_page` + `keyboard_*` + UI chrome | ~8 | `menu` | |
-| `ges_tap_*` + `page_turns_tap_zones` + `inertial_scroll` + `scroll_method` | ~4 | `gestures` | |
-| `simpleui_*` | ~8 | `plugins_community` or catalog | Community UI mod. |
-| `pinpadlock_*` | ~6 | `plugins_bundled` | Includes `pinpadlock_pin_code` — SECRET (already filtered by pull). |
-| `zlibrary_*` + `zlib_*` | ~8 | `plugins_bundled` | Includes passwords — SECRETs already filtered. |
-| `kosync` + `dict_*` + `dicts_*` + `wikipedia_*` + `vocabulary_builder` + `coverbrowser_*` + `style_tweaks*` + `readtimer` + `statistics` + `exporter` + `terminal_*` + `httpinspector_port` + `LocalSend_*` | ~25 | `plugins_bundled` | The long tail of stock plugins. |
-| `quickstart_shown_version` + `last_migration_date` + `device_id` + `wifi_was_on` + `currently_blocked` + `filemanagermenu_tab_index` + `menu_search_string` + `lastdir` + `start_with` | ~10 | `ephemeral` | Runtime state, already filtered by `pull --minimal`. |
-| Miscellaneous long tail | ~20 | various | Case-by-case — e.g. `dimension_units`, `duration_format`, `default_highlight_action` → `reading`; `folder_shortcuts` + `inbox_dir` + `lock_home_folder` → `menu` or `reading`. |
+2. **`lastfile` is `ephemeral`, not `reading`.** Previously in the stub
+   under `reading`, but it's the path to the last-opened book — pushing
+   it device-to-device would spuriously change the "next open" target.
+   Moved to `ephemeral` in W8; the pull/export denylist already filters
+   it, so no behavior change.
 
-### Signals beyond categorization
+3. **`cre_show_progress` landed in `reading`, not `status_bar`.** It's a
+   global CR engine flag for progress indication, not specifically a
+   header setting. The `cre_header_*` keys (all 11) went to `status_bar`.
 
-1. **Community-plugin namespace clusters** (`navbar_*`, `simpleui_*`, `aaaProjectTitle_*`) are a clear signal that the device has third-party plugins installed. The taxonomy can slot them into a generic `plugins_community` bucket, but the richer answer lives in the plugin catalog (W19-W24): once we have per-plugin metadata, these clusters get annotated with plugin identity, description, upstream URL, etc. W8 should leave a pragmatic seam — do *not* over-invest in categorizing community-plugin keys by function, because plugin catalog will re-layer them.
+4. **Power-management belongs in `display`.** `auto_standby_*`,
+   `auto_suspend_*`, `autoshutdown_*`, `frontlight_*`, `autowarmth_*`,
+   `autodim_*`, `ota_*`, wifi, mass-storage — all display/power territory
+   on a Kindle. Separating a `power` bucket would only help if we had
+   >20 clearly-power-only keys, and we don't.
 
-2. **Stub gap — `cre_header_*` should have been in `status_bar` from day one.** The W7 stub only caught `reader_footer_*`, missing the CREengine's own top-header settings. Footer + CR-header are two expressions of the same "info always visible while reading" concern — W8 merges them.
+5. **`autoturn_*` is `reading`, not `gestures`.** Auto-page-turn is a
+   scheduled reading feature, not input. `gestures` is for user-driven
+   input (taps, swipes, keys, sensors).
 
-3. **Secret keys present on device** (`pinpadlock_pin_code`, `zlibrary_password`, `zlib_user_key`) are already filtered by `pull` / `setup export` via the denylist. The taxonomy records them under `plugins_bundled` for UI completeness; the relevance file (when it lands) or a future `is_secret` flag in the taxonomy can mark them for GUI-side redaction.
+6. **`dev_*` keys kept as `display` with "Developer:" label prefix.**
+   They're mostly rendering-debug flags (blitter, dither, fbdepth). The
+   prefixed label lets the GUI gray them out or put them behind an
+   "advanced" toggle.
 
-4. **Schema drift is zero.** All 180 device keys exist in `data/schemas/settings.reader.lua.v1.json`. The March schema extract is still accurate against current-device KOReader. No W8 blocker on that front.
+7. **`fulltext_search_*` is `reading`, not `menu`.** In-book text search
+   is a reading-experience feature; file-manager search went to `menu`.
+
+8. **`kopt_*`, `copt_*` and `cre_*` are split by function, not by
+   engine.** Engine prefix is a KOReader implementation detail; the
+   user-facing concern is whether it's fonts, reading layout, or header
+   display.
+
+9. **Schema drift is zero.** All 180 device keys exist in the schema
+   extract. No W8 blocker on that front.
+
+### Hit-rate
+
+Before W8: 17/540 keys categorized (3% schema coverage), 8/180 device-keys
+hit (4.4%).
+
+After W8: 557/557 (100% schema coverage), 180/180 (100% device hit).
 
 ---
 

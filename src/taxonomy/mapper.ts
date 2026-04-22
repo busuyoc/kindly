@@ -181,8 +181,24 @@ export function impactOf(
         return { severity, hint: next ? "enabled" : "disabled" };
     }
 
-    // Numeric deltas.
+    // Numeric deltas — but only for keys the taxonomy marks as real numbers.
+    // KOReader stores toggles and enums as ints (Lua config has no booleans),
+    // so `cre_header_battery: 1 → 0` would otherwise render as "-100%" which
+    // reads like catastrophic loss instead of "turned off". control_hint
+    // curation in the taxonomy distinguishes the two.
     if (typeof prev === "number" && typeof next === "number") {
+        const hint = controlHintOf(tax, key);
+        if (hint === "toggle") {
+            // Int-backed boolean: normalize 0/1 to enabled/disabled; anything
+            // weirder falls back to plain "prev → next".
+            if ((prev === 0 || prev === 1) && (next === 0 || next === 1)) {
+                return { severity, hint: next === 1 ? "enabled" : "disabled" };
+            }
+            return { severity, hint: `${prev} → ${next}` };
+        }
+        if (hint === "enum") {
+            return { severity, hint: `${prev} → ${next}` };
+        }
         return { severity, hint: formatNumericDelta(key, prev, next) };
     }
 

@@ -120,7 +120,9 @@ keys:
     description: "Device pixel density. Affects how ppi-sensitive sizes render."
   textviewer_pinned_pages: reading
   textviewer_text_types: reading
-  txt_preformatted: reading
+  txt_preformatted:
+    category: reading
+    control_hint: toggle
   use_cre_call_cache: reading
   use_cre_call_cache_log_stats: reading
   use_xtext: reading
@@ -181,39 +183,53 @@ keys:
   # =============================================================
   # status_bar — bottom footer + CR engine top header.
   # =============================================================
+  # cre_header_* are KOReader's in-book header toggles, stored as 0/1 ints
+  # (Lua config has no real booleans). Flag them as `toggle` so impactOf
+  # renders "enabled"/"disabled" instead of a meaningless "-100%".
+  # chapter_marks is tri-state (off / chapter / section) → "enum".
   cre_header_author:
     category: status_bar
     label: "Show author in CR header"
+    control_hint: toggle
   cre_header_auto_refresh:
     category: status_bar
     label: "Auto-refresh CR header"
+    control_hint: toggle
   cre_header_battery:
     category: status_bar
     label: "Show battery in CR header"
+    control_hint: toggle
   cre_header_battery_percent:
     category: status_bar
     label: "Show battery percent in CR header"
+    control_hint: toggle
   cre_header_chapter_marks:
     category: status_bar
     label: "Show chapter marks in CR header"
+    control_hint: enum
   cre_header_clock:
     category: status_bar
     label: "Show clock in CR header"
+    control_hint: toggle
   cre_header_page_count:
     category: status_bar
     label: "Show page count in CR header"
+    control_hint: toggle
   cre_header_page_number:
     category: status_bar
     label: "Show page number in CR header"
+    control_hint: toggle
   cre_header_reading_percent:
     category: status_bar
     label: "Show reading percent in CR header"
+    control_hint: toggle
   cre_header_status_font_size:
     category: status_bar
     label: "CR header status font size"
   cre_header_title:
     category: status_bar
     label: "Show title in CR header"
+    control_hint: toggle
   footer:
     category: status_bar
     label: "Footer config"
@@ -232,6 +248,7 @@ keys:
   reader_footer_mode:
     category: status_bar
     label: "Footer mode"
+    control_hint: enum
   reader_timer_remain_time: status_bar
   readtimer_show_value_in_footer:
     category: status_bar
@@ -333,7 +350,9 @@ keys:
   # =============================================================
   screensaver_background: screensaver
   screensaver_cycle_images_alphabetically: screensaver
-  screensaver_cycle_index: screensaver
+  screensaver_cycle_index:
+    category: screensaver
+    control_hint: enum
   screensaver_delay: screensaver
   screensaver_dir: screensaver
   screensaver_document_cover: screensaver
@@ -441,7 +460,9 @@ keys:
   autowarmth_timezone: display
   autowarmth_warmth: display
   avoid_flashing_ui: display
-  closed_rotation_mode: display
+  closed_rotation_mode:
+    category: display
+    control_hint: enum
   color_rendering: display
   custom_screen_dpi: display
   dev_abort_on_crash:
@@ -734,7 +755,9 @@ keys:
   debug_verbose: ephemeral
   device_id: ephemeral
   emulator_fake_wifi_connected: ephemeral
-  filemanagermenu_tab_index: ephemeral
+  filemanagermenu_tab_index:
+    category: ephemeral
+    control_hint: enum
   focus_manager: ephemeral
   gestures_migrated: ephemeral
   is_frontlight_on: ephemeral

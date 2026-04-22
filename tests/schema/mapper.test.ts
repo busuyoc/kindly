@@ -145,6 +145,30 @@ describe("mapper — impactOf hints", () => {
         expect(impactOf(t, "big_blob", longPrev, longNext).hint).toBeUndefined();
     });
 
+    test("int-backed toggle renders enabled/disabled, not '-100%'", () => {
+        // KOReader stores on/off flags as 0/1 ints — the taxonomy marks
+        // them control_hint: toggle so the mapper doesn't yell "-100%".
+        const t2 = tax({
+            cre_header_battery: { category: "status_bar", control_hint: "toggle" },
+        });
+        expect(impactOf(t2, "cre_header_battery", 1, 0).hint).toBe("disabled");
+        expect(impactOf(t2, "cre_header_battery", 0, 1).hint).toBe("enabled");
+    });
+
+    test("toggle-hinted int with weirder values falls back to 'prev → next'", () => {
+        const t2 = tax({ toggle_ish: { category: "reading", control_hint: "toggle" } });
+        expect(impactOf(t2, "toggle_ish", 2, 3).hint).toBe("2 → 3");
+    });
+
+    test("enum-hinted ints render 'prev → next' without percent", () => {
+        // Footer mode is a 0..5 enum, not a continuous number — no % delta.
+        const t2 = tax({
+            reader_footer_mode: { category: "status_bar", control_hint: "enum" },
+        });
+        expect(impactOf(t2, "reader_footer_mode", 0, 1).hint).toBe("0 → 1");
+        expect(impactOf(t2, "reader_footer_mode", 3, 1).hint).toBe("3 → 1");
+    });
+
     test("tables / mixed types leave hint absent", () => {
         const impact = impactOf(t, "nested", { a: 1 }, { a: 2 });
         expect(impact.severity).toBe("functional");

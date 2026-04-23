@@ -17,12 +17,22 @@ import {
     fileRole, groupArchivePluginFiles, verifyPluginAgainstCatalog,
 } from "../catalog/verify.ts";
 import { collectPluginDirs } from "../setup/files.ts";
+import { loadSchema, type Schema } from "../schema/settings.ts";
+import { readKoreaderVersion } from "../device/version.ts";
+import type { KindleMount } from "../device/kindle.ts";
+
+/** 90 §5.1, §5.3 — a check flips to warning once its source is this
+ *  many days old. Scalar, not a spec number, but the spec names
+ *  90 days explicitly for both schema and catalog. */
+const STALE_DAYS = 90;
 
 export interface DoctorOptions {
     /** Testability hook — override the plugin catalog path. Production
      *  leaves this undefined so `loadPluginCatalog` reads the committed
      *  `data/catalog/plugins.bundled.v1.json`. Not exposed on the CLI. */
     catalogPath?: string;
+    /** Testability hook — override the schema path. */
+    schemaPath?: string;
 }
 
 const SEVERITY_RANK: Record<DoctorSeverity, number> = {
@@ -117,12 +127,147 @@ export function executeDoctor(env: CliEnv, opts: DoctorOptions = {}): DoctorResu
         });
     }
 
+    // W34c: schema.* freshness + uncurated keys (90 §5.1, §5.2).
+    checks.push(...runSchemaChecks(env, parsed, opts.schemaPath));
+
+    // W34c: catalog.* freshness + version-match (90 §5.3).
+    checks.push(...runCatalogChecks(env, mount, opts.catalogPath));
+
     // W34b: plugins.* findings (90 §5.4, §5.5). Walk the on-device
     // plugins dir, verify against the catalog in "full" mode (doctor
     // wants missing files reported, unlike import's subset mode).
     checks.push(...runPluginHashChecks(mount.pluginsDir, opts.catalogPath));
 
     return finalize(checks, findSecrets(parsed));
+}
+
+/** Days elapsed between `iso` and env.now(). Negative → 0 (clock skew). */
+function daysSince(iso: string, now: Date): number {
+    const then = new Date(iso);
+    if (Number.isNaN(then.getTime())) return 0;
+    const ms = now.getTime() - then.getTime();
+    return Math.max(0, Math.floor(ms / 86_400_000));
+}
+
+/** W34c 90 §5.1 + §5.2. `parsed` is the device settings — needed for
+ *  the uncurated-keys diff. Silent no-op if the schema can't be loaded. */
+function runSchemaChecks(
+    env: CliEnv,
+    parsed: Record<string, LuaValue>,
+    schemaPath?: string,
+): DoctorCheck[] {
+    let schema: Schema;
+    try { schema = loadSchema(schemaPath); }
+    catch { return []; }
+
+    const out: DoctorCheck[] = [];
+    const age = daysSince(schema.extracted_at, env.now?.() ?? new Date());
+    const declared = String(schema.$schema_version);
+    out.push({
+        id: "schema.version",
+        category: "schema",
+        severity: age >= STALE_DAYS ? "warning" : "info",
+        ok: true,
+        label: age >= STALE_DAYS
+            ? `schema ${declared} is ${age} days old`
+            : `schema ${declared} (${age} days old)`,
+        data: { declared, current: declared, age_days: age },
+        ...(age >= STALE_DAYS ? {
+            remediation: [{
+                text: "Rebuild with scripts/extract-schema.ts if you're building kindly locally; otherwise upgrade the binary.",
+                command: "bun run scripts/extract-schema.ts",
+            }],
+        } : {}),
+    });
+
+    // 90 §5.2: device keys not in the schema → warning with up to 5 samples.
+    const unknowns: string[] = [];
+    for (const k of Object.keys(parsed)) {
+        if (!schema.keys[k]) unknowns.push(k);
+    }
+    unknowns.sort();
+    const sample = unknowns.slice(0, 5);
+    out.push({
+        id: "schema.uncurated_keys",
+        category: "schema",
+        severity: unknowns.length > 0 ? "warning" : "info",
+        ok: true,
+        label: unknowns.length > 0
+            ? `${unknowns.length} device key(s) not in schema`
+            : "all device keys curated",
+        ...(unknowns.length > 0 ? {
+            detail: sample.join(", ") + (unknowns.length > sample.length ? ", …" : ""),
+        } : {}),
+        data: { count: unknowns.length, sample },
+        ...(unknowns.length > 0 ? {
+            remediation: [{
+                text: "Run scripts/extract-schema.ts against current KOReader source. Review new keys — any network/path additions need SENSITIVE_KEYS updates (88 §2).",
+                command: "bun run scripts/extract-schema.ts",
+            }],
+        } : {}),
+    });
+
+    for (const c of out) c.ok = okFromSeverity(c.severity);
+    return out;
+}
+
+/** W34c 90 §5.3. Silent no-op when the catalog can't be loaded (mirrors
+ *  plugins.* behaviour). */
+function runCatalogChecks(
+    env: CliEnv, mount: KindleMount, catalogPath?: string,
+): DoctorCheck[] {
+    let catalog;
+    try { catalog = loadPluginCatalog(catalogPath); }
+    catch { return []; }
+
+    const out: DoctorCheck[] = [];
+    const age = daysSince(catalog.curated_at, env.now?.() ?? new Date());
+    const declared = catalog.catalog_version;
+    out.push({
+        id: "catalog.version",
+        category: "catalog",
+        severity: age >= STALE_DAYS ? "warning" : "info",
+        ok: true,
+        label: age >= STALE_DAYS
+            ? `plugin catalog ${declared} is ${age} days old`
+            : `plugin catalog ${declared} (${age} days old)`,
+        data: { declared, current: declared, age_days: age },
+        ...(age >= STALE_DAYS ? {
+            remediation: [{
+                text: "Regenerate from a current KOReader source tree.",
+                command: "bun run scripts/extract-plugin-meta.ts",
+            }],
+        } : {}),
+    });
+
+    // catalog.matches_koreader_version: compare catalog's hash-source
+    // version against the device's reported KOReader version.
+    const deviceVer = readKoreaderVersion(mount);
+    const catalogFor = catalog.koreader_hash_version ?? null;
+    const deviceRaw = deviceVer?.raw ?? null;
+    const exactMatch = catalogFor !== null && deviceRaw !== null
+        && catalogFor === deviceRaw;
+    const severity: DoctorSeverity = exactMatch ? "info" : "warning";
+    out.push({
+        id: "catalog.matches_koreader_version",
+        category: "catalog",
+        severity,
+        ok: true,
+        label: exactMatch
+            ? `catalog matches KOReader version on device (${deviceRaw})`
+            : deviceRaw === null
+                ? "device KOReader version unreadable — plugin checks are advisory"
+                : `catalog built for KOReader ${catalogFor ?? "unknown"}, device reports ${deviceRaw}`,
+        data: { catalog_for: catalogFor, device_has: deviceRaw },
+        ...(!exactMatch && deviceRaw !== null ? {
+            remediation: [{
+                text: "Hash mismatches below may be false positives. Regenerate the catalog against the device's KOReader version or verify by hand.",
+            }],
+        } : {}),
+    });
+
+    for (const c of out) c.ok = okFromSeverity(c.severity);
+    return out;
 }
 
 /** Run plugin-hash checks against the on-device `plugins/` dir. Returns

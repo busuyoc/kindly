@@ -257,3 +257,146 @@ describe("executeDoctor — W34b plugins.* findings (90 §5.4, §5.5)", () => {
         expect(r.checks.some((c) => c.id === "mount")).toBe(true);
     });
 });
+
+// ---- W34c schema.* + catalog.* freshness (90 §5.1, §5.2, §5.3) -------------
+
+function writeSyntheticSchema(
+    dir: string,
+    extractedAt: string,
+    keys: string[] = [],
+): string {
+    const schemaKeys: Record<string, unknown> = {};
+    for (const k of keys) {
+        schemaKeys[k] = {
+            type: "boolean",
+            evidence: { methods: [], literals: [], observed: [], source: null },
+            call_sites: 0,
+        };
+    }
+    const body = {
+        $schema_version: 1,
+        extracted_from: { koreader_version: "v2026.03" },
+        extracted_at: extractedAt,
+        stats: {},
+        keys: schemaKeys,
+    };
+    const path = join(dir, `schema-${Math.random().toString(36).slice(2)}.json`);
+    writeFileSync(path, JSON.stringify(body));
+    return path;
+}
+
+function writeCatalogWith(
+    dir: string,
+    curatedAt: string,
+    koreaderHashVersion: string | null = null,
+): string {
+    const body: PluginCatalog = {
+        catalog_version: "v1" as const,
+        license: "MIT",
+        curated_at: curatedAt,
+        koreader_source: "test-src",
+        koreader_hash_version: koreaderHashVersion,
+        plugin_count: 0,
+        plugins: [],
+    };
+    const path = join(dir, `cat-${Math.random().toString(36).slice(2)}.json`);
+    writeFileSync(path, JSON.stringify(body));
+    return path;
+}
+
+function setGitRev(kindleRoot: string, rev: string): void {
+    writeFileSync(join(kindleRoot, "koreader", "git-rev"), rev + "\n");
+}
+
+describe("executeDoctor — W34c schema.* (90 §5.1 + §5.2)", () => {
+    test("fresh schema → info; age_days derived from extracted_at vs env.now()", () => {
+        // env.now() = 2026-04-22; schema extracted 3 days earlier.
+        const schemaPath = writeSyntheticSchema(workdir, "2026-04-19T00:00:00Z", ["avoid_flashing_ui"]);
+        const r = executeDoctor(env, { schemaPath });
+        const v = r.checks.find((c) => c.id === "schema.version")!;
+        expect(v.severity).toBe("info");
+        expect(v.data).toMatchObject({ age_days: 3 });
+    });
+
+    test("stale schema (≥90 days) → warning with remediation", () => {
+        const schemaPath = writeSyntheticSchema(workdir, "2025-01-01T00:00:00Z", ["avoid_flashing_ui"]);
+        const r = executeDoctor(env, { schemaPath });
+        const v = r.checks.find((c) => c.id === "schema.version")!;
+        expect(v.severity).toBe("warning");
+        expect((v.data as { age_days: number }).age_days).toBeGreaterThanOrEqual(90);
+        expect(v.remediation?.[0]?.command).toContain("extract-schema");
+    });
+
+    test("all device keys curated → schema.uncurated_keys info, count 0", () => {
+        // Device has avoid_flashing_ui + zlibrary_password (see beforeEach).
+        const schemaPath = writeSyntheticSchema(workdir, "2026-04-22T00:00:00Z",
+            ["avoid_flashing_ui", "zlibrary_password"]);
+        const r = executeDoctor(env, { schemaPath });
+        const u = r.checks.find((c) => c.id === "schema.uncurated_keys")!;
+        expect(u.severity).toBe("info");
+        expect(u.data).toEqual({ count: 0, sample: [] });
+    });
+
+    test("uncurated device keys → warning with up to 5 samples", () => {
+        // Schema covers neither key on the device.
+        const schemaPath = writeSyntheticSchema(workdir, "2026-04-22T00:00:00Z", []);
+        const r = executeDoctor(env, { schemaPath });
+        const u = r.checks.find((c) => c.id === "schema.uncurated_keys")!;
+        expect(u.severity).toBe("warning");
+        const d = u.data as { count: number; sample: string[] };
+        expect(d.count).toBeGreaterThan(0);
+        expect(d.sample.length).toBeLessThanOrEqual(5);
+    });
+
+    test("schema unavailable → no schema.* findings, doctor continues", () => {
+        const r = executeDoctor(env, { schemaPath: "/nonexistent/schema.json" });
+        expect(r.checks.find((c) => c.category === "schema")).toBeUndefined();
+        expect(r.ok).toBe(true);
+    });
+});
+
+describe("executeDoctor — W34c catalog.* (90 §5.3)", () => {
+    test("fresh catalog → catalog.version info", () => {
+        const catalogPath = writeCatalogWith(workdir, "2026-04-22");
+        const r = executeDoctor(env, { catalogPath });
+        const v = r.checks.find((c) => c.id === "catalog.version")!;
+        expect(v.severity).toBe("info");
+        expect((v.data as { age_days: number }).age_days).toBe(0);
+    });
+
+    test("stale catalog (≥90 days) → catalog.version warning", () => {
+        const catalogPath = writeCatalogWith(workdir, "2025-01-01");
+        const r = executeDoctor(env, { catalogPath });
+        const v = r.checks.find((c) => c.id === "catalog.version")!;
+        expect(v.severity).toBe("warning");
+        expect((v.data as { age_days: number }).age_days).toBeGreaterThanOrEqual(90);
+    });
+
+    test("matches_koreader_version: exact match → info", () => {
+        setGitRev(fakeKindle, "v2026.03");
+        const catalogPath = writeCatalogWith(workdir, "2026-04-22", "v2026.03");
+        const r = executeDoctor(env, { catalogPath });
+        const m = r.checks.find((c) => c.id === "catalog.matches_koreader_version")!;
+        expect(m.severity).toBe("info");
+        expect(m.data).toEqual({ catalog_for: "v2026.03", device_has: "v2026.03" });
+    });
+
+    test("matches_koreader_version: version mismatch → warning", () => {
+        setGitRev(fakeKindle, "v2024.07");
+        const catalogPath = writeCatalogWith(workdir, "2026-04-22", "v2026.03");
+        const r = executeDoctor(env, { catalogPath });
+        const m = r.checks.find((c) => c.id === "catalog.matches_koreader_version")!;
+        expect(m.severity).toBe("warning");
+        expect(m.data).toEqual({ catalog_for: "v2026.03", device_has: "v2024.07" });
+        expect(r.ok).toBe(true);  // warning only
+    });
+
+    test("matches_koreader_version: device unreadable → warning", () => {
+        // No git-rev written.
+        const catalogPath = writeCatalogWith(workdir, "2026-04-22", "v2026.03");
+        const r = executeDoctor(env, { catalogPath });
+        const m = r.checks.find((c) => c.id === "catalog.matches_koreader_version")!;
+        expect(m.severity).toBe("warning");
+        expect(m.data).toEqual({ catalog_for: "v2026.03", device_has: null });
+    });
+});

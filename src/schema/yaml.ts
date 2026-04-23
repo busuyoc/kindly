@@ -11,7 +11,8 @@
 // (keys starting with numbers, values with colons, multiline strings).
 // That's strictly a parser/emitter dependency — no schema enforcement.
 
-import { parse as yamlParse, stringify as yamlStringify } from "yaml";
+import { stringify as yamlStringify } from "yaml";
+import { parseYamlSafe } from "../fs/yamlSafe.ts";
 import type { LuaTable, LuaValue } from "../lua/writer.ts";
 import {
     classifyKey, filterForYaml, isSecretPath,
@@ -92,7 +93,7 @@ function sortNested(v: unknown): unknown {
 // Parse YAML → partial Lua table. Callers must merge this back into the
 // on-device settings to avoid wiping secrets/ephemerals not present here.
 export function yamlToLua(yaml: string): LuaTable {
-    const parsed = yamlParse(yaml);
+    const parsed = parseYamlSafe(yaml);
     if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
         throw new Error("YAML root must be a map of settings keys");
     }

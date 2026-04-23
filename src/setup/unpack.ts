@@ -19,7 +19,7 @@
 import { existsSync, lstatSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
-import { parse as yamlParse } from "yaml";
+import { parseYamlSafe } from "../fs/yamlSafe.ts";
 import { extractTarGz, listTarGz } from "../fs/archive.ts";
 import { hashBytes } from "./canonical.ts";
 import { isSafeRelativePath, parseManifest, type SetupManifest } from "./schema.ts";
@@ -89,7 +89,7 @@ export function unpackSetup(archivePath: string): UnpackedSetup {
         const manifestBytes = readFileSync(manifestAbs);
         let manifest: SetupManifest;
         try {
-            const raw = yamlParse(manifestBytes.toString("utf8"));
+            const raw = parseYamlSafe(manifestBytes.toString("utf8"));
             manifest = parseManifest(raw);
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);

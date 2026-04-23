@@ -7,7 +7,7 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-import { parse as yamlParse } from "yaml";
+import { parseYamlSafe } from "../fs/yamlSafe.ts";
 
 import { parseSettingsFile } from "../lua/reader.ts";
 import { dumpSettingsFile, type LuaTable, type LuaValue } from "../lua/writer.ts";
@@ -60,7 +60,7 @@ export function loadManifestFile(path: string): { raw: string; manifest: SetupMa
     const raw = readFileSync(path, "utf8");
     let parsed: unknown;
     try {
-        parsed = yamlParse(raw);
+        parsed = parseYamlSafe(raw);
     } catch (e) {
         throw new Error(`${path} is not valid YAML: ${(e as Error).message}`);
     }

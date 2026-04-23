@@ -23,7 +23,11 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:d55ad2fd60f01aca333455c52b5809dc19e1841d653f7cef512321df68679f13",
+        "main.lua": "sha256:ba1a380f625efeb315e49bc98951f8d913b83510b860f5b2cd7716f082dcb36e"
+      }
     },
     {
       "name": "archiveviewer",
@@ -42,7 +46,11 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:f178f482a979fee8726ef9058cd39b49df1d6b2af79aff8239b3f369905071b3",
+        "main.lua": "sha256:7c17e53ab165e73e447abf21a45bf82120864ec5328cc1ba5a1340080ad19eeb"
+      }
     },
     {
       "name": "autodim",
@@ -60,7 +68,11 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:8c4c2e29d4d9568e12832c72367ddbb4d0cbb4bc35de7e470a3faba04ac2d894",
+        "main.lua": "sha256:2d1df822b7ce0f3cb209d087affe28e2beb2cd326d031f4b5ce758e16b8ac7c6"
+      }
     },
     {
       "name": "autostandby",
@@ -79,7 +91,11 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:429df34efb34271849f31e267da25c7e88a21c43a89726eec929d442417a3152",
+        "main.lua": "sha256:c6dfbaf3f01addcf76794ec06efbb33d90645cd1b46983b4fa5de50d16f69461"
+      }
     },
     {
       "name": "autosuspend",
@@ -99,7 +115,11 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:eab769a7c4f6e7a7abba89f19be0add8949616e88c63a91a83ab8218187f6966",
+        "main.lua": "sha256:aa9507c532598e3463a5b07f17d0fdd43b9dd2775cd479e830610c9e8058f050"
+      }
     },
     {
       "name": "autoturn",
@@ -118,7 +138,11 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:05dcff9110e07b1494b30f0a304f6a0567bb06717a4be381a58a894c2fb7245b",
+        "main.lua": "sha256:c57793b1c3d94751de02fbbe5acf75ccf71712a71b4218fc63ff200970e7f3d1"
+      }
     },
     {
       "name": "autowarmth",
@@ -138,7 +162,12 @@
       ],
       "deprecated": null,
       "computed": true,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:5935f52648d9bfd7f85fe8695ece735da3fd59667dc1ac97d24d78887be81876",
+        "main.lua": "sha256:3e48be8bedb207f94ebf060a00aba184fe0740b9b8fc65ebc20d6fcd5a8f5df2",
+        "suntime.lua": "sha256:b005faa30fa3cecd2945d1b49a00627073088a62bd069de52e1bf318f2361fa9"
+      }
     },
     {
       "name": "batterystat",
@@ -156,7 +185,11 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:0c225b48b170304500cf248033f4f2420877fecfe867e20ff34dda55b199723f",
+        "main.lua": "sha256:5a753bc7a614b85bd80bfc0d06c768f66537d4b677aa807c6162953744bd0ad8"
+      }
     },
     {
       "name": "bookshortcuts",
@@ -175,7 +208,11 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:f64f16050d64758729c69e8fe943866ae48e82235b4afc26ae96e352b08c9b9d",
+        "main.lua": "sha256:7e75bc968827bb0da79b8dc454d3f761e2a646acb367cde6a816b4e02f725314"
+      }
     },
     {
       "name": "calibre",
@@ -195,7 +232,15 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:6c21bb96c67826ae9b9904a1c38e95ec5619c829b10bce1aa9829650231334ba",
+        "extensions.lua": "sha256:be4277b8b9c9ee0f7d06bb2c6ce5741fd2d6715161eba14c35c5fe2316081beb",
+        "main.lua": "sha256:de267e3f6d3c1e19662aba47f2c6f59aa676b5e29dc46722841d38bca86caf2d",
+        "metadata.lua": "sha256:52f1574f274b4e63d6cad46c3d5350d1018063388ac24123eb8d023d36222392",
+        "search.lua": "sha256:961c19ec507cd991dc6b809cfa808740876f120052345ce9c79cae2b0b6a2d95",
+        "wireless.lua": "sha256:b90579f4f4f9084802b2e4929411c279d31ca9bd709a9dd3ed1cf9f2d8e8e78d"
+      }
     },
     {
       "name": "cloudstorage",
@@ -215,7 +260,15 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:6c1321ed065826853319e90381823ad79c6018d33747dced6245534150f22cd9",
+        "cloudstorage.lua": "sha256:b4869bbd89df15df2bc3697a9270c1d0e2fd011db5dae5684df79495efd5f769",
+        "main.lua": "sha256:a11a543408489ed5e4317242bc16a7db786d26677a74360dd6cb0a8c53297947",
+        "providers/dropbox.lua": "sha256:e61e60ea9c72170856ecb9b6e901026f3386d93c7b9e0de9d7420363905fdf0c",
+        "providers/ftp.lua": "sha256:62fce33e9a32f2f1aa9fd8ddff801de9cb40e50e9b17f6d1db9e2dc054a3073f",
+        "providers/webdav.lua": "sha256:2a91a14919e814a009326bba8da3514e3a7309ff342a038937bd26407801e85c"
+      }
     },
     {
       "name": "coverbrowser",
@@ -234,7 +287,15 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:50fe960839f50882436399eb8b71a5446b05dec9e6d25d680c71b8be1524c30d",
+        "bookinfomanager.lua": "sha256:09132f7bdadc87e60e920abdb53967f8584e0ef8dbcfbe1b633ac47f5348150f",
+        "covermenu.lua": "sha256:7be2cd840a3c770ae81089e2ff08e79ef5a85606933e23e278df8172b5da9357",
+        "listmenu.lua": "sha256:a12d1e02b70cc822c7b2e4bab3f67ff0006b8f25b58e7efb73033ae2a7362613",
+        "main.lua": "sha256:7f9bf838d796bb1ac89ab6a0d1fb840fcb90c0c6aa52a0f450460d810f844b66",
+        "mosaicmenu.lua": "sha256:d63e6135ed90849b63f65283f48bfc83b2a7fde1f65ab1426387137792a92f36"
+      }
     },
     {
       "name": "coverimage",
@@ -252,7 +313,11 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:58b9c2880c70daa5651724aed93b11012b4cc3b9e2b2a0d4c0b934a86e883280",
+        "main.lua": "sha256:9e50cef2a74e1a18d2caae027945579a67469bc6727a7370b36bcf0282fe8163"
+      }
     },
     {
       "name": "docsettingtweak",
@@ -271,7 +336,12 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:8186eb0627df10f9ad69a2344c28ad5d75bef0a1198700b878359e8cb62293e8",
+        "directory_defaults_template.lua": "sha256:49b093ef6042aa68fa3ad445b9071e2ee895f2bc40c075ab96e7a002e6c482a6",
+        "main.lua": "sha256:5455ae36a34d5a48df1602754e36a4b0807d0cd9b9bbaf26f0d91dffae93e950"
+      }
     },
     {
       "name": "exporter",
@@ -294,7 +364,25 @@
         "detail": "Joplin"
       },
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:dcbc174471a4639cca8c71d36f9dde24a5a09c2ad7d71bc964c5844ca4960c6c",
+        "base.lua": "sha256:f4cf0490c3b85dd574ecd97eefc8f5e8a26be9aea7144292b99f225e02479dab",
+        "clip.lua": "sha256:889d462f18cdb3ad4035c24130986c768602f688367610e4677fcd3527c28541",
+        "main.lua": "sha256:3c55119ace48db73d516624c7b2eec654d114e441ecf81a79809bb8e20bf4daa",
+        "target/html.lua": "sha256:34a2868f07c1dc56ec58975e7e84a89a68a0baff9a98e0ca73b77f094d5a43a5",
+        "target/joplin.lua": "sha256:2cc60a4268fed6294f1a3c1515a57228fed3a101b65d8ad76d821957b09ed1bd",
+        "target/json.lua": "sha256:cfe9571b2e0b2abe274eafb5af4fdcda3ac01fa519118219010611905d9347a8",
+        "target/markdown.lua": "sha256:4f74803220755fae3c4eff5ed9cfde7121ef4fedf0832cd66995f345260ef1f4",
+        "target/my_clippings.lua": "sha256:a4adc036079822313537f4e4316ebd0232566b05fe6f1dfb494e78c25ae22697",
+        "target/nextcloud.lua": "sha256:6f099350c8a6b9cc5e75bc416312b62e50406164005b85249847675b243eb90e",
+        "target/readwise.lua": "sha256:93f542f1a1dde088439b6ee84671b1c7bac15e99e1d24e510353fbdf8096a3ad",
+        "target/text.lua": "sha256:4feec0ddbde224fa2370bc9dea8097b8178f4108b96a9a353adfc9b5dc5bb132",
+        "target/xmnote.lua": "sha256:0d991e2790cf5103a6e9df37a14eae7cba5bec606285cae054104a263a9990c4",
+        "template/md.lua": "sha256:ce29981714d8f99eea39e3bf53a5b4e41d0e0b3bcec0bea711173277a0b4a9c5",
+        "template/note.tpl": "sha256:bbb95936a80781c4706f62cea9400ab4176559ce4e3441d6759574ab691b7d74",
+        "template/slt2.lua": "sha256:21b61a05d80c9a050e222871ed9172e85c3320b350685102e82f8eb55ec7cd50"
+      }
     },
     {
       "name": "externalkeyboard",
@@ -314,7 +402,13 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:f036c85805f2a9bb168322ad5e639de2f408d3736109051dfd715f5c7d133d09",
+        "event_map_keyboard.lua": "sha256:10e44cd45c152608532448283ac50059ffd50bd702b985cb6e81c6339d6eb49d",
+        "find-keyboard.lua": "sha256:613f4541bd60de6b9fb1f333d7dc6b4529ff8a3d6486a428f63d2ac876110f74",
+        "main.lua": "sha256:6b59d206766b4c9b6489fb8df7acb0023a9a22e80a84c052c0dc638c70d3c8cb"
+      }
     },
     {
       "name": "gestures",
@@ -334,7 +428,13 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:38f297acf09f288829b67045d790ce8f1cb21afc67ebfce88828989e9c73a386",
+        "defaults.lua": "sha256:c9420680b8355ce1a43059afb65f0b44534a7396a2d4e1ef3028a0fb73a3a6bf",
+        "main.lua": "sha256:70309e4c602686ed010e77410ab1024380b96f221e773a25d465dbcd772bb52b",
+        "migration.lua": "sha256:6c967474e01ecc4065daf8c6203d69a5ac4e700820e4a71f6bf7e75a95bbe37a"
+      }
     },
     {
       "name": "hello",
@@ -352,7 +452,11 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:871155fbd6e2d854d825c78b5127af5703456a8838e424c2a7bc83beae2485ff",
+        "main.lua": "sha256:97f3b9641556a5f3692b8de0727316c2303cfb6cdea1dbce09adcb72f4eeb2ea"
+      }
     },
     {
       "name": "hotkeys",
@@ -370,7 +474,12 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:8620f25072aff3d486b56f224730e02372800c83c380ac3e7a8367ee2d18cce5",
+        "defaults.lua": "sha256:4fe472b15b65570b40c0932a3b8ef5140327385c5a31e4c4dcb801b3c3b1b421",
+        "main.lua": "sha256:9adf4e2ab658c8a50f5b782a5111cfe9a12f4be1f03a333e66f496702686eab5"
+      }
     },
     {
       "name": "httpinspector",
@@ -390,7 +499,11 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:8fafef7bbb26402e12665c94715998f099bc36f0a1d4e54f3c90fa0b175f540d",
+        "main.lua": "sha256:c58ec92d72e05306563dce9de8e4d53e84c55891c17e1ac2a1d4e867d8b5e6bb"
+      }
     },
     {
       "name": "japanese",
@@ -410,7 +523,14 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "README.md": "sha256:d565f621c195f8a318d26eed14957548106b39cd3ee55070d8539d2a805e3fe7",
+        "_meta.lua": "sha256:00192b68496e51972cfcac4c6e5d0d9ef9721378976b174d45f5e50d8d7524cd",
+        "deinflector.lua": "sha256:1f81d0d1fe10fd5256182a63257c0638f661fb67a48d3cf448fbee42b570cb51",
+        "main.lua": "sha256:721893e2294b230a452d2323c453a2122d0d19a8013622457e5fde63560d631a",
+        "yomichan-deinflect.json": "sha256:f2be0305b619bd7784b2b64a4758afaabdf794f25fbef471845ef90da9be56bd"
+      }
     },
     {
       "name": "keepalive",
@@ -428,7 +548,11 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:bf3d65789ee0d6037d708e2212e10659df1165f64425d66f0f09f4f1c1cb5c89",
+        "main.lua": "sha256:415d519287e207962e2a29dafa47f6ecc48c38456b1acab534a198ad399358f5"
+      }
     },
     {
       "name": "kosync",
@@ -448,7 +572,13 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "KOSyncClient.lua": "sha256:42207aa570bde1c17d3a6360b6d5f3856177c812234817c5e24f1014e4106a83",
+        "_meta.lua": "sha256:fc4d4a16f9dd3f3594aa7ce8501e7a97de00df72a463e97cfb4123015d49317a",
+        "api.json": "sha256:8d9cbc822ad1a0a03fb776b48efcd6273b8e0cd09a046f0ce57a13e75337e3d1",
+        "main.lua": "sha256:c23ffdcfaeaa0b05ddc555cf790d1aeb5dba145f30d64e339a580589b3f7e440"
+      }
     },
     {
       "name": "movetoarchive",
@@ -468,7 +598,11 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:6be2e480aeeaa9dd7e21e66b7e69ae0732bbe51b25ec55bfe17440e73fe54a32",
+        "main.lua": "sha256:ce4a938db9083e79f121b6d1e3124aee1c91b8a7dd7b28e897461d3605588905"
+      }
     },
     {
       "name": "newsdownloader",
@@ -488,7 +622,19 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:603fbae044add7035411379ca114f0a70c2f39848ce68095c3f741e227b12945",
+        "epubdownloadbackend.lua": "sha256:074ad7cfee5b4ec1bdc003648f7d9efaa00997e719014d974d76a8c10c1e1249",
+        "feed_config.lua": "sha256:4242d3bc2a11dc806067a775015313514be2dd942fa255f59424545b95410296",
+        "feed_view.lua": "sha256:bb6501ed011d8ce8ae933e1eb858b0dd2c78753b07f4c09c4d135b881468e57d",
+        "lib/LICENCE_lua-feedparser": "sha256:f9a57954ba49b3e1a51d9434f1baf10cae7db1f12760cdc0abeaeccd390a0099",
+        "lib/LICENSE_LuaXML": "sha256:c736d3ae9ee32254e28718b2be802b0c768f2c2cbe658d792d8d926406d9e004",
+        "lib/dateparser.lua": "sha256:b5700ea7140aa43f7108dd4d9c95fe03234b305ba4d869d1a192221706fb0df8",
+        "lib/handler.lua": "sha256:e807168fdeffdd0c1e8dd85c2d3677344c975b983d12af0301031b4027893448",
+        "lib/xml.lua": "sha256:9cf55b40855a5678c38acd1d59039408754cc98df4131c6034b9dccf4cbc5c73",
+        "main.lua": "sha256:5d7f71bca825c359deab6a9c6672379d7a02d78cba6b871fb5f7476f902fe8c5"
+      }
     },
     {
       "name": "opds",
@@ -508,7 +654,14 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:1054e9c7a1068c755746267bb3fae4b7698c1a54d1098ad78ed648b2431a66f4",
+        "main.lua": "sha256:3adc6fa403591c9a458a67da8eff6156bbf6cae6d8dbe9499b08e998deee414c",
+        "opdsbrowser.lua": "sha256:e8e6b2bebb44a58956aa2fae0f33e0bf86c230ce596f66a8806e67437a0eb531",
+        "opdsparser.lua": "sha256:0364a56bf1ad706d32582ae39b7f58ee35b070e1c2a9f9e1915bb6eab0ba5dc5",
+        "opdspse.lua": "sha256:b0055644afec8378208fdcb14a9bdd3f6cc0534442364524743001665e6e6c30"
+      }
     },
     {
       "name": "perceptionexpander",
@@ -528,7 +681,11 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:7eb37c2a9946ecaff9b8522d51358957630f65eb207b75e763fe22dfccfb28f0",
+        "main.lua": "sha256:092b12ca8d945754ae09914c0dec9807a589d50d0facf3abdb571cbf79986937"
+      }
     },
     {
       "name": "profiles",
@@ -548,7 +705,11 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:ece7849ac212daa043a578c403580a75523109ba4bdd674532a4fe05aeec54eb",
+        "main.lua": "sha256:853d663628583f92a2f24858549011173b9988a352a77dd69e9fd7ebcae2fb57"
+      }
     },
     {
       "name": "qrclipboard",
@@ -567,7 +728,11 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:5036b867ef9bbf362d105b29d1c90475f238397e8e387c795f8f0a86d1883d0b",
+        "main.lua": "sha256:524a6bca5f8026ec05cf331c8d4c78ca35ac4828ffc6353de619a89d991b4f60"
+      }
     },
     {
       "name": "readtimer",
@@ -587,7 +752,11 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:87e5cd79428728824a5664d0da9c6446064b265e2667a1a948e60ae5a088dc9e",
+        "main.lua": "sha256:3cbc9d5e15ff6f7bcd864c9b6e9e0033325512ff5ad10ea3d5f7e489ffcab4db"
+      }
     },
     {
       "name": "statistics",
@@ -607,7 +776,13 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:9afc8b61b4b08f15dec62b4912fc4cea0006a5e581edd9e185944b5593b0e258",
+        "calendarview.lua": "sha256:80e232d13a46660c2c0c9aafb2a043668c36175d57a8ee5b1539c583b00347b1",
+        "main.lua": "sha256:c785b2d62145fbbc10385cdb3e3e726f9015df8f7b7c07f2f0208b7d6b8c5599",
+        "readerprogress.lua": "sha256:2edf8d29ef8374d921cb14cfb2f928c42c05b7259683b4566be05a7dbf9643d9"
+      }
     },
     {
       "name": "systemstat",
@@ -625,7 +800,11 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:982d7454cb1f280ee04ab26acd2c2ec50297b7bedc24a4fe154500303ee81c56",
+        "main.lua": "sha256:0683683ef5a4aad5fae6e0c63856b9e1bbef30b2d36c24cc715b42157c088710"
+      }
     },
     {
       "name": "terminal",
@@ -644,7 +823,16 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:7a2cd67cd8b763611775126dbfc7e5144b3af10aa12a1af7d2e5151043adc2b7",
+        "aliases.lua": "sha256:8c84d444f92c9022dafc3e166f15b1f75cd45281a3dec2941c6a70e4d0604574",
+        "main.lua": "sha256:ef801b1ec50bb8bc6be320ba6dce3f087dc3ea4480ff2ecafb921ae05d8f1715",
+        "profile": "sha256:16cf3e8e0033df29b2326f4867620da2a42a18a05d78d7bf355f584d23ae80cb",
+        "shfm": "sha256:6dabcb61515e90b741131a9090a5321626ab1ee9a39df435fc8036ae11c3b506",
+        "shfm_opener.sh": "sha256:457eee2fea88e397a2e4a69cf2d614a18a2a337a5345f2da6375d586cc2a1583",
+        "terminputtext.lua": "sha256:a9952c683d1fe4610cbbea6047a0657c52736025c0e662c22ef635f390e2e102"
+      }
     },
     {
       "name": "texteditor",
@@ -663,7 +851,11 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:7f42c368ceab9da25fa5516f3a3fb15da68278df4d408fbf572529401e22ea3a",
+        "main.lua": "sha256:fa5ca761eddac3f8e0fa1b95c52ab42f7651049a4f6407c8d6022815e02ffd17"
+      }
     },
     {
       "name": "timesync",
@@ -682,7 +874,11 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:6683e9a96238540dc5332cc923944444fcaf94eab67ff70d6a416174e8af728f",
+        "main.lua": "sha256:5be6c9d3af0d72494b8de6dbc9fa684fccc68a415cf399937d3218c1a8033ae0"
+      }
     },
     {
       "name": "vocabbuilder",
@@ -701,7 +897,12 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:0ebcd20e8bde3d0ab485b4e2fcf944fd049545c41d70d8a4562667f1a9293884",
+        "db.lua": "sha256:f21cb6f5e2a9eb4e3985ccadfde45c926490f5c20de670a0c00f92a572e305ef",
+        "main.lua": "sha256:d6d7e78f2e3f2c68cd586bab752b06b5f60547d87519b580148c0ac245691f47"
+      }
     },
     {
       "name": "wallabag",
@@ -721,7 +922,12 @@
       ],
       "deprecated": null,
       "computed": false,
-      "warnings": []
+      "warnings": [],
+      "known_hashes": {
+        "_meta.lua": "sha256:1f9c861209a6cdfe4e5b9cd969f147498ad0173203096660abd4efd6bc39624e",
+        "main.lua": "sha256:3b8051cbc730330467e6fefde465ce5c6f20ef4385c4de22392fb0052dbbceca"
+      }
     }
-  ]
+  ],
+  "koreader_hash_version": "git-2bf682784c"
 }

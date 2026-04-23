@@ -420,15 +420,18 @@ export function executeSetupImport(
             : null
     );
 
-    // W34e strict gate: refuse if any plugin is tampered or uncatalogued.
+    // W34e strict gate: refuse if any plugin fails to MATCH the catalog.
     // Runs even in --dry-run so CI can validate without touching device.
+    // UNVERIFIED also blocks — otherwise an attacker can impersonate any
+    // catalogued-but-unhashed plugin folder name and slip S2-style
+    // lexically-obfuscated payloads past --strict-imports entirely.
     if (opts.strictImports && pluginHashReport) {
-        const bad = pluginHashReport.verdicts.filter(
-            (v) => v.status === "MISMATCH" || v.status === "UNCATALOGUED",
-        );
+        const bad = pluginHashReport.verdicts.filter((v) => v.status !== "MATCH");
         if (bad.length > 0) {
             const list = bad
-                .map((v) => `  [${v.status}] ${v.name}`)
+                .map((v) => v.status === "MALFORMED_STRUCTURE"
+                    ? `  [MALFORMED_STRUCTURE] ${v.paths.length} path(s) outside <name>.koplugin/`
+                    : `  [${v.status}] ${v.name}`)
                 .join("\n");
             throw new KindlyError(
                 ErrorCodes.STRICT_IMPORT_BLOCKED,

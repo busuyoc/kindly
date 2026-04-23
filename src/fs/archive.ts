@@ -79,6 +79,18 @@ export type ExtractOptions = {
     /** Root directory to extract into. Created if missing. Existing files
      *  are OVERWRITTEN by default (that's the whole point of restore). */
     destRoot: string;
+    /** Reject archives larger than this many bytes on disk. A2 defense:
+     *  kindly has never legitimately needed >100 MiB archives. Override
+     *  only if you know what you're doing. */
+    maxArchiveBytes?: number;
+    /** Reject archives whose gzip trailer reports more than this many
+     *  uncompressed bytes. Combined with maxArchiveBytes this bounds the
+     *  compression bomb blast radius — see A9 in 87. */
+    maxUncompressedBytes?: number;
+    /** Reject archives whose uncompressed:compressed ratio exceeds this.
+     *  Legitimate text archives top out around 10:1; plugin source trees
+     *  are denser but stay under 50:1. */
+    maxCompressionRatio?: number;
 };
 
 export type ExtractResult = {
@@ -97,6 +109,96 @@ export class UnsafeArchivePathError extends Error {
     }
 }
 
+/** Thrown when an archive exceeds one of the compression-bomb guards
+ *  (archive bytes, uncompressed bytes, or compression ratio). A9 from 87. */
+export class ArchiveTooLargeError extends Error {
+    constructor(
+        message: string,
+        public readonly kind: "archive_bytes" | "uncompressed_bytes" | "ratio",
+        public readonly observed: number,
+        public readonly limit: number,
+    ) {
+        super(message);
+        this.name = "ArchiveTooLargeError";
+    }
+}
+
+const DEFAULT_MAX_ARCHIVE_BYTES = 100 * 1024 * 1024;       // 100 MiB
+const DEFAULT_MAX_UNCOMPRESSED_BYTES = 500 * 1024 * 1024;  // 500 MiB
+const DEFAULT_MAX_COMPRESSION_RATIO = 100;                 // 100:1
+
+/** Read the gzip trailer via `gzip -l` to learn the declared uncompressed
+ *  size. The gzip ISIZE field is uncompressed-size mod 2^32, which is
+ *  only fully trustworthy when combined with an archive-bytes cap (so a
+ *  legit archive couldn't expand past 4 GiB anyway). Returns null if
+ *  gzip can't parse the file. */
+function readGzipSizes(archivePath: string): { compressed: number; uncompressed: number } | null {
+    const r = spawnSync("gzip", ["-l", archivePath], { encoding: "utf8" });
+    if (r.status !== 0) return null;
+    // Output is two lines: header + data. Data line starts with two
+    // integers (compressed, uncompressed) followed by a ratio and name.
+    const lines = r.stdout.trim().split("\n");
+    if (lines.length < 2) return null;
+    const tokens = lines[lines.length - 1]!.trim().split(/\s+/);
+    if (tokens.length < 2) return null;
+    const compressed = Number(tokens[0]);
+    const uncompressed = Number(tokens[1]);
+    if (!Number.isFinite(compressed) || !Number.isFinite(uncompressed)) return null;
+    return { compressed, uncompressed };
+}
+
+/** A9: reject archives likely to be compression bombs BEFORE extraction.
+ *  Three independent caps; any one trips the refusal. Throws
+ *  ArchiveTooLargeError. */
+function enforceSizeCaps(archivePath: string, opts: ExtractOptions): void {
+    const maxArchive = opts.maxArchiveBytes ?? DEFAULT_MAX_ARCHIVE_BYTES;
+    const maxUncompressed = opts.maxUncompressedBytes ?? DEFAULT_MAX_UNCOMPRESSED_BYTES;
+    const maxRatio = opts.maxCompressionRatio ?? DEFAULT_MAX_COMPRESSION_RATIO;
+
+    const archiveBytes = statSync(archivePath).size;
+    if (archiveBytes > maxArchive) {
+        throw new ArchiveTooLargeError(
+            `archive is ${archiveBytes} bytes, exceeds ${maxArchive} limit`,
+            "archive_bytes", archiveBytes, maxArchive,
+        );
+    }
+    const sizes = readGzipSizes(archivePath);
+    if (sizes !== null) {
+        if (sizes.uncompressed > maxUncompressed) {
+            throw new ArchiveTooLargeError(
+                `archive expands to ${sizes.uncompressed} bytes, exceeds ${maxUncompressed} limit`,
+                "uncompressed_bytes", sizes.uncompressed, maxUncompressed,
+            );
+        }
+        if (sizes.compressed > 0) {
+            const ratio = sizes.uncompressed / sizes.compressed;
+            if (ratio > maxRatio) {
+                throw new ArchiveTooLargeError(
+                    `archive compression ratio is ${ratio.toFixed(1)}:1, exceeds ${maxRatio}:1 limit`,
+                    "ratio", Math.round(ratio), maxRatio,
+                );
+            }
+        }
+    }
+}
+
+/** Run both safety checks (compression-bomb + path traversal) without
+ *  extracting. Callers that do filesystem work before extractTarGz —
+ *  like restore taking a pre-restore safety snapshot — should call this
+ *  up front so a malicious archive can't trigger any side effects. */
+export function assertSafeArchive(archivePath: string, opts: Omit<ExtractOptions, "archivePath" | "destRoot"> = {}): void {
+    if (!existsSync(archivePath)) {
+        throw new Error(`archive not found: ${archivePath}`);
+    }
+    enforceSizeCaps(archivePath, { ...opts, archivePath, destRoot: "" });
+    const listed = listTarGz(archivePath).filter((p) => !p.endsWith("/"));
+    for (const entry of listed) {
+        if (!isSafeRelativePath(entry)) {
+            throw new UnsafeArchivePathError(entry);
+        }
+    }
+}
+
 export function extractTarGz(opts: ExtractOptions): ExtractResult {
     const { archivePath, destRoot } = opts;
     if (!existsSync(archivePath)) {
@@ -104,8 +206,9 @@ export function extractTarGz(opts: ExtractOptions): ExtractResult {
     }
     if (!existsSync(destRoot)) mkdirSync(destRoot, { recursive: true });
 
-    // Path-safety sweep BEFORE extraction (F8 from 87). Directory entries
-    // in tar listings are suffixed with "/"; strip that before validating.
+    // Bomb guards + path-safety BEFORE extraction. Belt-and-suspenders
+    // with caller-side assertSafeArchive — the choke point is here.
+    enforceSizeCaps(archivePath, opts);
     const listed = listTarGz(archivePath).filter((p) => !p.endsWith("/"));
     for (const entry of listed) {
         if (!isSafeRelativePath(entry)) {

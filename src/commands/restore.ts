@@ -14,8 +14,10 @@
 import { ArgError, parseArgs, type FlagSpecs } from "../cli/args.ts";
 import { type CliEnv, resolveMount } from "../cli/env.ts";
 import { dim, heading, info, ok, warn } from "../cli/log.ts";
-import { createTarGz, extractTarGz, listTarGz } from "../fs/archive.ts";
-import { isSafeRelativePath } from "../fs/paths.ts";
+import {
+    ArchiveTooLargeError, assertSafeArchive, createTarGz, extractTarGz,
+    listTarGz, UnsafeArchivePathError,
+} from "../fs/archive.ts";
 import { resolve } from "node:path";
 import { existsSync } from "node:fs";
 import type { RestoreResult } from "../types/results.ts";
@@ -71,20 +73,30 @@ export function executeRestore(opts: RestoreOptions, env: CliEnv): RestoreResult
     }
 
     const mount = resolveMount(env);
-    const entries = listTarGz(archivePath);
 
-    // Path-safety pre-scan (F8). Fail before taking a safety snapshot —
-    // a malicious archive shouldn't cause us to do any filesystem work.
-    for (const e of entries) {
-        if (e.endsWith("/")) continue;
-        if (!isSafeRelativePath(e)) {
+    // Safety pre-scan: fail before taking a safety snapshot, before
+    // reading the full entry list, before anything. A malicious archive
+    // shouldn't cause ANY filesystem work on our side.
+    try {
+        assertSafeArchive(archivePath);
+    } catch (e) {
+        if (e instanceof UnsafeArchivePathError) {
             throw new KindlyError(
                 ErrorCodes.ARCHIVE_UNSAFE_PATH,
-                `archive contains unsafe path: ${e}`,
+                e.message,
                 [{ text: "Archive was built outside kindly or tampered with; do not restore it. Produce a fresh snapshot with `kindly snapshot`." }],
             );
         }
+        if (e instanceof ArchiveTooLargeError) {
+            throw new KindlyError(
+                ErrorCodes.ARCHIVE_TOO_LARGE,
+                e.message,
+                [{ text: "Archive exceeds kindly's compression-bomb guard. Verify its provenance before restoring." }],
+            );
+        }
+        throw e;
     }
+    const entries = listTarGz(archivePath);
 
     if (opts.dryRun) {
         return {

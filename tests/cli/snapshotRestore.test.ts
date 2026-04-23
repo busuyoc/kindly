@@ -145,6 +145,32 @@ describe("restore", () => {
         expect(stderr.value).toContain("archive not found");
     });
 
+    test("rejects archive that trips the compression-bomb guard (A9)", async () => {
+        // Build a real gzip-compressed archive and confirm the extractTarGz
+        // caps trigger. We craft the archive small but with a highly
+        // compressible payload, then use tight custom caps to trip the
+        // uncompressed-bytes guard without needing a real GB of data.
+        const stage = mkdtempSync(join(tmpdir(), "kindly-bomb-"));
+        // 1 MiB of zeros compresses to <2 KiB.
+        const bigPayload = Buffer.alloc(1024 * 1024, 0);
+        writeFileSync(join(stage, "big.bin"), bigPayload);
+        const archive = join(workdir, "bomb.tar.gz");
+        const r = spawnSync(
+            "tar", ["-czf", archive, "-C", stage, "big.bin"],
+            { encoding: "utf8" },
+        );
+        expect(r.status).toBe(0);
+
+        // Library-level check: low uncompressed cap should trip.
+        const { extractTarGz, ArchiveTooLargeError } =
+            await import("../../src/fs/archive.ts");
+        expect(() => extractTarGz({
+            archivePath: archive,
+            destRoot: join(workdir, "dest"),
+            maxUncompressedBytes: 64 * 1024,   // 64 KiB — payload is 1 MiB
+        })).toThrow(ArchiveTooLargeError);
+    });
+
     test("rejects archive with an absolute-path entry before any write (F8)", async () => {
         // Hand-craft a malicious archive: an absolute path entry is one of
         // the traversal vectors isSafeRelativePath rejects. Build via `tar

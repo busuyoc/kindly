@@ -22,6 +22,7 @@ import { ArgError, parseArgs, type FlagSpecs } from "../cli/args.ts";
 import { type CliEnv, resolveMount } from "../cli/env.ts";
 import { dim, heading, info, ok, warn } from "../cli/log.ts";
 import { createTarGz, extractTarGz, listTarGz } from "../fs/archive.ts";
+import { isSafeRelativePath } from "../fs/paths.ts";
 import { safeWrite } from "../fs/safeWrite.ts";
 import type { RollbackResult } from "../types/results.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
@@ -93,6 +94,20 @@ export function executeRollback(opts: RollbackOptions, env: CliEnv): RollbackRes
 
     const mount = resolveMount(env);
     const fatEntries: string[] = hasFat ? listTarGz(fatSnap) : [];
+
+    // Path-safety pre-scan (F8). These archives come from disk — they're
+    // ours by construction — but honor the same "verify before extract"
+    // rule as restore, for defense in depth.
+    for (const e of fatEntries) {
+        if (e.endsWith("/")) continue;
+        if (!isSafeRelativePath(e)) {
+            throw new KindlyError(
+                ErrorCodes.ARCHIVE_UNSAFE_PATH,
+                `snapshot archive contains unsafe path: ${e}`,
+                [{ text: "This shouldn't happen for a kindly-produced snapshot. Do not roll back from this directory; report the issue." }],
+            );
+        }
+    }
 
     if (opts.dryRun) {
         return {

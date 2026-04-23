@@ -1,4 +1,5 @@
 import { describe, test, expect, beforeEach } from "bun:test";
+import { spawnSync } from "node:child_process";
 import {
     existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync,
 } from "node:fs";
@@ -142,6 +143,30 @@ describe("restore", () => {
         const code = await main(["restore", "/nowhere/nope.tar.gz"], env);
         expect(code).toBe(1);
         expect(stderr.value).toContain("archive not found");
+    });
+
+    test("rejects archive with an absolute-path entry before any write (F8)", async () => {
+        // Hand-craft a malicious archive: an absolute path entry is one of
+        // the traversal vectors isSafeRelativePath rejects. Build via `tar
+        // -P` which preserves absolute paths in the archive.
+        const stage = mkdtempSync(join(tmpdir(), "kindly-evil-"));
+        const payload = join(stage, "pwn.txt");
+        writeFileSync(payload, "pwn\n");
+        const archive = join(workdir, "evil.tar.gz");
+        const r = spawnSync("tar", ["-czPf", archive, payload], { encoding: "utf8" });
+        expect(r.status).toBe(0);
+
+        const settingsPath = join(fakeKindle, "koreader", "settings.reader.lua");
+        const before = readFileSync(settingsPath, "utf8");
+
+        const code = await main(["restore", archive], env);
+        expect(code).toBe(1);
+        expect(stderr.value).toContain("unsafe path");
+
+        // No safety snapshot was taken — we failed before any filesystem work.
+        expect(existsSync(join(workdir, ".kindly", "pre-restore"))).toBe(false);
+        // Device untouched.
+        expect(readFileSync(settingsPath, "utf8")).toBe(before);
     });
 
     test("errors when no archive positional given", async () => {

@@ -14,6 +14,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, statSync } from "node:fs";
 import { dirname } from "node:path";
+import { isSafeRelativePath } from "./paths.ts";
 
 export type CreateOptions = {
     /** Root directory whose children will be archived. Paths inside the
@@ -85,6 +86,17 @@ export type ExtractResult = {
     fileCount: number;
 };
 
+/** Thrown when an archive lists a path that could escape the extraction
+ *  root (absolute, contains "..", null byte, drive letter, or backslash).
+ *  F8 from 87 — never let `tar -xzf` operate on an archive we haven't
+ *  validated first. */
+export class UnsafeArchivePathError extends Error {
+    constructor(public readonly path: string) {
+        super(`archive contains unsafe path: ${path}`);
+        this.name = "UnsafeArchivePathError";
+    }
+}
+
 export function extractTarGz(opts: ExtractOptions): ExtractResult {
     const { archivePath, destRoot } = opts;
     if (!existsSync(archivePath)) {
@@ -92,8 +104,14 @@ export function extractTarGz(opts: ExtractOptions): ExtractResult {
     }
     if (!existsSync(destRoot)) mkdirSync(destRoot, { recursive: true });
 
-    // Count files first so we can report something concrete to the user.
+    // Path-safety sweep BEFORE extraction (F8 from 87). Directory entries
+    // in tar listings are suffixed with "/"; strip that before validating.
     const listed = listTarGz(archivePath).filter((p) => !p.endsWith("/"));
+    for (const entry of listed) {
+        if (!isSafeRelativePath(entry)) {
+            throw new UnsafeArchivePathError(entry);
+        }
+    }
 
     const r = spawnSync("tar", ["-xzf", archivePath, "-C", destRoot], { encoding: "utf8" });
     if (r.status !== 0) {

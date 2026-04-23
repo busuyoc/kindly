@@ -15,6 +15,7 @@ import { ArgError, parseArgs, type FlagSpecs } from "../cli/args.ts";
 import { type CliEnv, resolveMount } from "../cli/env.ts";
 import { dim, heading, info, ok, warn } from "../cli/log.ts";
 import { createTarGz, extractTarGz, listTarGz } from "../fs/archive.ts";
+import { isSafeRelativePath } from "../fs/paths.ts";
 import { resolve } from "node:path";
 import { existsSync } from "node:fs";
 import type { RestoreResult } from "../types/results.ts";
@@ -71,6 +72,19 @@ export function executeRestore(opts: RestoreOptions, env: CliEnv): RestoreResult
 
     const mount = resolveMount(env);
     const entries = listTarGz(archivePath);
+
+    // Path-safety pre-scan (F8). Fail before taking a safety snapshot —
+    // a malicious archive shouldn't cause us to do any filesystem work.
+    for (const e of entries) {
+        if (e.endsWith("/")) continue;
+        if (!isSafeRelativePath(e)) {
+            throw new KindlyError(
+                ErrorCodes.ARCHIVE_UNSAFE_PATH,
+                `archive contains unsafe path: ${e}`,
+                [{ text: "Archive was built outside kindly or tampered with; do not restore it. Produce a fresh snapshot with `kindly snapshot`." }],
+            );
+        }
+    }
 
     if (opts.dryRun) {
         return {

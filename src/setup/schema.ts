@@ -47,21 +47,10 @@ export const SettingValueSchema: z.ZodType<SettingValue> = z.lazy(() =>
 
 const SHA256_HEX = /^sha256:[a-f0-9]{64}$/;
 
-// Reject anything that could escape the extraction root or be interpreted as
-// a non-relative path on any platform. Setups come from strangers; "by
-// shape, not by trust" is the rule. The koreader/ layout is POSIX, so "/"
-// is the only valid separator — backslashes are rejected outright.
-export function isSafeRelativePath(p: string): boolean {
-    if (p.length === 0) return false;
-    if (p.includes("\0")) return false;              // null byte
-    if (p.startsWith("/")) return false;             // POSIX absolute
-    if (/^[a-zA-Z]:/.test(p)) return false;          // Windows drive letter
-    if (p.includes("\\")) return false;              // Windows separator
-    for (const seg of p.split("/")) {
-        if (seg === "..") return false;              // traversal
-    }
-    return true;
-}
+// Path-safety predicate lives in src/fs/paths.ts — re-exported here so
+// existing setup/*.ts imports keep working without a churn PR.
+import { isSafeRelativePath } from "../fs/paths.ts";
+export { isSafeRelativePath };
 
 const SafeRelPathSchema = z
     .string()

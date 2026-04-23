@@ -14,7 +14,6 @@
 // src/lib/setupInspect.ts) assemble the inputs; this module does the
 // walking, hashing, scanning, and suppression math.
 
-import { hashBytes } from "../setup/canonical.ts";
 import { scanLuaSource } from "../setup/luaScan.ts";
 import type { EmbeddedFile } from "../setup/schema.ts";
 import type { ScanFinding, ScanReport } from "../types/results.ts";
@@ -129,18 +128,4 @@ export function scanShippedLuaFiles(inputs: ScanInputs): ScanReport {
     });
 
     return { findings, filesScanned, bytesScanned, suppressedByCatalog };
-}
-
-// Convenience used by setupInspect.ts, which loads the archive but
-// doesn't know about catalog verdicts. The verify hash (for suppression)
-// is optional — when the pipeline has no hash report (lean inspect flow),
-// we still scan everything; findings just aren't suppressible.
-export function hashesForShippedPlugins(
-    files: Map<string, Buffer>,
-): Map<string, string> {
-    const out = new Map<string, string>();
-    for (const [path, bytes] of files) {
-        out.set(path, hashBytes(bytes as unknown as Uint8Array));
-    }
-    return out;
 }

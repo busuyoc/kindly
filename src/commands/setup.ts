@@ -826,7 +826,7 @@ function renderScanReport(report: NonNullable<SetupInspectResult["scanReport"]>,
         `scanner findings: ${report.findings.length} across ${uniqueFiles.size} file(s)`,
     );
     if (report.suppressedByCatalog > 0) {
-        info(env, dim(env, `  (${report.suppressedByCatalog} plugin(s) suppressed by catalog hash match)`));
+        info(env, dim(env, `  (${report.suppressedByCatalog} file(s) suppressed by catalog hash match)`));
     }
     for (const f of report.findings) {
         const tag = paint(env, "red", `[${f.category}]`);

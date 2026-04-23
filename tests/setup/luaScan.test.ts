@@ -102,7 +102,7 @@ describe("scanLuaSource — dynamic-load category", () => {
     test("load(variable) fires", () => {
         expect(categories(`load(body)`)).toEqual(["dynamic-load"]);
     });
-    test("load() empty call fires (loads from stdin)", () => {
+    test("load() empty call does NOT fire (no arg to inspect)", () => {
         expect(categories(`load()`)).toEqual([]);
         // Empty parens: spec regex requires 1 non-ws char after `(`.
         // `)` is excluded from the non-literal char class → no match.

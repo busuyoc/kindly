@@ -15,7 +15,10 @@ import {
     filterForYaml, classifyKey, changeHitsSensitive, sensitiveDomain,
 } from "../schema/classify.ts";
 import { mergeYamlIntoLua, replaceYamlIntoLua } from "../schema/yaml.ts";
-import { computeChanges, computeReplaceChanges, type Change } from "../schema/diff.ts";
+import {
+    REPLACE_REMOVAL_WARN_THRESHOLD, computeChanges, computeReplaceChanges,
+    topLevelRemovedKeys, type Change,
+} from "../schema/diff.ts";
 import { safeWrite } from "../fs/safeWrite.ts";
 import { createTarGz } from "../fs/archive.ts";
 import { type CliEnv, resolveMount } from "../cli/env.ts";
@@ -276,6 +279,25 @@ function formatSensitiveChange(changes: readonly Change[], hitPath: string): str
     return "(change)";
 }
 
+// W34d: if this is a replace-mode Setup and the top-level removal count
+// crosses the threshold, return a warning payload so renderers can surface
+// a distinct banner ("this will wipe N of your settings"). Null otherwise.
+// Only top-level removes count — nested removes inside a merged parent are
+// normal structural churn, not a wipe.
+function computeReplaceWarnings(
+    applyMode: "additive" | "replace",
+    changes: readonly Change[],
+): SetupImportResult["replaceWarnings"] {
+    if (applyMode !== "replace") return null;
+    const removed = topLevelRemovedKeys(changes);
+    if (removed.length <= REPLACE_REMOVAL_WARN_THRESHOLD) return null;
+    return {
+        removedUserKeys: removed.length,
+        threshold: REPLACE_REMOVAL_WARN_THRESHOLD,
+        sampleKeys: removed.slice(0, 20),
+    };
+}
+
 // W32 (89 §4): build the plugin hash report for a fat Setup being imported.
 // Subset mode: the Setup may legitimately ship a subset of a plugin's files
 // (§5.4), so catalog-only files are NOT reported as MISSING.
@@ -512,6 +534,21 @@ export function executeSetupImport(
     }
     const sensitiveHits = [...sensitiveHitSet].sort();
 
+    // W34d + W34e strict gate: a replace-mode Setup that wipes more than
+    // REPLACE_REMOVAL_WARN_THRESHOLD top-level USER keys is almost certainly
+    // not what a CI pipeline intended to import. Refuse before the SENSITIVE
+    // check so the error message points at the right thing.
+    const replaceWarningPayload = computeReplaceWarnings(manifest.apply_mode, changes);
+    if (opts.strictImports && replaceWarningPayload) {
+        const sample = replaceWarningPayload.sampleKeys.join(", ");
+        throw new KindlyError(
+            ErrorCodes.STRICT_IMPORT_BLOCKED,
+            `--strict-imports: replace-mode Setup would remove ${replaceWarningPayload.removedUserKeys} top-level USER key(s) ` +
+            `(threshold ${replaceWarningPayload.threshold}). First few: ${sample}`,
+            [{ text: "Verify the Setup's apply_mode and the device state are what you expect, or drop --strict-imports." }],
+        );
+    }
+
     // W34e strict mode: any SENSITIVE hit blocks, acceptance overrides
     // are ignored (and forbidden at the CLI layer). Runs in dry-run too —
     // CI uses --dry-run + --strict-imports as a "is this safe to import?"
@@ -593,6 +630,7 @@ export function executeSetupImport(
         fatSnapshotPath: null,
         pluginHashReport,
         compat: compatSummary,
+        replaceWarnings: replaceWarningPayload,
         ...(manifest.meta.author ? { author: manifest.meta.author } : {}),
         ...(manifest.meta.description ? { description: manifest.meta.description } : {}),
         ...(manifest.meta.source_url ? { sourceUrl: manifest.meta.source_url } : {}),

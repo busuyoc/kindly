@@ -320,3 +320,95 @@ describe("replace mode — empty manifest", () => {
         expect(after.last_migration_date).toBe(20250101);
     });
 });
+
+describe("replace mode — W34d large-removal warning", () => {
+    function makeBigLua(keyCount: number): string {
+        const lines: string[] = ["return {"];
+        for (let i = 0; i < keyCount; i++) {
+            lines.push(`    ["big_user_key_${i}"] = ${i},`);
+        }
+        lines.push("}\n");
+        return lines.join("\n");
+    }
+
+    test("replace wipe > threshold surfaces replaceWarnings in dry-run result", async () => {
+        // 60 device keys, manifest keeps 1 → 59 removals
+        const k = makeFakeKindle(makeBigLua(60));
+        workdir = mkdtempSync(join(tmpdir(), "kindly-w34d-w-"));
+        ({ env, out: stdout, err: stderr } = makeEnv(workdir, k.root));
+        manifestPath = join(workdir, "setup.kset.yaml");
+
+        writeManifestFile(manifestPath, makeReplaceManifest({
+            settings: { big_user_key_0: 0 },
+        }));
+        const code = await main(
+            ["setup", "import", manifestPath, "--dry-run", "--json"],
+            env,
+        );
+        expect(code).toBe(0);
+        const payload = JSON.parse(stdout.value);
+        expect(payload.status).toBe("ok");
+        expect(payload.data.replaceWarnings).toBeDefined();
+        expect(payload.data.replaceWarnings.removedUserKeys).toBe(59);
+        expect(payload.data.replaceWarnings.threshold).toBe(50);
+        expect(payload.data.replaceWarnings.sampleKeys.length).toBe(20);
+    });
+
+    test("replace wipe at threshold → no warning", async () => {
+        const k = makeFakeKindle(makeBigLua(51));
+        workdir = mkdtempSync(join(tmpdir(), "kindly-w34d-edge-"));
+        ({ env, out: stdout, err: stderr } = makeEnv(workdir, k.root));
+        manifestPath = join(workdir, "setup.kset.yaml");
+
+        writeManifestFile(manifestPath, makeReplaceManifest({
+            settings: { big_user_key_0: 0 },
+        }));
+        const code = await main(
+            ["setup", "import", manifestPath, "--dry-run", "--json"],
+            env,
+        );
+        expect(code).toBe(0);
+        const payload = JSON.parse(stdout.value);
+        expect(payload.data.replaceWarnings).toBeNull();
+    });
+
+    test("--strict-imports blocks on large replace wipe", async () => {
+        const k = makeFakeKindle(makeBigLua(60));
+        workdir = mkdtempSync(join(tmpdir(), "kindly-w34d-strict-"));
+        ({ env, out: stdout, err: stderr } = makeEnv(workdir, k.root));
+        manifestPath = join(workdir, "setup.kset.yaml");
+
+        writeManifestFile(manifestPath, makeReplaceManifest({
+            settings: { big_user_key_0: 0 },
+        }));
+        const code = await main(
+            ["setup", "import", manifestPath, "--strict-imports", "--json"],
+            env,
+        );
+        expect(code).toBe(1);
+        const payload = JSON.parse(stderr.value);
+        expect(payload.error.code).toBe("STRICT_IMPORT_BLOCKED");
+        expect(payload.error.message).toContain("59");
+        expect(payload.error.message).toContain("replace-mode");
+        // No write happened.
+        expect(readFileSync(k.settingsPath, "utf8")).toBe(makeBigLua(60));
+    });
+
+    test("text-mode preview renders the warning banner", async () => {
+        const k = makeFakeKindle(makeBigLua(60));
+        workdir = mkdtempSync(join(tmpdir(), "kindly-w34d-text-"));
+        ({ env, out: stdout, err: stderr } = makeEnv(workdir, k.root));
+        manifestPath = join(workdir, "setup.kset.yaml");
+
+        writeManifestFile(manifestPath, makeReplaceManifest({
+            settings: { big_user_key_0: 0 },
+        }));
+        const code = await main(
+            ["setup", "import", manifestPath, "--dry-run"],
+            env,
+        );
+        expect(code).toBe(0);
+        expect(stderr.value).toContain("remove 59");
+        expect(stderr.value).toContain("threshold 50");
+    });
+});

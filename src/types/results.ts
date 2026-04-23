@@ -232,6 +232,15 @@ export interface SetupInspectResult {
          *  the sorted hit list, which keeps output deterministic. */
         byDomain: Record<string, string[]>;
     };
+    /** W34d: only populated when `preview` is present AND the manifest is
+     *  replace-mode AND the removal count exceeds the "looks accidental"
+     *  threshold. Same shape as SetupImportResult.replaceWarnings for
+     *  renderer reuse. */
+    replaceWarnings?: {
+        removedUserKeys: number;
+        threshold: number;
+        sampleKeys: string[];
+    };
 }
 
 export interface SetupExportResult {
@@ -332,6 +341,19 @@ export interface SetupImportResult {
         unverifiable: string[];
         blocking: string[];
         forced: boolean;
+    } | null;
+    /** W34d: present when apply_mode is replace AND the removal count
+     *  crosses a threshold that a naive user might not have intended.
+     *  `removedUserKeys` counts only USER-class removals (secrets and
+     *  ephemerals are always preserved, so they don't cause alarm).
+     *  Null when the manifest is additive, or when the removal count is
+     *  below threshold. */
+    replaceWarnings: {
+        removedUserKeys: number;
+        threshold: number;
+        /** First ~20 removed key names so text/json renderers can preview
+         *  the scope of the wipe. */
+        sampleKeys: string[];
     } | null;
 }
 

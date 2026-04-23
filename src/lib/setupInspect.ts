@@ -10,7 +10,10 @@ import { parseSettingsFile } from "../lua/reader.ts";
 import type { LuaValue } from "../lua/writer.ts";
 import { canonicalizeManifest, hashBytes, manifestHash, shortId } from "../setup/canonical.ts";
 import type { SetupManifest } from "../setup/schema.ts";
-import { computeChanges, computeReplaceChanges, type Change } from "../schema/diff.ts";
+import {
+    REPLACE_REMOVAL_WARN_THRESHOLD, computeChanges, computeReplaceChanges,
+    topLevelRemovedKeys, type Change,
+} from "../schema/diff.ts";
 import { collectSensitiveFromSettings, sensitiveDomain } from "../schema/classify.ts";
 import { groupChanges } from "../taxonomy/group.ts";
 import type { SetupInspectResult } from "../types/results.ts";
@@ -69,8 +72,36 @@ export function executeSetupInspect(
         patchesCount: manifest.patches?.length ?? 0,
         isCanonical,
         ...(isCanonical ? {} : { canonicalHash: manifestHash(manifest) }),
-        ...(opts.preview ? { preview: computePreview(manifest, opts.preview, env) } : {}),
+        ...previewAndWarnings(manifest, opts.preview, env),
         ...securityBlock(manifest),
+    };
+}
+
+// Assemble the preview payload (if requested) plus any replace-mode
+// removal warning that falls out of those changes. Kept in one place so
+// the changes list is computed only once per inspect call.
+function previewAndWarnings(
+    manifest: SetupManifest,
+    mode: "vs-device" | "vs-default" | undefined,
+    env: CliEnv,
+): Pick<SetupInspectResult, "preview" | "replaceWarnings"> {
+    if (!mode) return {};
+    const preview = computePreview(manifest, mode, env);
+    const warnings = replaceWarningsFromChanges(manifest.apply_mode, preview.changes);
+    return { preview, ...(warnings ? { replaceWarnings: warnings } : {}) };
+}
+
+function replaceWarningsFromChanges(
+    applyMode: "additive" | "replace",
+    changes: readonly Change[],
+): NonNullable<SetupInspectResult["replaceWarnings"]> | null {
+    if (applyMode !== "replace") return null;
+    const removed = topLevelRemovedKeys(changes);
+    if (removed.length <= REPLACE_REMOVAL_WARN_THRESHOLD) return null;
+    return {
+        removedUserKeys: removed.length,
+        threshold: REPLACE_REMOVAL_WARN_THRESHOLD,
+        sampleKeys: removed.slice(0, 20),
     };
 }
 

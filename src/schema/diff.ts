@@ -26,6 +26,23 @@ export type Change =
     | { kind: "changed"; path: string[]; prev: LuaValue; next: LuaValue }
     | { kind: "removed"; path: string[]; prev: LuaValue };
 
+// W34d: the "this replace-mode Setup looks accidentally destructive" threshold.
+// 50 matches docs/80 v0.11 W34d acceptance criteria. Tuned empirically if field
+// feedback shows legitimate Setups tripping it.
+export const REPLACE_REMOVAL_WARN_THRESHOLD = 50;
+
+// Top-level removed key names from a changes list. Used for the
+// replace-mode removal warning banner (W34d): only top-level keys count,
+// because nested "removed" entries under a changed parent are part of a
+// natural merge, not a wipe.
+export function topLevelRemovedKeys(changes: readonly Change[]): string[] {
+    const out: string[] = [];
+    for (const c of changes) {
+        if (c.kind === "removed" && c.path.length === 1) out.push(c.path[0]!);
+    }
+    return out;
+}
+
 export function computeChanges(
     onDevice: Record<string, LuaValue>,
     fromYaml: Record<string, LuaValue>

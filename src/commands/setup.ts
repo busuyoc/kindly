@@ -320,6 +320,15 @@ export function renderSetupInspect(result: SetupInspectResult, env: CliEnv): voi
         }
     }
 
+    if (result.replaceWarnings) {
+        const { removedUserKeys, threshold, sampleKeys } = result.replaceWarnings;
+        warn(env,
+            `replace-mode Setup would remove ${removedUserKeys} top-level USER key(s) ` +
+            `(threshold ${threshold}) — on apply, these device settings would be wiped.`,
+        );
+        info(env, dim(env, `  first: ${sampleKeys.join(", ")}${removedUserKeys > sampleKeys.length ? ", ..." : ""}`));
+    }
+
     if (result.preview) {
         const { preview } = result;
         const totalChanges = preview.changes.length;
@@ -885,6 +894,14 @@ export function renderSetupImport(
             heading(env, `${result.changes.length} change(s) to apply (replace mode):`);
             info(env, dim(env, `  replace mode: USER keys not declared in the manifest will be removed.`));
             info(env, dim(env, `  secrets and ephemerals are preserved regardless.`));
+            if (result.replaceWarnings) {
+                const { removedUserKeys, threshold, sampleKeys } = result.replaceWarnings;
+                warn(env,
+                    `this Setup would remove ${removedUserKeys} top-level USER key(s) ` +
+                    `(threshold ${threshold}) — verify apply_mode is what you intended.`,
+                );
+                info(env, dim(env, `  first: ${sampleKeys.join(", ")}${removedUserKeys > sampleKeys.length ? ", ..." : ""}`));
+            }
         } else {
             heading(env, `${result.changes.length} change(s) to apply:`);
         }

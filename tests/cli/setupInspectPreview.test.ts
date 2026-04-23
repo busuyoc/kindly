@@ -210,3 +210,82 @@ describe("setup inspect text mode — preview summary", () => {
         expect(stdout.value).toMatch(/fonts: 1/);
     });
 });
+
+describe("setup inspect — W34d replace-mode removal warning", () => {
+    function makeBigKindle(keyCount: number): string {
+        const settings: LuaTable = {};
+        for (let i = 0; i < keyCount; i++) {
+            settings[`user_key_${i}`] = i;
+        }
+        return makeFakeKindle(settings);
+    }
+
+    test("replace-mode removing >50 USER keys → replaceWarnings populated", () => {
+        // Device has 60 USER keys; manifest keeps just 1 → 59 removals.
+        env.mountOverride = makeBigKindle(60);
+
+        const m = makeManifest(
+            { user_key_0: 0 },
+            { apply_mode: "replace" },
+        );
+        const p = join(setupsDir, "wipe.kset.yaml");
+        writeFileSync(p, canonicalizeManifest(m));
+
+        const r = executeSetupInspect(p, env, { preview: "vs-device" });
+        expect(r.replaceWarnings).toBeDefined();
+        expect(r.replaceWarnings!.removedUserKeys).toBe(59);
+        expect(r.replaceWarnings!.threshold).toBe(50);
+        expect(r.replaceWarnings!.sampleKeys.length).toBeLessThanOrEqual(20);
+    });
+
+    test("replace-mode just under threshold → no warning", () => {
+        env.mountOverride = makeBigKindle(51);  // 50 removals = at threshold
+        const m = makeManifest(
+            { user_key_0: 0 },
+            { apply_mode: "replace" },
+        );
+        const p = join(setupsDir, "edge.kset.yaml");
+        writeFileSync(p, canonicalizeManifest(m));
+
+        const r = executeSetupInspect(p, env, { preview: "vs-device" });
+        expect(r.replaceWarnings).toBeUndefined();
+    });
+
+    test("additive mode large delta → no warning (additive never removes)", () => {
+        env.mountOverride = makeBigKindle(100);
+        // Additive won't emit any "removed" changes, so count is 0.
+        const m = makeManifest({ user_key_0: 0 }, { apply_mode: "additive" });
+        const p = join(setupsDir, "additive.kset.yaml");
+        writeFileSync(p, canonicalizeManifest(m));
+
+        const r = executeSetupInspect(p, env, { preview: "vs-device" });
+        expect(r.replaceWarnings).toBeUndefined();
+    });
+
+    test("no --vs-* preview → no warning computed (need baseline)", () => {
+        const m = makeManifest(
+            { user_key_0: 0 },
+            { apply_mode: "replace" },
+        );
+        const p = join(setupsDir, "noprev.kset.yaml");
+        writeFileSync(p, canonicalizeManifest(m));
+
+        const r = executeSetupInspect(p, env);
+        expect(r.replaceWarnings).toBeUndefined();
+    });
+
+    test("text mode shows the warning banner", async () => {
+        env.mountOverride = makeBigKindle(60);
+        const m = makeManifest(
+            { user_key_0: 0 },
+            { apply_mode: "replace" },
+        );
+        const p = join(setupsDir, "banner.kset.yaml");
+        writeFileSync(p, canonicalizeManifest(m));
+
+        const code = await main(["setup", "inspect", p, "--vs-device"], env);
+        expect(code).toBe(0);
+        expect(stderr.value).toContain("remove 59");
+        expect(stderr.value).toContain("threshold 50");
+    });
+});

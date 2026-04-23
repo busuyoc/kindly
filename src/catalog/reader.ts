@@ -75,10 +75,6 @@ export const PluginEntrySchema = z.object({
      *  `null` when the extractor couldn't hash (predates W32 or failed to
      *  walk the directory). Omitted on entries that predate the field. */
     known_hashes: KnownHashesSchema.nullable().optional(),
-    /** W32 (89 §2): KOReader source version these hashes were computed
-     *  from. Drives the version-skew advisory when the device runs a
-     *  different version. `null` / omitted on pre-W32 entries. */
-    koreader_hash_version: z.string().nullable().optional(),
 }).passthrough();
 
 export type PluginEntry = z.infer<typeof PluginEntrySchema>;
@@ -88,6 +84,11 @@ export const PluginCatalogSchema = z.object({
     license: z.string(),
     curated_at: z.string(),
     koreader_source: z.string(),
+    /** W32 (89 §2): KOReader source version the hashes were computed
+     *  from. One value per catalog — spec §5.3 "one hash set per catalog".
+     *  Drives the version-skew advisory when the device runs a different
+     *  version. Null/omitted on catalogs that predate W32. */
+    koreader_hash_version: z.string().nullable().optional(),
     plugin_count: z.number().int().nonnegative(),
     plugins: z.array(PluginEntrySchema),
 }).passthrough();

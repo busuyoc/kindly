@@ -30,12 +30,14 @@ import { parseManifest } from "../../src/setup/schema.ts";
 function writeSyntheticCatalog(
     dir: string,
     plugins: unknown[],
+    hashVersion?: string,
 ): string {
     const body: PluginCatalog = {
         catalog_version: "v1" as const,
         license: "MIT",
         curated_at: "2026-04-23",
         koreader_source: "test-src",
+        koreader_hash_version: hashVersion ?? null,
         plugin_count: plugins.length,
         plugins: plugins as PluginCatalog["plugins"],
     };
@@ -206,9 +208,8 @@ describe("pluginHashReport — MATCH/MISMATCH against synthetic catalog", () => 
                     "main.lua": hashBytes(Buffer.from(mainSrc)),
                     "_meta.lua": hashBytes(Buffer.from(metaSrc)),
                 },
-                koreader_hash_version: "v2026.01",
             }),
-        ]);
+        ], "v2026.01");
         const src = await exportFat("SSH.koplugin", {
             "main.lua": mainSrc, "_meta.lua": metaSrc,
         });
@@ -337,9 +338,8 @@ describe("setup import renderer — §5.6 data-loss + version-skew advisory", ()
             stubCatalogEntry({
                 name: "SSH",
                 known_hashes: { "main.lua": hashBytes(Buffer.from("-- orig\n")) },
-                koreader_hash_version: "v2025.01-pinned",
             }),
-        ]);
+        ], "v2025.01-pinned");
         const src = await exportFat("SSH.koplugin", { "main.lua": "-- tampered\n" });
         const r = executeSetupImport(
             { file: src, acceptPlugins: true, catalogPath, dryRun: true },
@@ -453,9 +453,8 @@ describe("extractor + verifier round-trip", () => {
             stubCatalogEntry({
                 name: "SSH",
                 known_hashes: hashes,
-                koreader_hash_version: "rt-v1",
             }),
-        ]);
+        ], "rt-v1");
         // Export + re-import the very bytes the extractor just hashed.
         const outPath = join(workdir, "rt.kset");
         const code = await main([

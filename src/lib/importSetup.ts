@@ -298,16 +298,9 @@ function computePluginHashReport(
         verdicts.push(verifyPluginAgainstCatalog(name, files, catalog, "subset"));
     }
 
-    // catalogVersion: first non-null koreader_hash_version from the plugins
-    // we looked at. Different entries could theoretically carry different
-    // versions, but the curated catalog is produced from one source tree
-    // at a time, so picking the first is fine.
-    let catalogVersion: string | null = null;
-    for (const v of verdicts) {
-        if (v.status === "MALFORMED_STRUCTURE") continue;
-        const e = catalog.plugins.find((p) => p.name === v.name);
-        if (e?.koreader_hash_version) { catalogVersion = e.koreader_hash_version; break; }
-    }
+    // catalogVersion comes from the catalog-level field (89 §5.3 "one
+    // hash set per catalog"). Null when the catalog predates W32.
+    const catalogVersion = catalog.koreader_hash_version ?? null;
 
     return {
         verdicts,

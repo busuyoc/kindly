@@ -32,7 +32,6 @@ function stubEntry(overrides: Partial<PluginEntry> & { name: string }): PluginEn
         computed: false,
         warnings: [],
         known_hashes: null,
-        koreader_hash_version: null,
         ...overrides,
     };
 }

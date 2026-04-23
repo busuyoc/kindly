@@ -584,6 +584,11 @@ const IMPORT_FLAGS = {
         type: "string",
         description: "accept SENSITIVE changes only for these comma-separated key names (e.g. SSH_port,debug)",
     },
+    "strict-imports": {
+        type: "boolean",
+        default: false,
+        description: "CI mode: refuse the import if any SENSITIVE key is changed, any plugin file is tampered, or any uncatalogued plugin is shipped. Incompatible with --accept-sensitive and --accept-key.",
+    },
 } as const satisfies FlagSpecs;
 
 // Parse + validate --accept-key=<a,b,c>. Returns the dotted-key set.
@@ -940,6 +945,14 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
     if (flags["accept-patches"] && flags["skip-patches"]) {
         throw new ArgError("--accept-patches and --skip-patches are mutually exclusive");
     }
+    if (flags["strict-imports"]) {
+        if (flags["accept-sensitive"]) {
+            throw new ArgError("--strict-imports and --accept-sensitive are mutually exclusive");
+        }
+        if (flags["accept-key"] !== undefined) {
+            throw new ArgError("--strict-imports and --accept-key are mutually exclusive");
+        }
+    }
 
     const expectHash = flags["expect-hash"] !== undefined
         ? normalizeExpectedHash(flags["expect-hash"])
@@ -979,6 +992,7 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
         ...(expectHash ? { expectHash } : {}),
         acceptSensitive: flags["accept-sensitive"],
         ...(acceptKey ? { acceptKey } : {}),
+        strictImports: flags["strict-imports"],
     }, env);
 
     if (env.jsonMode) {

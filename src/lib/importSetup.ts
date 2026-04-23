@@ -182,6 +182,15 @@ export interface SetupImportOptions {
      */
     acceptKey?: Set<string>;
     /**
+     * W34e: compound CI-mode gate. When true, the import refuses outright
+     * if any of the following hold: any SENSITIVE-class change, any
+     * plugin file hash mismatch (tampered), or any uncatalogued plugin
+     * shipped. Overrides (--accept-sensitive, --accept-key) are
+     * rejected at the CLI layer when this is set. Designed for scripted
+     * use — fail loudly rather than let a user click through.
+     */
+    strictImports?: boolean;
+    /**
      * Testability hook — override the plugin catalog path for hash
      * verification. Production leaves this undefined so `loadPluginCatalog`
      * reads the committed `data/catalog/plugins.bundled.v1.json`. Not
@@ -388,6 +397,24 @@ export function executeSetupImport(
             : null
     );
 
+    // W34e strict gate: refuse if any plugin is tampered or uncatalogued.
+    // Runs even in --dry-run so CI can validate without touching device.
+    if (opts.strictImports && pluginHashReport) {
+        const bad = pluginHashReport.verdicts.filter(
+            (v) => v.status === "MISMATCH" || v.status === "UNCATALOGUED",
+        );
+        if (bad.length > 0) {
+            const list = bad
+                .map((v) => `  [${v.status}] ${v.name}`)
+                .join("\n");
+            throw new KindlyError(
+                ErrorCodes.STRICT_IMPORT_BLOCKED,
+                `--strict-imports: ${bad.length} plugin integrity finding(s):\n${list}`,
+                [{ text: "Regenerate the catalog against the device's KOReader version, or drop --strict-imports if the findings are expected." }],
+            );
+        }
+    }
+
     let compatSummary: SetupImportResult["compat"] = null;
     if (manifest.compat) {
         const detected = { version: detectedVersion, family: detectedFamily };
@@ -484,6 +511,21 @@ export function executeSetupImport(
         for (const p of changeHitsSensitive(c)) sensitiveHitSet.add(p);
     }
     const sensitiveHits = [...sensitiveHitSet].sort();
+
+    // W34e strict mode: any SENSITIVE hit blocks, acceptance overrides
+    // are ignored (and forbidden at the CLI layer). Runs in dry-run too —
+    // CI uses --dry-run + --strict-imports as a "is this safe to import?"
+    // preflight and must get a non-zero exit if the answer is no.
+    if (opts.strictImports && sensitiveHits.length > 0) {
+        const list = sensitiveHits
+            .map((p) => `  [${sensitiveDomain(p)}] ${p}: ${formatSensitiveChange(changes, p)}`)
+            .join("\n");
+        throw new KindlyError(
+            ErrorCodes.STRICT_IMPORT_BLOCKED,
+            `--strict-imports: Setup modifies ${sensitiveHits.length} security-sensitive setting(s):\n${list}`,
+            [{ text: "Use a hand-audited import (drop --strict-imports) to accept any of these." }],
+        );
+    }
 
     if (!opts.dryRun && sensitiveHits.length > 0) {
         const accepted = opts.acceptKey ?? new Set<string>();

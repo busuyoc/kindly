@@ -382,6 +382,96 @@ describe("setup import — JSON error envelope", () => {
     });
 });
 
+describe("setup import — --strict-imports (W34e)", () => {
+    test("SENSITIVE change + --strict-imports → STRICT_IMPORT_BLOCKED", async () => {
+        writeManifestFile(manifestPath, makeManifest({
+            settings: { SSH_port: 2222, debug: true },
+        }));
+        const code = await main(
+            ["setup", "import", manifestPath, "--strict-imports"],
+            env,
+        );
+        expect(code).toBe(1);
+        expect(stderr.value).toContain("--strict-imports");
+        expect(stderr.value).toContain("SSH_port");
+        expect(stderr.value).toContain("debug");
+        // No write.
+        expect(readFileSync(kindle.settingsPath, "utf8")).toBe(DEFAULT_LUA);
+    });
+
+    test("--strict-imports JSON envelope uses STRICT_IMPORT_BLOCKED code", async () => {
+        writeManifestFile(manifestPath, makeManifest({
+            settings: { SSH_port: 2222 },
+        }));
+        const code = await main(
+            ["setup", "import", manifestPath, "--strict-imports", "--json"],
+            env,
+        );
+        expect(code).toBe(1);
+        const payload = JSON.parse(stderr.value);
+        expect(payload.status).toBe("error");
+        expect(payload.error.code).toBe("STRICT_IMPORT_BLOCKED");
+    });
+
+    test("--strict-imports + --accept-sensitive → ArgError exit 2", async () => {
+        writeManifestFile(manifestPath, makeManifest({
+            settings: { SSH_port: 2222 },
+        }));
+        const code = await main(
+            ["setup", "import", manifestPath,
+                "--strict-imports", "--accept-sensitive"],
+            env,
+        );
+        expect(code).toBe(2);
+        expect(stderr.value).toContain("--strict-imports");
+        expect(stderr.value).toContain("--accept-sensitive");
+    });
+
+    test("--strict-imports + --accept-key → ArgError exit 2", async () => {
+        writeManifestFile(manifestPath, makeManifest({
+            settings: { SSH_port: 2222 },
+        }));
+        const code = await main(
+            ["setup", "import", manifestPath,
+                "--strict-imports", "--accept-key=SSH_port"],
+            env,
+        );
+        expect(code).toBe(2);
+        expect(stderr.value).toContain("--strict-imports");
+        expect(stderr.value).toContain("--accept-key");
+    });
+
+    test("clean USER-only change + --strict-imports → exit 0", async () => {
+        writeManifestFile(manifestPath, makeManifest({
+            settings: { night_mode: true, refresh_rate: 4 },
+        }));
+        const code = await main(
+            ["setup", "import", manifestPath, "--strict-imports"],
+            env,
+        );
+        expect(code).toBe(0);
+        expect(stderr.value).not.toContain("STRICT_IMPORT_BLOCKED");
+        expect(readFileSync(kindle.settingsPath, "utf8")).toContain("night_mode");
+    });
+
+    test("--dry-run + --strict-imports with SENSITIVE still blocks", async () => {
+        // Strict is a CI gate: it must refuse even in dry-run, since a
+        // pipeline running `--dry-run --strict-imports` is asking "is this
+        // safe to import?" — the answer must be no if SENSITIVE keys are
+        // touched.
+        writeManifestFile(manifestPath, makeManifest({
+            settings: { SSH_port: 2222 },
+        }));
+        const code = await main(
+            ["setup", "import", manifestPath, "--dry-run", "--strict-imports"],
+            env,
+        );
+        expect(code).toBe(1);
+        expect(stderr.value).toContain("--strict-imports");
+        expect(stderr.value).toContain("SSH_port");
+    });
+});
+
 describe("setup import — CLI / lib layer split", () => {
     // Spec 88 §3.1: --accept-key format validation is a CLI concern. The
     // lib trusts opts.acceptKey is already a Set of valid key names and

@@ -10,7 +10,7 @@
 //   success → stdout (single JSON object + newline)
 //   {
 //     "$schema_version": 1,
-//     "kindly_version": "0.3.0",
+//     "kindly_version": "0.11.0",
 //     "generated_at": "2026-04-22T12:00:00.000Z",
 //     "command": "pull",
 //     "status": "ok",

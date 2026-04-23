@@ -425,3 +425,51 @@ standard merge path with zero special handling. KOReader's plugin loader
 reads this key to discover additional plugin directories, making it a
 settings-level code-execution vector that requires no fat archive and no
 special CLI flags.
+
+---
+
+## 9. KOReader plugin loader source analysis (2026-04-23)
+
+Source-level audit of `pluginloader.lua` and `userpatch.lua` on the
+mounted Kindle. Full findings in `97-pluginloader-analysis.md`.
+Three structural findings that reshape the hardening plan.
+
+**PL-1 — `plugins_disabled` covers all plugin paths (good news).**
+The quarantine mechanism works for `extra_plugin_paths` plugins too.
+`pluginloader.lua:170` checks the disabled dict for every lookup
+path, not just the default `plugins/` directory.
+
+**PL-2 — disabled plugins still execute `_meta.lua` (bad news).**
+`pluginloader.lua:171` swaps `mainfile = metafile` for disabled
+plugins, but `_load` at line 202 still does `pcall(dofile, mainfile)`.
+A malicious `_meta.lua` runs on every boot even when the plugin is
+"disabled." Quarantine alone is not sufficient — kindly must sanitize
+or replace `_meta.lua` at install time.
+
+**PL-3 — patches run unconditionally with no disable mechanism (worst news).**
+`userpatch.lua:66-84` does `pcall(dofile, fullpath)` on every
+`patches/*.lua` file matching the priority pattern. No disabled check.
+No settings key. Priority `0` patches run before `G_reader_settings`
+is even loaded (`reader.lua:24-26`). Additionally, `userpatch.lua`
+exports `debug.getupvalue` and `debug.setupvalue` as first-class API
+— a priority-1 patch can hook `pluginloader.createPluginInstance`
+and inject code into every plugin that loads after it, including
+hash-verified bundled plugins.
+
+**S4 confirmed PL-3 in practice.** A fat Setup shipping a
+BUNDLED_MATCH plugin decoy alongside a scanner-evading patch passed
+every trust gate kindly has — including `--strict-imports`. The patch
+landed in `koreader/patches/` and executed on boot. See
+`96-red-team-v0.11.1.md` §S4.
+
+**Structural limit (stated plainly):** KOReader plugins and patches
+run with full process privilege. There is no OS sandbox. There is no
+Lua sandbox (LuaJIT FFI bypasses `setfenv`). Against a skilled
+attacker targeting the uncatalogued/patch path, kindly's defense is
+**making the trust decision visible and explicit** — not proving the
+code is safe. The scanner is an advisory for unsophisticated payloads.
+The catalog hash is the only proof-grade defense, and it only covers
+the 37 bundled plugins.
+
+This limit should be visible to users, not hidden behind "scanner
+findings: 0."

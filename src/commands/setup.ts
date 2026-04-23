@@ -713,6 +713,72 @@ function renderImportAuthorBlock(result: ImportResultWithExtras, env: CliEnv): v
         info(env, `  description:  ${result.description}`);
 }
 
+// W32 (89 §7): plugin hash verification block. Surfaces MISMATCH /
+// UNCATALOGUED / UNVERIFIED / MALFORMED_STRUCTURE verdicts from the
+// catalog comparison. MATCH verdicts are silent (no news = good news).
+// Data-loss escalation (§5.6): when a MISMATCH exists AND the user passed
+// --no-safety-snapshot, `installPluginFiles` will wipe the existing
+// plugin dir without a safety copy — we spell that out at the decision
+// point.
+function renderPluginHashReport(
+    result: ImportResultWithExtras,
+    env: CliEnv,
+    safetySnapshot: boolean,
+): void {
+    const report = result.pluginHashReport;
+    if (!report) return;
+    const interesting = report.verdicts.filter((v) => v.status !== "MATCH");
+    if (interesting.length === 0) return;
+
+    warn(env, "Plugin hash verification:");
+    const catalogV = report.catalogVersion;
+    for (const v of interesting) {
+        if (v.status === "MISMATCH") {
+            env.stderr.write(`  ${v.name}.koplugin: MISMATCH\n`);
+            for (const f of v.files) {
+                if (f.status === "modified") {
+                    env.stderr.write(`    modified: ${f.file}\n`);
+                    env.stderr.write(`      expected: ${f.expected}${catalogV ? ` (catalog, KOReader ${catalogV})` : ""}\n`);
+                    env.stderr.write(`      actual:   ${f.actual} (Setup archive)\n`);
+                } else if (f.status === "extra") {
+                    env.stderr.write(`    extra: ${f.file} (not in catalog)\n`);
+                } else {
+                    env.stderr.write(`    missing: ${f.file} (catalog expected ${f.expected})\n`);
+                }
+            }
+        } else if (v.status === "UNCATALOGUED") {
+            env.stderr.write(`  ${v.name}.koplugin: UNCATALOGUED (not in bundled catalog — cannot verify)\n`);
+        } else if (v.status === "UNVERIFIED") {
+            env.stderr.write(`  ${v.name}.koplugin: UNVERIFIED (catalog predates W32 hash collection)\n`);
+        } else {
+            // MALFORMED_STRUCTURE
+            env.stderr.write(`  MALFORMED_STRUCTURE: file paths not under <name>.koplugin/:\n`);
+            for (const p of v.paths) env.stderr.write(`    - ${p}\n`);
+        }
+    }
+
+    if (report.catalogVersion && report.deviceVersion
+        && !report.versionMatch) {
+        env.stderr.write(
+            `\n  Note: catalog hashes are from KOReader ${report.catalogVersion}; ` +
+            `device runs ${report.deviceVersion}. Mismatches may reflect upstream ` +
+            `changes, not tampering.\n`,
+        );
+    }
+
+    const hasMismatch = interesting.some((v) => v.status === "MISMATCH");
+    if (hasMismatch && !safetySnapshot) {
+        warn(env,
+            "Proceeding with --no-safety-snapshot: original plugin files will be " +
+            "permanently deleted. There will be NO rollback copy.",
+        );
+    } else if (hasMismatch) {
+        info(env, dim(env,
+            "  Proceeding will replace existing plugin files; originals are in the safety snapshot.",
+        ));
+    }
+}
+
 // W33 (91 §4) + 88 §3.5: in dry-run we summarize the SENSITIVE hits as a
 // distinct block at the top of the preview. The gate didn't throw (dry-run
 // skips it), so the block stands in for the would-have-been error message.
@@ -741,13 +807,17 @@ function renderSensitiveSummary(result: ImportResultWithExtras, env: CliEnv): vo
 export function renderSetupImport(
     result: ImportResultWithExtras,
     env: CliEnv,
-    renderOpts: { allowUnknownKeys: boolean; strict: boolean; force: boolean },
+    renderOpts: { allowUnknownKeys: boolean; strict: boolean; force: boolean; safetySnapshot: boolean },
 ): void {
     // W33 (91 §4) — order is load-bearing: SENSITIVE summary first so a user
     // reads what the Setup *does* before reading who *claims* to have authored
     // it (N1 anti-anchor-trust mitigation).
     renderSensitiveSummary(result, env);
     renderImportAuthorBlock(result, env);
+    // W32 (89 §7): plugin hash verification — what's being installed, and
+    // whether it matches the curated catalog. Emitted before compat/schema
+    // so the decision surface is consolidated near the top.
+    renderPluginHashReport(result, env, renderOpts.safetySnapshot);
 
     if (result.compat) {
         env.stdout.write(`  compat check:\n`);
@@ -924,6 +994,7 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
             allowUnknownKeys: !!flags["allow-unknown-keys"],
             strict: !!flags.strict,
             force: !!flags.force,
+            safetySnapshot: flags["safety-snapshot"] !== false,
         });
     }
     return 0;

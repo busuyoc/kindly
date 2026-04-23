@@ -28,7 +28,10 @@
 // Defaults to data/catalog/plugins.bundled.v1.draft.json.
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve, relative } from "node:path";
+import { execFileSync } from "node:child_process";
+
+import { hashBytes } from "../src/setup/canonical.ts";
 
 export interface DeprecatedField {
     kind: string;
@@ -48,6 +51,10 @@ export interface PluginMeta {
     computed: boolean;
     /** Non-fatal extraction issues (missing field, couldn't parse). */
     warnings: string[];
+    /** W32 (89 §3): per-file SHA256 of the plugin's files, keyed by path
+     *  relative to the plugin folder. `null` if the directory couldn't
+     *  be walked (e.g. symlinks, permission). */
+    known_hashes: Record<string, string> | null;
 }
 
 export interface ExtractionResult {
@@ -55,6 +62,11 @@ export interface ExtractionResult {
     /** Short provenance label — basename of the source tree, not the
      *  absolute path (keeps committed drafts portable). */
     koreader_source: string;
+    /** W32 (89 §3): KOReader version the hashes were computed from.
+     *  `git describe --tags --always` on the source tree; null if the
+     *  tree is not a git repo. Every plugin's `known_hashes` is valid
+     *  only for this version (§4.5 version-skew advisory uses it). */
+    koreader_hash_version: string | null;
     plugin_count: number;
     plugins: PluginMeta[];
 }
@@ -64,7 +76,10 @@ export function extractPluginMeta(metaSource: string, pluginName: string): Plugi
     const body = sliceReturnTableBody(metaSource);
     if (body === null) {
         warnings.push("could not find `return { ... }` block");
-        return { name: pluginName, fullname: null, description: null, deprecated: null, computed: false, warnings };
+        return {
+            name: pluginName, fullname: null, description: null, deprecated: null,
+            computed: false, warnings, known_hashes: null,
+        };
     }
 
     const fullnameExpr = fieldExpression(body, "fullname");
@@ -88,7 +103,47 @@ export function extractPluginMeta(metaSource: string, pluginName: string): Plugi
         deprecated: dp,
         computed: fn.computed || dc.computed,
         warnings,
+        known_hashes: null,   // populated by extractAllPlugins, which has the dir
     };
+}
+
+// Walk a plugin folder recursively and hash every regular file. Mirrors
+// `collectPluginDirs` in src/setup/files.ts — skip dotfiles. Returns
+// { path → sha256:... } keyed by path relative to `pluginDir`. Raw bytes,
+// no normalization (89 §3 "hash normalization policy").
+export function hashPluginDir(pluginDir: string): Record<string, string> {
+    const out: Record<string, string> = {};
+    const walk = (dir: string): void => {
+        for (const name of readdirSync(dir)) {
+            if (name.startsWith(".")) continue;
+            const full = join(dir, name);
+            const st = statSync(full);
+            if (st.isDirectory()) walk(full);
+            else if (st.isFile()) {
+                const rel = relative(pluginDir, full).split("\\").join("/");
+                out[rel] = hashBytes(readFileSync(full));
+            }
+            // symlinks/other → ignored; extractor's warning surfaces if hashes empty
+        }
+    };
+    walk(pluginDir);
+    return out;
+}
+
+// Derive `koreader_hash_version` from the source tree. `git describe
+// --tags --always` gives "v2024.03" on a tagged release or a shortsha
+// otherwise. Returns null if git fails (not a repo, no git binary).
+// Intentionally synchronous — the extractor is a one-shot script.
+function readKoreaderVersion(root: string): string | null {
+    try {
+        const out = execFileSync("git", ["-C", root, "describe", "--tags", "--always", "--dirty"], {
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "ignore"],
+        });
+        return out.trim() || null;
+    } catch {
+        return null;
+    }
 }
 
 export function extractAllPlugins(koreaderRoot: string): ExtractionResult {
@@ -102,21 +157,33 @@ export function extractAllPlugins(koreaderRoot: string): ExtractionResult {
 
     const plugins: PluginMeta[] = [];
     for (const folder of folders) {
-        const metaPath = join(pluginsDir, folder, "_meta.lua");
+        const pluginDir = join(pluginsDir, folder);
+        const metaPath = join(pluginDir, "_meta.lua");
         const name = folder.slice(0, -".koplugin".length);
+
+        let known_hashes: Record<string, string> | null = null;
+        try {
+            known_hashes = hashPluginDir(pluginDir);
+        } catch (e) {
+            // swallow — we'll still emit the entry with null hashes and a warning
+            void e;
+        }
+
         if (!existsSync(metaPath)) {
             plugins.push({
                 name, fullname: null, description: null, deprecated: null,
-                computed: false, warnings: ["no _meta.lua"],
+                computed: false, warnings: ["no _meta.lua"], known_hashes,
             });
             continue;
         }
         const src = readFileSync(metaPath, "utf8");
-        plugins.push(extractPluginMeta(src, name));
+        const meta = extractPluginMeta(src, name);
+        plugins.push({ ...meta, known_hashes });
     }
     return {
         extracted_at: new Date().toISOString(),
         koreader_source: basename(koreaderRoot),
+        koreader_hash_version: readKoreaderVersion(koreaderRoot),
         plugin_count: plugins.length,
         plugins,
     };

@@ -14,6 +14,7 @@ import type { Severity } from "../taxonomy/mapper.ts";
 import type { LuaValue } from "../lua/writer.ts";
 import type { HistoryEntryWithIndex } from "../history/reader.ts";
 import type { PluginEntry, PluginWithState } from "../catalog/reader.ts";
+import type { PluginHashReport } from "../catalog/verify.ts";
 
 export interface DiffGroupEntry {
     /** Joined dotted path, e.g. "footer.align" or "avoid_flashing_ui". */
@@ -274,6 +275,12 @@ export interface SetupImportResult {
     snapshotDir: string | null;
     /** Pre-install tar.gz for plugin/patch rollback. Null when no fat install. */
     fatSnapshotPath: string | null;
+    /** W32 (89 §4.3): plugin hash verification report. Populated only when
+     *  the manifest ships plugin files AND --accept-plugins was passed
+     *  (otherwise there's nothing to install and nothing to verify). Null
+     *  when --skip-plugins was passed, when no plugins ship, or when the
+     *  catalog couldn't be loaded. */
+    pluginHashReport: PluginHashReport | null;
     /** Compat-check summary. Null when manifest had no compat block. */
     compat: {
         declared: {

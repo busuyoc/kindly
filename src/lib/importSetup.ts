@@ -24,6 +24,11 @@ import { parseManifest, SetupSchemaError, type EmbeddedFile, type SetupManifest 
 import { unpackSetup } from "../setup/unpack.ts";
 import { checkCompat, formatCompatIssue } from "../setup/compat.ts";
 import { detectDeviceFamily, readKoreaderVersion } from "../device/version.ts";
+import { loadPluginCatalog } from "../catalog/reader.ts";
+import {
+    groupArchivePluginFiles, verifyPluginAgainstCatalog,
+    type PluginHashReport, type PluginVerdict,
+} from "../catalog/verify.ts";
 import { loadSchema } from "../schema/settings.ts";
 import { validateSettings, formatValidationReport, type ValidationReport } from "../schema/report.ts";
 import {
@@ -255,6 +260,55 @@ function formatSensitiveChange(changes: readonly Change[], hitPath: string): str
     return "(change)";
 }
 
+// W32 (89 §4): build the plugin hash report for a fat Setup being imported.
+// Subset mode: the Setup may legitimately ship a subset of a plugin's files
+// (§5.4), so catalog-only files are NOT reported as MISSING.
+// Version-skew advisory is computed from the catalog's
+// `koreader_hash_version` vs the device's detected version.
+// Catalog load failures fall back to a `null` report — hash verification is
+// best-effort; we don't want a stale catalog JSON to break imports.
+function computePluginHashReport(
+    shippedPlugins: readonly EmbeddedFile[],
+    fileBytes: Map<string, Buffer>,
+    deviceVersion: string | null,
+): PluginHashReport | null {
+    let catalog;
+    try { catalog = loadPluginCatalog(); }
+    catch { return null; }
+
+    const grouped = groupArchivePluginFiles(
+        shippedPlugins,
+        // Buffer ⊂ Uint8Array; the verifier only needs a byte view.
+        fileBytes as Map<string, Uint8Array>,
+    );
+
+    const verdicts: PluginVerdict[] = [];
+    if (grouped.malformed.length > 0) {
+        verdicts.push({ status: "MALFORMED_STRUCTURE", paths: grouped.malformed });
+    }
+    for (const [name, files] of grouped.plugins) {
+        verdicts.push(verifyPluginAgainstCatalog(name, files, catalog, "subset"));
+    }
+
+    // catalogVersion: first non-null koreader_hash_version from the plugins
+    // we looked at. Different entries could theoretically carry different
+    // versions, but the curated catalog is produced from one source tree
+    // at a time, so picking the first is fine.
+    let catalogVersion: string | null = null;
+    for (const v of verdicts) {
+        if (v.status === "MALFORMED_STRUCTURE") continue;
+        const e = catalog.plugins.find((p) => p.name === v.name);
+        if (e?.koreader_hash_version) { catalogVersion = e.koreader_hash_version; break; }
+    }
+
+    return {
+        verdicts,
+        catalogVersion,
+        deviceVersion,
+        versionMatch: catalogVersion !== null && catalogVersion === deviceVersion,
+    };
+}
+
 export function executeSetupImport(
     opts: SetupImportOptions,
     env: CliEnv,
@@ -315,12 +369,24 @@ export function executeSetupImport(
         );
     }
 
+    // W32: plugin hash verification — step 5 in the canonical import pipeline
+    // (89 §4.1). Runs only when the manifest ships plugins AND the user has
+    // accepted them (otherwise there's no install to protect). --skip-plugins
+    // short-circuits: nothing to verify.
+    // Version-skew advisory compares the catalog's `koreader_hash_version`
+    // against the device's KOReader version. Read both up-front so the
+    // compat check below can reuse the device version.
+    const detectedVersion = readKoreaderVersion(mount);
+    const detectedFamily = detectDeviceFamily(mount);
+    const pluginHashReport: PluginHashReport | null = (
+        shippedPlugins.length > 0 && opts.acceptPlugins
+            ? computePluginHashReport(shippedPlugins, files, detectedVersion?.raw ?? null)
+            : null
+    );
+
     let compatSummary: SetupImportResult["compat"] = null;
     if (manifest.compat) {
-        const detected = {
-            version: readKoreaderVersion(mount),
-            family: detectDeviceFamily(mount),
-        };
+        const detected = { version: detectedVersion, family: detectedFamily };
         const cr = checkCompat(manifest.compat, detected);
 
         const blocking = cr.blocking.map(formatCompatIssue);
@@ -479,6 +545,7 @@ export function executeSetupImport(
         backupPath: null,
         snapshotDir: null,
         fatSnapshotPath: null,
+        pluginHashReport,
         compat: compatSummary,
         ...(manifest.meta.author ? { author: manifest.meta.author } : {}),
         ...(manifest.meta.description ? { description: manifest.meta.description } : {}),

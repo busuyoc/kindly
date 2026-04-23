@@ -216,6 +216,7 @@ return { fullname = _("Aye"), description = _("a desc") }
             deprecated: null,
             computed: false,
             warnings: ["no _meta.lua"],
+            known_hashes: {},   // empty dir — walk returns {}
         }]);
     });
 

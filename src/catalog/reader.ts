@@ -31,6 +31,16 @@ export const DeprecatedSchema = z.object({
     detail: z.string(),
 }).passthrough();
 
+/** W32 (89 §2): per-file SHA256 of a plugin's known-good files, keyed by
+ *  path relative to the plugin folder (e.g. `"main.lua"`). Used by the
+ *  import-time hash verifier and the doctor to flag tampered or
+ *  uncatalogued plugin bytes. */
+export const KnownHashesSchema = z.record(
+    z.string(),
+    z.string().regex(/^sha256:[a-f0-9]{64}$/),
+);
+export type KnownHashes = z.infer<typeof KnownHashesSchema>;
+
 export const PluginEntrySchema = z.object({
     /** Folder basename without `.koplugin`. Matches the key used in
      *  KOReader's `plugins_disabled` settings dict. */
@@ -61,6 +71,14 @@ export const PluginEntrySchema = z.object({
     computed: z.boolean(),
     /** Extractor carry-over: non-fatal extraction warnings. */
     warnings: z.array(z.string()),
+    /** W32 (89 §2): per-file SHA256 of the plugin's known-good bytes.
+     *  `null` when the extractor couldn't hash (predates W32 or failed to
+     *  walk the directory). Omitted on entries that predate the field. */
+    known_hashes: KnownHashesSchema.nullable().optional(),
+    /** W32 (89 §2): KOReader source version these hashes were computed
+     *  from. Drives the version-skew advisory when the device runs a
+     *  different version. `null` / omitted on pre-W32 entries. */
+    koreader_hash_version: z.string().nullable().optional(),
 }).passthrough();
 
 export type PluginEntry = z.infer<typeof PluginEntrySchema>;

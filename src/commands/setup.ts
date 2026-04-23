@@ -7,7 +7,7 @@ import { dirname, join, resolve } from "node:path";
 
 import { ArgError, parseArgs, type FlagSpecs } from "../cli/args.ts";
 import { type CliEnv, resolveSetupsDir } from "../cli/env.ts";
-import { dim, heading, info, ok, paint, warn } from "../cli/log.ts";
+import { dim, heading, info, ok, paint, stderrLine, warn } from "../cli/log.ts";
 import { canonicalizeManifest, hashBytes, manifestHash, shortId } from "../setup/canonical.ts";
 import { parseManifest, type EmbeddedFile, type SetupManifest } from "../setup/schema.ts";
 import { hasFindings, type ValidationReport } from "../schema/report.ts";
@@ -734,35 +734,35 @@ function renderPluginHashReport(
     const catalogV = report.catalogVersion;
     for (const v of interesting) {
         if (v.status === "MISMATCH") {
-            env.stderr.write(`  ${v.name}.koplugin: MISMATCH\n`);
+            stderrLine(env, `  ${v.name}.koplugin: MISMATCH`);
             for (const f of v.files) {
                 if (f.status === "modified") {
-                    env.stderr.write(`    modified: ${f.file}\n`);
-                    env.stderr.write(`      expected: ${f.expected}${catalogV ? ` (catalog, KOReader ${catalogV})` : ""}\n`);
-                    env.stderr.write(`      actual:   ${f.actual} (Setup archive)\n`);
+                    stderrLine(env, `    modified: ${f.file}`);
+                    stderrLine(env, `      expected: ${f.expected}${catalogV ? ` (catalog, KOReader ${catalogV})` : ""}`);
+                    stderrLine(env, `      actual:   ${f.actual} (Setup archive)`);
                 } else if (f.status === "extra") {
-                    env.stderr.write(`    extra: ${f.file} (not in catalog)\n`);
+                    stderrLine(env, `    extra: ${f.file} (not in catalog)`);
                 } else {
-                    env.stderr.write(`    missing: ${f.file} (catalog expected ${f.expected})\n`);
+                    stderrLine(env, `    missing: ${f.file} (catalog expected ${f.expected})`);
                 }
             }
         } else if (v.status === "UNCATALOGUED") {
-            env.stderr.write(`  ${v.name}.koplugin: UNCATALOGUED (not in bundled catalog — cannot verify)\n`);
+            stderrLine(env, `  ${v.name}.koplugin: UNCATALOGUED (not in bundled catalog — cannot verify)`);
         } else if (v.status === "UNVERIFIED") {
-            env.stderr.write(`  ${v.name}.koplugin: UNVERIFIED (catalog predates W32 hash collection)\n`);
+            stderrLine(env, `  ${v.name}.koplugin: UNVERIFIED (catalog predates W32 hash collection)`);
         } else {
             // MALFORMED_STRUCTURE
-            env.stderr.write(`  MALFORMED_STRUCTURE: file paths not under <name>.koplugin/:\n`);
-            for (const p of v.paths) env.stderr.write(`    - ${p}\n`);
+            stderrLine(env, `  MALFORMED_STRUCTURE: file paths not under <name>.koplugin/:`);
+            for (const p of v.paths) stderrLine(env, `    - ${p}`);
         }
     }
 
     if (report.catalogVersion && report.deviceVersion
         && !report.versionMatch) {
-        env.stderr.write(
+        stderrLine(env,
             `\n  Note: catalog hashes are from KOReader ${report.catalogVersion}; ` +
             `device runs ${report.deviceVersion}. Mismatches may reflect upstream ` +
-            `changes, not tampering.\n`,
+            `changes, not tampering.`,
         );
     }
 

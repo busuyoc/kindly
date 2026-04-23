@@ -43,3 +43,12 @@ export function heading(env: CliEnv, msg: string): void {
 export function dim(env: CliEnv, msg: string): string {
     return paint(env, "dim", msg);
 }
+
+// Stderr continuation line (no "warn:" prefix). For multi-line warning
+// blocks where the header goes through `warn()` and the body lines are
+// indented children — `env.stderr.write(...)` scattered through renderers
+// drifts from convention; this helper keeps every stderr write on the
+// same path.
+export function stderrLine(env: CliEnv, msg: string): void {
+    env.stderr.write(msg + "\n");
+}

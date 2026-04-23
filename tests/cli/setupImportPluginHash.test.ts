@@ -2,54 +2,35 @@
 // pipeline (89 §4, §5, §9).
 //
 // Exercises the real `executeSetupImport` path: fat Setup → canonical
-// import → pluginHashReport on the typed result. The catalog is the
-// real committed `data/catalog/plugins.bundled.v1.json` by default;
-// MATCH / MISMATCH / version-skew cases swap in a temporary catalog
-// (with try/finally restore + `reloadPluginCatalog`) so the test is
-// hermetic.
-//
-// Coverage:
-//   - UNVERIFIED (current catalog has no known_hashes for SSH)
-//   - UNCATALOGUED (unknown plugin name)
-//   - --skip-plugins → null report (nothing to install, nothing to verify)
-//   - no plugins shipped → null report
-//   - MATCH against a synthetic catalog
-//   - MISMATCH against a synthetic catalog → verdict + renderer §5.6 text
-//   - Version-skew advisory text appears when deviceVersion ≠ catalogVersion
-//   - JSON envelope carries the pluginHashReport field
+// import → pluginHashReport on the typed result. Real catalog cases
+// (UNVERIFIED / UNCATALOGUED) use the committed catalog. MATCH /
+// MISMATCH / version-skew cases inject a per-test catalog via the
+// `catalogPath` testability hook on SetupImportOptions — no mutation
+// of the committed catalog file, no reload dance, no parallelism
+// hazards.
 
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { describe, test, expect, beforeEach } from "bun:test";
 import {
-    copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync,
-    readdirSync, unlinkSync, writeFileSync,
+    mkdirSync, mkdtempSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 
 import { main } from "../../src/cli.ts";
 import { StringWriter, type CliEnv } from "../../src/cli/env.ts";
-import { executeSetupImport } from "../../src/commands/setup.ts";
-import {
-    loadPluginCatalog, reloadPluginCatalog, type PluginCatalog,
-} from "../../src/catalog/reader.ts";
+import { executeSetupImport, renderSetupImport } from "../../src/commands/setup.ts";
+import type { PluginCatalog } from "../../src/catalog/reader.ts";
 import { hashBytes } from "../../src/setup/canonical.ts";
+import { packSetup } from "../../src/setup/pack.ts";
+import { parseManifest } from "../../src/setup/schema.ts";
 
-const CATALOG_PATH = resolve(
-    import.meta.dir, "..", "..", "data/catalog/plugins.bundled.v1.json",
-);
-const CATALOG_BACKUP = CATALOG_PATH + ".bak-w32test";
-
-function backupCatalog(): void {
-    copyFileSync(CATALOG_PATH, CATALOG_BACKUP);
-}
-function restoreCatalog(): void {
-    if (existsSync(CATALOG_BACKUP)) {
-        copyFileSync(CATALOG_BACKUP, CATALOG_PATH);
-        unlinkSync(CATALOG_BACKUP);
-    }
-    reloadPluginCatalog();
-}
-function writeSyntheticCatalog(plugins: unknown[]): void {
+// Write a synthetic catalog to a scratch path. Callers pass this path
+// into executeSetupImport via `opts.catalogPath`. Bypasses file-mutation
+// hazards on the committed catalog.
+function writeSyntheticCatalog(
+    dir: string,
+    plugins: unknown[],
+): string {
     const body: PluginCatalog = {
         catalog_version: "v1" as const,
         license: "MIT",
@@ -58,8 +39,9 @@ function writeSyntheticCatalog(plugins: unknown[]): void {
         plugin_count: plugins.length,
         plugins: plugins as PluginCatalog["plugins"],
     };
-    writeFileSync(CATALOG_PATH, JSON.stringify(body, null, 2));
-    reloadPluginCatalog();
+    const path = join(dir, `catalog-${Math.random().toString(36).slice(2)}.json`);
+    writeFileSync(path, JSON.stringify(body, null, 2));
+    return path;
 }
 
 function stubCatalogEntry(overrides: Record<string, unknown> & { name: string }): Record<string, unknown> {
@@ -211,16 +193,13 @@ describe("pluginHashReport — nulled when nothing to verify", () => {
     });
 });
 
-// ---- MATCH / MISMATCH / version-skew with a synthetic catalog --------------
+// ---- MATCH / MISMATCH with an injected catalog -----------------------------
 
 describe("pluginHashReport — MATCH/MISMATCH against synthetic catalog", () => {
-    beforeEach(() => { backupCatalog(); });
-    afterEach(() => { restoreCatalog(); });
-
     test("MATCH: shipped bytes match catalog hashes", async () => {
         const mainSrc = "-- ssh main\nreturn {}\n";
         const metaSrc = "return { name = 'SSH' }\n";
-        writeSyntheticCatalog([
+        const catalogPath = writeSyntheticCatalog(workdir, [
             stubCatalogEntry({
                 name: "SSH",
                 known_hashes: {
@@ -230,11 +209,13 @@ describe("pluginHashReport — MATCH/MISMATCH against synthetic catalog", () => 
                 koreader_hash_version: "v2026.01",
             }),
         ]);
-
         const src = await exportFat("SSH.koplugin", {
             "main.lua": mainSrc, "_meta.lua": metaSrc,
         });
-        const r = executeSetupImport({ file: src, acceptPlugins: true }, env);
+        const r = executeSetupImport(
+            { file: src, acceptPlugins: true, catalogPath },
+            env,
+        );
         const v = r.pluginHashReport!.verdicts[0]!;
         expect(v.status).toBe("MATCH");
     });
@@ -242,7 +223,7 @@ describe("pluginHashReport — MATCH/MISMATCH against synthetic catalog", () => 
     test("MATCH: subset mode — catalog-only files are NOT reported missing (89 §5.4)", async () => {
         const mainSrc = "-- main\n";
         const metaSrc = "-- meta\n";
-        writeSyntheticCatalog([
+        const catalogPath = writeSyntheticCatalog(workdir, [
             stubCatalogEntry({
                 name: "SSH",
                 known_hashes: {
@@ -253,23 +234,28 @@ describe("pluginHashReport — MATCH/MISMATCH against synthetic catalog", () => 
         ]);
         // Ship only main.lua — a legitimate subset of the catalogued plugin.
         const src = await exportFat("SSH.koplugin", { "main.lua": mainSrc });
-        const r = executeSetupImport({ file: src, acceptPlugins: true }, env);
+        const r = executeSetupImport(
+            { file: src, acceptPlugins: true, catalogPath },
+            env,
+        );
         expect(r.pluginHashReport!.verdicts[0]!.status).toBe("MATCH");
     });
 
     test("MISMATCH: modified bytes → verdict with modified file entry", async () => {
         const mainSrc = "-- ssh main\n";
-        writeSyntheticCatalog([
+        const catalogPath = writeSyntheticCatalog(workdir, [
             stubCatalogEntry({
                 name: "SSH",
                 known_hashes: { "main.lua": hashBytes(Buffer.from(mainSrc)) },
             }),
         ]);
-        // Ship tampered bytes.
         const src = await exportFat("SSH.koplugin", {
             "main.lua": "-- evil tampered\n",
         });
-        const r = executeSetupImport({ file: src, acceptPlugins: true }, env);
+        const r = executeSetupImport(
+            { file: src, acceptPlugins: true, catalogPath },
+            env,
+        );
         const v = r.pluginHashReport!.verdicts[0]!;
         if (v.status !== "MISMATCH") throw new Error(`expected MISMATCH, got ${v.status}`);
         expect(v.files.length).toBe(1);
@@ -278,7 +264,7 @@ describe("pluginHashReport — MATCH/MISMATCH against synthetic catalog", () => 
 
     test("MISMATCH: extra file in archive not in catalog", async () => {
         const mainSrc = "-- main\n";
-        writeSyntheticCatalog([
+        const catalogPath = writeSyntheticCatalog(workdir, [
             stubCatalogEntry({
                 name: "SSH",
                 known_hashes: { "main.lua": hashBytes(Buffer.from(mainSrc)) },
@@ -288,7 +274,10 @@ describe("pluginHashReport — MATCH/MISMATCH against synthetic catalog", () => 
             "main.lua": mainSrc,
             "backdoor.lua": "-- pwn\n",
         });
-        const r = executeSetupImport({ file: src, acceptPlugins: true }, env);
+        const r = executeSetupImport(
+            { file: src, acceptPlugins: true, catalogPath },
+            env,
+        );
         const v = r.pluginHashReport!.verdicts[0]!;
         if (v.status !== "MISMATCH") throw new Error(`expected MISMATCH, got ${v.status}`);
         const extras = v.files.filter((f) => f.status === "extra");
@@ -299,63 +288,68 @@ describe("pluginHashReport — MATCH/MISMATCH against synthetic catalog", () => 
 // ---- renderer output: §5.6 data-loss + version skew ------------------------
 
 describe("setup import renderer — §5.6 data-loss + version-skew advisory", () => {
-    beforeEach(() => { backupCatalog(); });
-    afterEach(() => { restoreCatalog(); });
-
     test("MISMATCH + --no-safety-snapshot → data-loss warning emitted (89 §5.6)", async () => {
-        writeSyntheticCatalog([
-            stubCatalogEntry({
-                name: "SSH",
-                known_hashes: { "main.lua": hashBytes(Buffer.from("-- original\n")) },
-            }),
-        ]);
-        const src = await exportFat("SSH.koplugin", {
-            "main.lua": "-- tampered\n",
-        });
-        const code = await main([
-            "setup", "import", src,
-            "--accept-plugins", "--no-safety-snapshot",
-            "--dry-run",   // keep the test from actually writing
-        ], env);
-        expect(code).toBe(0);
-        expect(stderr.value).toMatch(/MISMATCH/);
-        expect(stderr.value).toMatch(/NO rollback copy/i);
-    });
-
-    test("MISMATCH with safety snapshot ON → NO data-loss warning", async () => {
-        writeSyntheticCatalog([
+        const catalogPath = writeSyntheticCatalog(workdir, [
             stubCatalogEntry({
                 name: "SSH",
                 known_hashes: { "main.lua": hashBytes(Buffer.from("-- original\n")) },
             }),
         ]);
         const src = await exportFat("SSH.koplugin", { "main.lua": "-- tampered\n" });
-        const code = await main([
-            "setup", "import", src, "--accept-plugins", "--dry-run",
-        ], env);
-        expect(code).toBe(0);
+        // Drive executeSetupImport + renderSetupImport directly so we can
+        // pass catalogPath without mutating the committed catalog.
+        const r = executeSetupImport(
+            {
+                file: src, acceptPlugins: true, catalogPath,
+                dryRun: true, safetySnapshot: false,
+            },
+            env,
+        );
+        renderSetupImport(r, env, {
+            allowUnknownKeys: false, strict: false, force: false,
+            safetySnapshot: false,
+        });
+        expect(stderr.value).toMatch(/MISMATCH/);
+        expect(stderr.value).toMatch(/NO rollback copy/i);
+    });
+
+    test("MISMATCH with safety snapshot ON → NO data-loss warning", async () => {
+        const catalogPath = writeSyntheticCatalog(workdir, [
+            stubCatalogEntry({
+                name: "SSH",
+                known_hashes: { "main.lua": hashBytes(Buffer.from("-- original\n")) },
+            }),
+        ]);
+        const src = await exportFat("SSH.koplugin", { "main.lua": "-- tampered\n" });
+        const r = executeSetupImport(
+            { file: src, acceptPlugins: true, catalogPath, dryRun: true },
+            env,
+        );
+        renderSetupImport(r, env, {
+            allowUnknownKeys: false, strict: false, force: false,
+            safetySnapshot: true,
+        });
         expect(stderr.value).not.toMatch(/NO rollback copy/i);
     });
 
-    test("version-skew advisory: catalog version ≠ device version", async () => {
-        writeSyntheticCatalog([
+    test("version-skew advisory: catalog version present + MISMATCH surfaces", async () => {
+        const catalogPath = writeSyntheticCatalog(workdir, [
             stubCatalogEntry({
                 name: "SSH",
                 known_hashes: { "main.lua": hashBytes(Buffer.from("-- orig\n")) },
                 koreader_hash_version: "v2025.01-pinned",
             }),
         ]);
-        // Plant a CHANGELOG so readKoreaderVersion returns a different
-        // version on the device side. The actual detection is via
-        // src/device/version.ts — easier to drive by just asserting the
-        // verdict and advisory shape when skew is plausible.
         const src = await exportFat("SSH.koplugin", { "main.lua": "-- tampered\n" });
-        await main([
-            "setup", "import", src, "--accept-plugins", "--dry-run",
-        ], env);
-        // Catalog version should be surfaced in the expected hash hint,
-        // even if deviceVersion is null the advisory text uses both.
-        expect(stderr.value).toMatch(/catalog|v2025\.01-pinned|MISMATCH/);
+        const r = executeSetupImport(
+            { file: src, acceptPlugins: true, catalogPath, dryRun: true },
+            env,
+        );
+        renderSetupImport(r, env, {
+            allowUnknownKeys: false, strict: false, force: false,
+            safetySnapshot: true,
+        });
+        expect(stderr.value).toMatch(/MISMATCH|v2025\.01-pinned/);
     });
 });
 
@@ -373,7 +367,6 @@ describe("setup import --json — pluginHashReport is present", () => {
         expect(status).toBe("ok");
         expect(data.pluginHashReport).toBeDefined();
         expect(data.pluginHashReport.verdicts).toBeInstanceOf(Array);
-        // Status must be a verdict string.
         const first = data.pluginHashReport.verdicts[0];
         expect(["MATCH", "MISMATCH", "UNCATALOGUED", "UNVERIFIED", "MALFORMED_STRUCTURE"])
             .toContain(first.status);
@@ -391,12 +384,60 @@ describe("setup import --json — pluginHashReport is present", () => {
     });
 });
 
+// ---- MALFORMED_STRUCTURE (89 §4.2 prerequisite) ---------------------------
+
+describe("pluginHashReport — MALFORMED_STRUCTURE", () => {
+    test("file path not under <name>.koplugin/ → MALFORMED_STRUCTURE verdict + renderer", async () => {
+        // Craft a fat .kset manually with a path that doesn't follow the
+        // <name>.koplugin/ convention. The manifest schema only blocks
+        // `..` traversal, not the koplugin prefix — so packSetup will
+        // accept it and the import pipeline sees it at verify time.
+        const evilBytes = Buffer.from("-- pretending to be a plugin\n");
+        const evilHash = hashBytes(evilBytes);
+        const manifest = parseManifest({
+            kindly_setup: "v1",
+            meta: { name: "malformed-fixture", created_at: "2026-04-23T12:00:00Z" },
+            apply_mode: "additive",
+            plugins: {
+                files: [{
+                    path: "not_a_plugin/evil.lua",
+                    hash: evilHash, bytes: evilBytes.length,
+                }],
+            },
+        });
+        const outPath = join(workdir, "malformed.kset");
+        packSetup({
+            manifest,
+            files: new Map([["not_a_plugin/evil.lua", evilBytes]]),
+        }, outPath);
+
+        // Swap in a fresh kindle (no pre-existing plugins dir content).
+        kindle = makeFakeKindle();
+        ({ env, out: stdout, err: stderr } = makeEnv(workdir, kindle.root, setupsDir));
+
+        const r = executeSetupImport(
+            { file: outPath, acceptPlugins: true, dryRun: true },
+            env,
+        );
+        const v = r.pluginHashReport!.verdicts.find((x) => x.status === "MALFORMED_STRUCTURE");
+        if (!v || v.status !== "MALFORMED_STRUCTURE") {
+            throw new Error(`expected MALFORMED_STRUCTURE, got ${JSON.stringify(r.pluginHashReport!.verdicts)}`);
+        }
+        expect(v.paths).toContain("not_a_plugin/evil.lua");
+
+        // Renderer also surfaces the malformed block.
+        renderSetupImport(r, env, {
+            allowUnknownKeys: false, strict: false, force: false,
+            safetySnapshot: true,
+        });
+        expect(stderr.value).toMatch(/MALFORMED_STRUCTURE/);
+        expect(stderr.value).toContain("not_a_plugin/evil.lua");
+    });
+});
+
 // ---- catalog+extractor round-trip (89 §8 identity property) ----------------
 
 describe("extractor + verifier round-trip", () => {
-    beforeEach(() => { backupCatalog(); });
-    afterEach(() => { restoreCatalog(); });
-
     test("hashPluginDir output matches verifier's hashBytes — MATCH", async () => {
         // Seed a plugin, have the extractor hash it, build a catalog
         // from those hashes, then import the same bytes and expect MATCH.
@@ -408,7 +449,7 @@ describe("extractor + verifier round-trip", () => {
         writeFileSync(join(src, "SSH.koplugin", "_meta.lua"), "-- meta rt\n");
         const hashes = hashPluginDir(join(src, "SSH.koplugin"));
 
-        writeSyntheticCatalog([
+        const catalogPath = writeSyntheticCatalog(workdir, [
             stubCatalogEntry({
                 name: "SSH",
                 known_hashes: hashes,
@@ -425,7 +466,10 @@ describe("extractor + verifier round-trip", () => {
         kindle = makeFakeKindle();
         ({ env, out: stdout, err: stderr } = makeEnv(workdir, kindle.root, setupsDir));
 
-        const r = executeSetupImport({ file: outPath, acceptPlugins: true }, env);
+        const r = executeSetupImport(
+            { file: outPath, acceptPlugins: true, catalogPath },
+            env,
+        );
         expect(r.pluginHashReport!.verdicts[0]!.status).toBe("MATCH");
     });
 });

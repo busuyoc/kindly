@@ -181,6 +181,13 @@ export interface SetupImportOptions {
      * SENSITIVE_KEYS / SENSITIVE_PATHS before constructing this set.
      */
     acceptKey?: Set<string>;
+    /**
+     * Testability hook — override the plugin catalog path for hash
+     * verification. Production leaves this undefined so `loadPluginCatalog`
+     * reads the committed `data/catalog/plugins.bundled.v1.json`. Not
+     * exposed on the CLI.
+     */
+    catalogPath?: string;
 }
 
 export type ImportResultWithExtras = SetupImportResult & {
@@ -271,9 +278,10 @@ function computePluginHashReport(
     shippedPlugins: readonly EmbeddedFile[],
     fileBytes: Map<string, Buffer>,
     deviceVersion: string | null,
+    catalogPath?: string,
 ): PluginHashReport | null {
     let catalog;
-    try { catalog = loadPluginCatalog(); }
+    try { catalog = loadPluginCatalog(catalogPath); }
     catch { return null; }
 
     const grouped = groupArchivePluginFiles(
@@ -380,7 +388,10 @@ export function executeSetupImport(
     const detectedFamily = detectDeviceFamily(mount);
     const pluginHashReport: PluginHashReport | null = (
         shippedPlugins.length > 0 && opts.acceptPlugins
-            ? computePluginHashReport(shippedPlugins, files, detectedVersion?.raw ?? null)
+            ? computePluginHashReport(
+                shippedPlugins, files, detectedVersion?.raw ?? null,
+                opts.catalogPath,
+            )
             : null
     );
 

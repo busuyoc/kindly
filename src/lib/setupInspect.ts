@@ -11,6 +11,7 @@ import type { LuaValue } from "../lua/writer.ts";
 import { canonicalizeManifest, hashBytes, manifestHash, shortId } from "../setup/canonical.ts";
 import type { SetupManifest } from "../setup/schema.ts";
 import { computeChanges, computeReplaceChanges, type Change } from "../schema/diff.ts";
+import { collectSensitiveFromSettings, sensitiveDomain } from "../schema/classify.ts";
 import { groupChanges } from "../taxonomy/group.ts";
 import type { SetupInspectResult } from "../types/results.ts";
 import { loadSetup } from "./importSetup.ts";
@@ -69,7 +70,26 @@ export function executeSetupInspect(
         isCanonical,
         ...(isCanonical ? {} : { canonicalHash: manifestHash(manifest) }),
         ...(opts.preview ? { preview: computePreview(manifest, opts.preview, env) } : {}),
+        ...securityBlock(manifest),
     };
+}
+
+// W34f: group SENSITIVE hits declared in the manifest by threat domain.
+// Returns { security: ... } when any hits exist, {} otherwise — merges
+// cleanly into the result spread.
+function securityBlock(
+    manifest: SetupManifest,
+): { security?: NonNullable<SetupInspectResult["security"]> } {
+    const settings = manifest.settings as Record<string, unknown> | undefined;
+    if (!settings) return {};
+    const hits = collectSensitiveFromSettings(settings);
+    if (hits.length === 0) return {};
+    const byDomain: Record<string, string[]> = {};
+    for (const h of hits) {
+        const d = sensitiveDomain(h);
+        (byDomain[d] ??= []).push(h);
+    }
+    return { security: { total: hits.length, byDomain } };
 }
 
 // Compare manifest.settings against a baseline and return the grouped preview.

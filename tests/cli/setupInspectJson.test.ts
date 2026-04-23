@@ -149,6 +149,63 @@ describe("setup inspect --json", () => {
         expect(stdout.value).not.toContain("contents:");
     });
 
+    test("security block surfaces SENSITIVE keys grouped by domain", async () => {
+        const m = makeManifest({
+            settings: {
+                SSH_port: 2222,
+                SSH_autostart: true,
+                debug: true,
+                kosync: { custom_server: "https://my-server.example" },
+                night_mode: true,  // USER — shouldn't appear
+            },
+        });
+        const p = join(setupsDir, "sec.kset.yaml");
+        writeFileSync(p, canonicalizeManifest(m));
+
+        const code = await main(["setup", "inspect", p, "--json"], env);
+        expect(code).toBe(0);
+        const env_ = JSON.parse(stdout.value);
+        expect(env_.data.security).toBeDefined();
+        expect(env_.data.security.total).toBe(4);
+        expect(env_.data.security.byDomain.ssh.sort()).toEqual(
+            ["SSH_autostart", "SSH_port"],
+        );
+        expect(env_.data.security.byDomain.debug).toEqual(["debug"]);
+        expect(env_.data.security.byDomain.network).toEqual(
+            ["kosync.custom_server"],
+        );
+        // USER key must not appear.
+        const allHits = Object.values<string[]>(env_.data.security.byDomain).flat();
+        expect(allHits).not.toContain("night_mode");
+    });
+
+    test("security block omitted when manifest has no SENSITIVE keys", async () => {
+        const m = makeManifest({
+            settings: { night_mode: true, refresh_rate: 4 },
+        });
+        const p = join(setupsDir, "clean.kset.yaml");
+        writeFileSync(p, canonicalizeManifest(m));
+
+        const code = await main(["setup", "inspect", p, "--json"], env);
+        expect(code).toBe(0);
+        const env_ = JSON.parse(stdout.value);
+        expect(env_.data.security).toBeUndefined();
+    });
+
+    test("text mode renders security line + per-domain buckets", async () => {
+        const m = makeManifest({
+            settings: { SSH_port: 2222, home_dir: "/mnt/evil" },
+        });
+        const p = join(setupsDir, "text.kset.yaml");
+        writeFileSync(p, canonicalizeManifest(m));
+
+        const code = await main(["setup", "inspect", p], env);
+        expect(code).toBe(0);
+        expect(stdout.value).toContain("security:");
+        expect(stdout.value).toContain("[ssh] SSH_port");
+        expect(stdout.value).toContain("[directory] home_dir");
+    });
+
     test("errors emit an error envelope to stderr with the right code", async () => {
         const code = await main(
             ["setup", "inspect", join(setupsDir, "nope.kset.yaml"), "--json"],

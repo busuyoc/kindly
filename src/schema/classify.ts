@@ -101,6 +101,27 @@ export function sensitiveDomain(dottedPath: string): string {
     return SENSITIVE_DOMAIN[dottedPath] ?? "other";
 }
 
+// W34f: collect all SENSITIVE paths reachable inside a manifest's settings
+// block. Unlike changeHitsSensitive (which diffs against a baseline), this
+// surfaces every SENSITIVE key the Setup *declares*, regardless of whether
+// the device already has the same value. Answers "does this Setup touch
+// security-sensitive stuff?" for inspect reviewers.
+export function collectSensitiveFromSettings(
+    settings: Record<string, unknown>,
+): string[] {
+    const hits: string[] = [];
+    for (const [k, v] of Object.entries(settings)) {
+        if (SENSITIVE_KEYS.has(k)) hits.push(k);
+        if (v !== null && typeof v === "object" && !Array.isArray(v)) {
+            for (const child of Object.keys(v as Record<string, unknown>)) {
+                const dotted = `${k}.${child}`;
+                if (SENSITIVE_PATHS.has(dotted)) hits.push(dotted);
+            }
+        }
+    }
+    return [...new Set(hits)].sort();
+}
+
 // Is this dotted string a known SENSITIVE top-level key or nested path?
 // Used by the CLI layer to validate --accept-key= entries.
 export function isSensitiveKeyName(name: string): boolean {

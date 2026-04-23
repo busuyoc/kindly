@@ -219,6 +219,19 @@ export interface SetupInspectResult {
         changes: Change[];
         grouped: Record<string, DiffGroupEntry[]>;
     };
+    /** W34f: SENSITIVE-class keys declared in the manifest's settings,
+     *  grouped by threat domain (ssh, network, code-exec, debug, ...). Lets
+     *  a reviewer see the security surface of a Setup up front, without
+     *  needing a `--vs-*` preview. Omitted when the manifest declares no
+     *  SENSITIVE keys. */
+    security?: {
+        /** Total SENSITIVE hit count (dotted paths). */
+        total: number;
+        /** domain → dotted paths, sorted within each bucket. Bucket keys
+         *  are iteration-order: the order threat domains first appear in
+         *  the sorted hit list, which keeps output deterministic. */
+        byDomain: Record<string, string[]>;
+    };
 }
 
 export interface SetupExportResult {

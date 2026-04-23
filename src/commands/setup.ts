@@ -309,6 +309,17 @@ export function renderSetupInspect(result: SetupInspectResult, env: CliEnv): voi
         info(env, dim(env, `  (canonical hash would be ${result.canonicalHash})`));
     }
 
+    if (result.security) {
+        const { total, byDomain } = result.security;
+        const domains = Object.keys(byDomain).sort();
+        env.stdout.write(
+            `  security:     ${total} SENSITIVE key(s) across ${domains.length} domain(s)\n`,
+        );
+        for (const d of domains) {
+            env.stdout.write(`    [${d}] ${byDomain[d]!.join(", ")}\n`);
+        }
+    }
+
     if (result.preview) {
         const { preview } = result;
         const totalChanges = preview.changes.length;

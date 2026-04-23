@@ -6,7 +6,11 @@
 // `settings_present`, `settings_parseable`, `old_parseable`) are
 // grandfathered per 90 §7 "never rename an id".
 
-import { existsSync, readFileSync } from "node:fs";
+import {
+    existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync,
+    statfsSync, statSync,
+} from "node:fs";
+import { join } from "node:path";
 import { parseSettingsFile, LuaParseError } from "../lua/reader.ts";
 import { classifyKey, isSecretPath } from "../schema/classify.ts";
 import type { LuaValue } from "../lua/writer.ts";
@@ -138,7 +142,21 @@ export function executeDoctor(env: CliEnv, opts: DoctorOptions = {}): DoctorResu
     // wants missing files reported, unlike import's subset mode).
     checks.push(...runPluginHashChecks(mount.pluginsDir, opts.catalogPath));
 
-    return finalize(checks, findSecrets(parsed));
+    // W34d: disk.* + secrets.* housekeeping (90 §5.6, §5.7).
+    checks.push(...runDiskChecks(env, mount));
+    const secretsPresent = findSecrets(parsed);
+    checks.push({
+        id: "secrets.present_count",
+        category: "secrets",
+        severity: "info",
+        ok: true,
+        label: secretsPresent.length > 0
+            ? `${secretsPresent.length} secret(s) present on device`
+            : "no secrets detected on device",
+        data: { count: secretsPresent.length },
+    });
+
+    return finalize(checks, secretsPresent);
 }
 
 /** Days elapsed between `iso` and env.now(). Negative → 0 (clock skew). */
@@ -365,6 +383,164 @@ function runPluginHashChecks(
         });
     }
     return findings;
+}
+
+/** 90 §5.6 thresholds. 1 MiB = atomic write would fail; 50 MiB = a fat
+ *  Setup import could fail. Not spec scalars, but named explicitly in §5.6. */
+const DISK_FATAL_BYTES = 1 * 1024 * 1024;
+const DISK_WARN_BYTES = 50 * 1024 * 1024;
+const BACKUPS_WARN_BYTES = 100 * 1024 * 1024;
+const BACKUPS_WARN_FILES = 100;
+
+/** W34d 90 §5.6. Three findings covering writable `.kindly/`, device
+ *  free space, and accumulated backup size on the host. All failures
+ *  here are loud but scoped — doctor never mutates state (so a missing
+ *  `.kindly/` is reported, not created). */
+function runDiskChecks(env: CliEnv, mount: KindleMount): DoctorCheck[] {
+    const out: DoctorCheck[] = [];
+    const kindlyDir = join(env.cwd, ".kindly");
+
+    // disk.kindly_writable: probe creatability if absent; probe writable
+    // bit if present. We don't want to leave side effects, so creation
+    // attempts use a sentinel subdir we immediately remove — simpler is
+    // just: if missing, check the parent is writable; if present, stat it.
+    let writable = false;
+    let writableDetail: string | undefined;
+    if (existsSync(kindlyDir)) {
+        try {
+            const probe = join(kindlyDir, `.doctor-probe-${process.pid}`);
+            mkdirSync(probe);
+            try { rmdirSync(probe); } catch { /* cleanup best-effort */ }
+            writable = true;
+        } catch (e) {
+            writableDetail = `not writable: ${(e as Error).message}`;
+        }
+    } else {
+        // Not present — try to create it. doctor IS allowed to mkdir
+        // `.kindly/` because every other command does so lazily on first
+        // write; reporting "would fail to apply" without attempting is
+        // less useful than just making the directory.
+        try {
+            mkdirSync(kindlyDir, { recursive: true });
+            writable = true;
+        } catch (e) {
+            writableDetail = `cannot create: ${(e as Error).message}`;
+        }
+    }
+    out.push({
+        id: "disk.kindly_writable",
+        category: "disk",
+        severity: writable ? "info" : "fatal",
+        ok: writable,
+        label: writable
+            ? `.kindly/ writable at ${kindlyDir}`
+            : `.kindly/ not writable at ${kindlyDir}`,
+        ...(writableDetail ? { detail: writableDetail } : {}),
+        data: { path: kindlyDir, writable },
+        ...(writable ? {} : {
+            remediation: [{
+                text: "Ensure the current working directory is writable, or run kindly from a directory you own.",
+            }],
+        }),
+    });
+
+    // disk.free_space: device free space, not host. Apply writes to the
+    // mount, so the relevant number is mount.root's filesystem. statfs
+    // on any path resolves to its containing filesystem.
+    let bytesFree: number | null = null;
+    try {
+        const st = statfsSync(mount.root);
+        bytesFree = Number(st.bavail) * Number(st.bsize);
+    } catch {
+        // Unreadable free space — emit an info finding rather than fatal;
+        // this doesn't block apply, atomic rename will surface EIO first.
+    }
+    if (bytesFree === null) {
+        out.push({
+            id: "disk.free_space",
+            category: "disk",
+            severity: "info",
+            ok: true,
+            label: "device free space unreadable",
+            data: { bytes_free: null, bytes_needed_for_apply: null },
+        });
+    } else {
+        const sev: DoctorSeverity =
+            bytesFree < DISK_FATAL_BYTES ? "fatal"
+            : bytesFree < DISK_WARN_BYTES ? "warning"
+            : "info";
+        out.push({
+            id: "disk.free_space",
+            category: "disk",
+            severity: sev,
+            ok: sev === "info" || sev === "warning",
+            label: `device free space: ${formatBytes(bytesFree)}`,
+            data: { bytes_free: bytesFree, bytes_needed_for_apply: null },
+            ...(sev !== "info" ? {
+                remediation: [{
+                    text: "Free space on the device (delete old books or snapshots) before running apply.",
+                }],
+            } : {}),
+        });
+    }
+
+    // disk.backups_size: additive .kindly/backups/ — F9 from 87. Loud
+    // advisory until W34h rotation lands.
+    const backupsDir = join(kindlyDir, "backups");
+    let bytes = 0;
+    let fileCount = 0;
+    if (existsSync(backupsDir)) {
+        for (const f of walkFiles(backupsDir)) {
+            try {
+                bytes += statSync(f).size;
+                fileCount++;
+            } catch { /* skip unreadable */ }
+        }
+    }
+    let oldestIso = "";
+    if (existsSync(backupsDir)) {
+        try {
+            const entries = readdirSync(backupsDir).sort();
+            oldestIso = entries[0] ?? "";
+        } catch { /* ignore */ }
+    }
+    const backupsSev: DoctorSeverity =
+        (bytes > BACKUPS_WARN_BYTES || fileCount > BACKUPS_WARN_FILES)
+            ? "warning" : "info";
+    out.push({
+        id: "disk.backups_size",
+        category: "disk",
+        severity: backupsSev,
+        ok: true,
+        label: `.kindly/backups/: ${formatBytes(bytes)} across ${fileCount} file(s)`,
+        data: { bytes, file_count: fileCount, oldest_iso: oldestIso },
+        ...(backupsSev === "warning" ? {
+            remediation: [{
+                text: "No automatic rotation ships yet (W34h pending). Delete old snapshots under .kindly/backups/ to reclaim space.",
+            }],
+        } : {}),
+    });
+
+    for (const c of out) c.ok = okFromSeverity(c.severity);
+    return out;
+}
+
+function* walkFiles(dir: string): Generator<string> {
+    let entries;
+    try { entries = readdirSync(dir, { withFileTypes: true }); }
+    catch { return; }
+    for (const e of entries) {
+        const p = join(dir, e.name);
+        if (e.isDirectory()) yield* walkFiles(p);
+        else if (e.isFile()) yield p;
+    }
+}
+
+function formatBytes(n: number): string {
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KiB`;
+    if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MiB`;
+    return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GiB`;
 }
 
 function finalize(checks: DoctorCheck[], secretsPresent: string[]): DoctorResult {

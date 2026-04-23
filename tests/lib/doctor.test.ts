@@ -400,3 +400,65 @@ describe("executeDoctor — W34c catalog.* (90 §5.3)", () => {
         expect(m.data).toEqual({ catalog_for: "v2026.03", device_has: null });
     });
 });
+
+describe("executeDoctor — W34d disk.* (90 §5.6)", () => {
+    test("kindly_writable: fresh workdir auto-creates .kindly → info", () => {
+        const r = executeDoctor(env);
+        const k = r.checks.find((c) => c.id === "disk.kindly_writable")!;
+        expect(k.severity).toBe("info");
+        expect(k.data).toMatchObject({ writable: true });
+        expect((k.data as { path: string }).path).toBe(join(workdir, ".kindly"));
+    });
+
+    test("free_space: healthy fs → info with non-null bytes_free", () => {
+        const r = executeDoctor(env);
+        const f = r.checks.find((c) => c.id === "disk.free_space")!;
+        expect(f.severity).toBe("info");
+        expect((f.data as { bytes_free: number | null }).bytes_free).toBeGreaterThan(0);
+    });
+
+    test("backups_size: empty .kindly → info with bytes=0", () => {
+        const r = executeDoctor(env);
+        const b = r.checks.find((c) => c.id === "disk.backups_size")!;
+        expect(b.severity).toBe("info");
+        expect(b.data).toMatchObject({ bytes: 0, file_count: 0 });
+    });
+
+    test("backups_size: > 100 files → warning", () => {
+        const backupsDir = join(workdir, ".kindly", "backups");
+        mkdirSync(backupsDir, { recursive: true });
+        for (let i = 0; i < 101; i++) {
+            writeFileSync(join(backupsDir, `b${i}.lua`), "x");
+        }
+        const r = executeDoctor(env);
+        const b = r.checks.find((c) => c.id === "disk.backups_size")!;
+        expect(b.severity).toBe("warning");
+        expect((b.data as { file_count: number }).file_count).toBe(101);
+        expect(b.remediation?.[0]?.text).toContain("rotation");
+    });
+});
+
+describe("executeDoctor — W34d secrets.* (90 §5.7)", () => {
+    test("present_count: always info, matches secretsPresent length", () => {
+        const r = executeDoctor(env);
+        const s = r.checks.find((c) => c.id === "secrets.present_count")!;
+        expect(s.severity).toBe("info");
+        expect((s.data as { count: number }).count).toBe(r.secretsPresent.length);
+        expect((s.data as { count: number }).count).toBeGreaterThan(0);
+    });
+
+    test("present_count: zero secrets still emits info finding", () => {
+        // Rebuild fake kindle without the secret key.
+        const clean = mkdtempSync(join(tmpdir(), "kindly-clean-"));
+        mkdirSync(join(clean, "koreader"));
+        writeFileSync(
+            join(clean, "koreader", "settings.reader.lua"),
+            dumpSettingsFile({ avoid_flashing_ui: true }, "./settings.reader.lua"),
+        );
+        const r = executeDoctor({ ...env, mountOverride: clean });
+        const s = r.checks.find((c) => c.id === "secrets.present_count")!;
+        expect(s.severity).toBe("info");
+        expect((s.data as { count: number }).count).toBe(0);
+        expect(r.secretsPresent).toEqual([]);
+    });
+});

@@ -328,6 +328,8 @@ Like SSH `known_hosts`. Local-only. No directory.
 
 ## 4. Proposed amendments to the roadmap (80-)
 
+> **Status (2026-04-23):** Amendments A, C, D, and F merged into `80-v0.6-plus-roadmap.md` v0.11 section. Amendments B and E deferred to v0.11.1 per the red-team reprioritisation in `87-security-matrices.md` §6 (remote fetch and visual asset library are not on the exploitable-today critical path; SENSITIVE class + policy gates are). The W# numbers below are historical — see 80 for the current DoD list.
+
 ### Amendment A — expand v0.11 from 1 week to 2-3 weeks
 
 Current v0.11 is a security baseline in name only (suspicious keys +

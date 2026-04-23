@@ -20,6 +20,7 @@ import type {
 } from "../types/results.ts";
 import { emitJson } from "../cli/json.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
+import { changeHitsSensitive, isSensitiveKeyName, sensitiveDomain } from "../schema/classify.ts";
 import {
     executeSetupImport,
     loadManifestFile,
@@ -227,6 +228,37 @@ async function runSetupExport(argv: readonly string[], env: CliEnv): Promise<num
     return 0;
 }
 
+// W33 (91 §3.2): identity-claim fields in JSON must be wrapped so the
+// `verified: false` flag is carried alongside the value. Content fields
+// (name, description, version, created_at, tags) stay bare. Wrapper shape
+// is stable across cardinality: scalars wrap their string, `supersedes`
+// wraps its array. When W39 adds minisign verification, the boolean
+// flips; consumers dispatch on field name, not on shape.
+//
+// Applies to both `setup inspect` and `setup import` JSON envelopes —
+// the shape of identity-claim fields must match across commands so
+// consumers have a single code path.
+function wrapIdentityClaims<T extends {
+    author?: string;
+    sourceUrl?: string;
+    authorKeyId?: string;
+    supersedes?: string[];
+}>(r: T): Omit<T, "author" | "sourceUrl" | "authorKeyId" | "supersedes"> & {
+    author?: { value: string; verified: false };
+    sourceUrl?: { value: string; verified: false };
+    authorKeyId?: { value: string; verified: false };
+    supersedes?: { value: string[]; verified: false };
+} {
+    const { author, sourceUrl, authorKeyId, supersedes, ...rest } = r;
+    return {
+        ...rest,
+        ...(author !== undefined     ? { author:      { value: author,      verified: false as const } } : {}),
+        ...(sourceUrl !== undefined  ? { sourceUrl:   { value: sourceUrl,   verified: false as const } } : {}),
+        ...(authorKeyId !== undefined ? { authorKeyId: { value: authorKeyId, verified: false as const } } : {}),
+        ...(supersedes !== undefined ? { supersedes:  { value: supersedes,  verified: false as const } } : {}),
+    };
+}
+
 // ---- `kindly setup inspect <file>` -----------------------------------------
 
 export function renderSetupInspect(result: SetupInspectResult, env: CliEnv): void {
@@ -242,7 +274,22 @@ export function renderSetupInspect(result: SetupInspectResult, env: CliEnv): voi
     }
     env.stdout.write(`  apply_mode:   ${result.applyMode}\n`);
     env.stdout.write(`  created_at:   ${result.createdAt}\n`);
-    if (result.author)      env.stdout.write(`  author:       ${result.author}\n`);
+    // W33: identity-claim fields show with `(UNVERIFIED)` until W39
+    // signature verification flips the trust label. See 91 §3.1.
+    if (result.author)
+        env.stdout.write(`  author:       ${result.author} ${dim(env, "(UNVERIFIED)")}\n`);
+    if (result.sourceUrl)
+        env.stdout.write(`  source:       ${result.sourceUrl} ${dim(env, "(UNVERIFIED)")}\n`);
+    if (result.authorKeyId)
+        env.stdout.write(`  author_key:   ${result.authorKeyId} ${dim(env, "(UNVERIFIED)")}\n`);
+    if (result.version)
+        env.stdout.write(`  version:      ${result.version}\n`);
+    if (result.supersedes?.length) {
+        env.stdout.write(`  supersedes:   ${dim(env, "(UNVERIFIED — no chain validation)")}\n`);
+        for (const h of result.supersedes) {
+            env.stdout.write(`                ${h}\n`);
+        }
+    }
     if (result.description) env.stdout.write(`  description:  ${result.description}\n`);
     if (result.tags.length) env.stdout.write(`  tags:         ${result.tags.join(", ")}\n`);
     if (result.compat) {
@@ -320,7 +367,7 @@ async function runSetupInspect(argv: readonly string[], env: CliEnv): Promise<nu
     if (flags.mount) env = { ...env, mountOverride: flags.mount };
 
     const result = executeSetupInspect(fileArg, env, { preview });
-    if (env.jsonMode) emitJson(env, "setup inspect", result);
+    if (env.jsonMode) emitJson(env, "setup inspect", wrapIdentityClaims(result));
     else renderSetupInspect(result, env);
     return 0;
 }
@@ -524,7 +571,55 @@ const IMPORT_FLAGS = {
         type: "string",
         description: "advisory name for this import — shown in `kindly history`",
     },
+    "expect-hash": {
+        type: "string",
+        description: "refuse import if the manifest's content hash doesn't match (sha256:<hex> or bare hex)",
+    },
+    "accept-sensitive": {
+        type: "boolean",
+        default: false,
+        description: "accept all SENSITIVE-class setting changes (network endpoints, SSH, debug, directory redirection)",
+    },
+    "accept-key": {
+        type: "string",
+        description: "accept SENSITIVE changes only for these comma-separated key names (e.g. SSH_port,debug)",
+    },
 } as const satisfies FlagSpecs;
+
+// Parse + validate --accept-key=<a,b,c>. Returns the dotted-key set.
+// Unknown keys (not in SENSITIVE_KEYS/SENSITIVE_PATHS) are an ArgError per
+// 88 §3.1 — silent acceptance of typos would defeat the per-key gate.
+function parseAcceptKey(raw: string): Set<string> {
+    const out = new Set<string>();
+    const parts = raw.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+    if (parts.length === 0) {
+        throw new ArgError("--accept-key: expected at least one key name");
+    }
+    const unknown = parts.filter((k) => !isSensitiveKeyName(k));
+    if (unknown.length > 0) {
+        throw new ArgError(
+            `--accept-key: unknown SENSITIVE key(s): ${unknown.join(", ")}. ` +
+            `Expected one of the key names listed in docs/88-sensitive-keys-spec.md §2.`
+        );
+    }
+    for (const k of parts) out.add(k);
+    return out;
+}
+
+// Parse + validate a user-supplied --expect-hash value.
+// Accepts `sha256:<64 hex>` or bare 64-hex; returns the canonical
+// `sha256:<hex>` form. Bad input is an ArgError — format validation is a
+// CLI concern (docs/92-expect-hash-spec.md §3), the lib trusts the string.
+function normalizeExpectedHash(raw: string): string {
+    const bare = raw.startsWith("sha256:") ? raw.slice(7) : raw;
+    if (!/^[a-f0-9]{64}$/.test(bare)) {
+        throw new ArgError(
+            `--expect-hash: invalid hash ${JSON.stringify(raw)}. ` +
+            `Expected sha256:<64 hex> or bare <64 hex>.`
+        );
+    }
+    return `sha256:${bare}`;
+}
 
 // Emit schema-validation warnings per finding; return true iff --strict
 // and there were findings we should block on. --allow-unknown-keys
@@ -579,13 +674,68 @@ function renderSetupImportIntro(
     shippedPatches: readonly EmbeddedFile[],
     env: CliEnv,
 ): void {
+    // W33 (91 §4): the intro intentionally does NOT show author / source /
+    // description. Identity-claim fields render AFTER the SENSITIVE block
+    // in renderSetupImport so a naive user reads what the Setup *does*
+    // before reading who *claims* to have made it (N1 mitigation).
     heading(env, `importing ${manifest.meta.name}  (${id})`);
     info(env, dim(env, `  from:   ${setupFile}`));
-    if (manifest.meta.author)      info(env, dim(env, `  author: ${manifest.meta.author}`));
-    if (manifest.meta.description) info(env, dim(env, `  ${manifest.meta.description}`));
     if (shippedPlugins.length > 0 || shippedPatches.length > 0) {
         printFatDisclosure(env, shippedPlugins, shippedPatches);
     }
+}
+
+// W33 (91 §3.1, §4): identity-claim block. Emitted by renderSetupImport
+// AFTER the SENSITIVE summary block. Every author-controlled identity field
+// carries `(UNVERIFIED)` until W39 minisign verification flips it.
+function renderImportAuthorBlock(result: ImportResultWithExtras, env: CliEnv): void {
+    const hasAny = !!(
+        result.author || result.sourceUrl || result.authorKeyId
+        || result.version || result.supersedes?.length
+        || result.description
+    );
+    if (!hasAny) return;
+    if (result.author)
+        info(env, `  author:       ${result.author} ${dim(env, "(UNVERIFIED)")}`);
+    if (result.sourceUrl)
+        info(env, `  source:       ${result.sourceUrl} ${dim(env, "(UNVERIFIED)")}`);
+    if (result.authorKeyId)
+        info(env, `  author_key:   ${result.authorKeyId} ${dim(env, "(UNVERIFIED)")}`);
+    if (result.version)
+        info(env, `  version:      ${result.version}`);
+    if (result.supersedes?.length) {
+        info(env, `  supersedes:   ${dim(env, "(UNVERIFIED — no chain validation)")}`);
+        for (const h of result.supersedes) {
+            info(env, `                ${h}`);
+        }
+    }
+    if (result.description)
+        info(env, `  description:  ${result.description}`);
+}
+
+// W33 (91 §4) + 88 §3.5: in dry-run we summarize the SENSITIVE hits as a
+// distinct block at the top of the preview. The gate didn't throw (dry-run
+// skips it), so the block stands in for the would-have-been error message.
+// On a real import that reaches this renderer, the user already consented;
+// the block recaps what they accepted.
+function renderSensitiveSummary(result: ImportResultWithExtras, env: CliEnv): void {
+    if (result.sensitiveHits.length === 0) return;
+    const n = result.sensitiveHits.length;
+    info(env, paint(env, "yellow", `⚠ This Setup modifies ${n} security-sensitive setting(s):`));
+    for (const path of result.sensitiveHits) {
+        // sensitiveDomain handles unknown paths defensively; the hit list
+        // came from the classifier so all entries are known.
+        const carrier = result.changes.find(
+            (c) => path.split(".").slice(0, c.path.length).join(".") === c.path.join("."),
+        );
+        const valueHint = carrier
+            ? (carrier.kind === "added"   ? `(added)`
+              : carrier.kind === "removed" ? `(removed)`
+              : `(changed)`)
+            : "";
+        info(env, `  [${sensitiveDomain(path)}] ${path} ${dim(env, valueHint)}`);
+    }
+    info(env, "");
 }
 
 export function renderSetupImport(
@@ -593,6 +743,12 @@ export function renderSetupImport(
     env: CliEnv,
     renderOpts: { allowUnknownKeys: boolean; strict: boolean; force: boolean },
 ): void {
+    // W33 (91 §4) — order is load-bearing: SENSITIVE summary first so a user
+    // reads what the Setup *does* before reading who *claims* to have authored
+    // it (N1 anti-anchor-trust mitigation).
+    renderSensitiveSummary(result, env);
+    renderImportAuthorBlock(result, env);
+
     if (result.compat) {
         env.stdout.write(`  compat check:\n`);
         if (result.compat.declared.koreaderVersionMin) {
@@ -648,12 +804,13 @@ export function renderSetupImport(
         }
         for (const c of result.changes) {
             const p = c.path.join(".");
+            const marker = changeHitsSensitive(c).length > 0 ? "[SENSITIVE] " : "";
             if (c.kind === "added") {
-                info(env, paint(env, "green", `  + ${p}`) + `  = ${fmtValue(c.next)}`);
+                info(env, paint(env, "green", `  + ${marker}${p}`) + `  = ${fmtValue(c.next)}`);
             } else if (c.kind === "changed") {
-                info(env, paint(env, "yellow", `  ~ ${p}`) + `  ${fmtValue(c.prev)} → ${fmtValue(c.next)}`);
+                info(env, paint(env, "yellow", `  ~ ${marker}${p}`) + `  ${fmtValue(c.prev)} → ${fmtValue(c.next)}`);
             } else {
-                info(env, paint(env, "red", `  - ${p}`) + `  (was ${fmtValue(c.prev)})`);
+                info(env, paint(env, "red", `  - ${marker}${p}`) + `  (was ${fmtValue(c.prev)})`);
             }
         }
     } else if (willInstallPlugins || willInstallPatches) {
@@ -714,6 +871,14 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
         throw new ArgError("--accept-patches and --skip-patches are mutually exclusive");
     }
 
+    const expectHash = flags["expect-hash"] !== undefined
+        ? normalizeExpectedHash(flags["expect-hash"])
+        : undefined;
+
+    const acceptKey = flags["accept-key"] !== undefined
+        ? parseAcceptKey(flags["accept-key"])
+        : undefined;
+
     // Pre-emit the intro + fat-disclosure in text mode so the user sees
     // what's being imported BEFORE any gate throws. No-op in JSON mode.
     const path = resolve(env.cwd, fileArg);
@@ -741,20 +906,19 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
         acceptPatches: flags["accept-patches"],
         skipPatches: flags["skip-patches"],
         label: flags.label,
+        ...(expectHash ? { expectHash } : {}),
+        acceptSensitive: flags["accept-sensitive"],
+        ...(acceptKey ? { acceptKey } : {}),
     }, env);
 
     if (env.jsonMode) {
         const { schemaFindings, shippedPluginCount, shippedPatchCount,
-                author, description, ...publicData } = result;
+                ...publicData } = result;
         void schemaFindings; void shippedPluginCount; void shippedPatchCount;
-        // author/description are useful in JSON too — add them back explicitly
-        // as declared fields (they're on the manifest, consumers will want them).
-        const withMeta = {
-            ...publicData,
-            ...(author ? { author } : {}),
-            ...(description ? { description } : {}),
-        };
-        emitJson(env, "setup import", withMeta);
+        // W33 (91 §3.2): identity-claim fields (author, sourceUrl,
+        // authorKeyId, supersedes) get wrapped `{ value, verified: false }`.
+        // Content fields (description, version) stay bare.
+        emitJson(env, "setup import", wrapIdentityClaims(publicData));
     } else {
         renderSetupImport(result, env, {
             allowUnknownKeys: !!flags["allow-unknown-keys"],
@@ -918,6 +1082,17 @@ usage: kindly setup import <file> [options]
   --accept-patches      install patch files shipped in the Setup (fat)
   --skip-patches        apply settings only; leave patches untouched
   --mount <path>        path to a mounted Kindle (auto-detect by default)
+  --expect-hash <h>     refuse import if the manifest's content hash doesn't
+                        match. Accepts sha256:<64 hex> or bare 64 hex. Check
+                        the hash out-of-band before passing this flag; compare
+                        against \`kindly setup hash <file>\`.
+  --accept-sensitive    accept all SENSITIVE-class setting changes (network
+                        endpoints, SSH, debug, directory redirection). Without
+                        this (or --accept-key), a SENSITIVE change fails the
+                        import with a listing of the affected keys.
+  --accept-key <k,...>  accept SENSITIVE changes only for these comma-separated
+                        key names (e.g. SSH_port,debug,kosync.custom_server).
+                        Unknown keys are rejected.
 
 Additive merge: keys in the manifest override; on-device keys not in the
 manifest are left alone (this is how secrets and reading state survive).

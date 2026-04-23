@@ -47,6 +47,11 @@ export function executeSetupInspect(
         ...(manifest.meta.author ? { author: manifest.meta.author } : {}),
         ...(manifest.meta.description ? { description: manifest.meta.description } : {}),
         tags: manifest.meta.tags ?? [],
+        ...(manifest.meta.source_url ? { sourceUrl: manifest.meta.source_url } : {}),
+        ...(manifest.meta.version ? { version: manifest.meta.version } : {}),
+        ...(manifest.meta.author_key_id ? { authorKeyId: manifest.meta.author_key_id } : {}),
+        ...(manifest.meta.supersedes?.length
+            ? { supersedes: [...manifest.meta.supersedes] } : {}),
         ...(manifest.compat ? {
             compat: {
                 ...(manifest.compat.koreader_version_min

@@ -104,6 +104,15 @@ export const MetaSchema = z.object({
     // "2026-04-21T12:00:00Z", with optional milliseconds, with Z or ±HH:MM.
     created_at: z.iso.datetime({ offset: true }),
     tags: z.array(z.string()).optional(),
+    // W33 reserved fields — accepted, displayed with `(UNVERIFIED)`,
+    // never trusted until W39 minisign verification ships. See
+    // docs/91-reserved-meta-fields-spec.md §2 + §6.
+    source_url: z.string().url().optional(),
+    version: z.string().optional(),
+    author_key_id: z.string().optional(),
+    supersedes: z.array(
+        z.string().regex(SHA256_HEX, "supersedes entry must be 'sha256:' + 64 lowercase hex chars")
+    ).optional(),
 }).strict();
 export type Meta = z.infer<typeof MetaSchema>;
 

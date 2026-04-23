@@ -157,6 +157,14 @@ export interface SetupInspectResult {
     author?: string;
     description?: string;
     tags: string[];
+    /** W33 reserved meta fields (91 §2). Always treated as UNVERIFIED at
+     *  display time until W39 minisign verification ships. Carried as-is
+     *  off the manifest — JSON renderers wrap identity-claim fields in
+     *  `{ value, verified: false }` per 91 §3.2. */
+    sourceUrl?: string;
+    version?: string;
+    authorKeyId?: string;
+    supersedes?: string[];
     compat?: {
         koreaderVersionMin?: string;
         koreaderVersionMax?: string;
@@ -254,6 +262,10 @@ export interface SetupImportResult {
     inertPluginToggles: string[];
     /** Secret-named keys in the manifest that were refused by the denylist. */
     refusedSecrets: string[];
+    /** Dotted paths of SENSITIVE keys touched by this import (88 §3). Empty
+     *  when no SENSITIVE changes. Populated on dry-run too (gate is skipped,
+     *  but the hits are still reported for [SENSITIVE] markers in preview). */
+    sensitiveHits: string[];
     /** Settings backup path inside .kindly/pre-import/<stamp>/. Null on
      *  no-op/dry-run or when --no-safety-snapshot. */
     backupPath: string | null;

@@ -11,9 +11,11 @@ import { parse as yamlParse } from "yaml";
 
 import { parseSettingsFile } from "../lua/reader.ts";
 import { dumpSettingsFile, type LuaTable, type LuaValue } from "../lua/writer.ts";
-import { filterForYaml, classifyKey } from "../schema/classify.ts";
+import {
+    filterForYaml, classifyKey, changeHitsSensitive, sensitiveDomain,
+} from "../schema/classify.ts";
 import { mergeYamlIntoLua, replaceYamlIntoLua } from "../schema/yaml.ts";
-import { computeChanges, computeReplaceChanges } from "../schema/diff.ts";
+import { computeChanges, computeReplaceChanges, type Change } from "../schema/diff.ts";
 import { safeWrite } from "../fs/safeWrite.ts";
 import { createTarGz } from "../fs/archive.ts";
 import { type CliEnv, resolveMount } from "../cli/env.ts";
@@ -156,6 +158,24 @@ export interface SetupImportOptions {
     acceptPatches?: boolean;
     skipPatches?: boolean;
     label?: string;
+    /**
+     * Assert the manifest's content hash matches before applying. Must be
+     * pre-normalized to `sha256:<64 hex>` by the caller (CLI layer owns
+     * format validation — see docs/92-expect-hash-spec.md §3).
+     */
+    expectHash?: string;
+    /**
+     * W31 (88 §3.1): accept all SENSITIVE-class changes in this import.
+     * Without it (and without per-key overrides in `acceptKey`), a SENSITIVE
+     * change throws SENSITIVE_REQUIRES_ACK.
+     */
+    acceptSensitive?: boolean;
+    /**
+     * W31 (88 §3.1): per-key override. Entries are dotted key strings
+     * (top-level or nested path). CLI layer validates them against
+     * SENSITIVE_KEYS / SENSITIVE_PATHS before constructing this set.
+     */
+    acceptKey?: Set<string>;
 }
 
 export type ImportResultWithExtras = SetupImportResult & {
@@ -163,12 +183,77 @@ export type ImportResultWithExtras = SetupImportResult & {
     author?: string;
     /** meta.description, for render intro line. */
     description?: string;
+    /** W33 reserved meta fields (91 §6). Used by the inspect/import preview
+     *  text renderer to surface identity claims with `(UNVERIFIED)` until
+     *  W39 signature verification lands. */
+    sourceUrl?: string;
+    version?: string;
+    authorKeyId?: string;
+    supersedes?: string[];
     /** Needed to format --skip-plugins / --skip-patches render lines. */
     shippedPluginCount: number;
     shippedPatchCount: number;
     /** Findings from the schema validator (non-strict warnings). */
     schemaFindings?: ValidationReport;
 };
+
+// Descend into a LuaValue by a dotted-path tail. Returns undefined if any
+// segment can't be traversed (scalar, array, map, or missing key).
+function descendLua(value: LuaValue | undefined, tail: readonly string[]): LuaValue | undefined {
+    let v: LuaValue | undefined = value;
+    for (const k of tail) {
+        if (v === null || typeof v !== "object" || Array.isArray(v) || v instanceof Map) {
+            return undefined;
+        }
+        v = (v as Record<string, LuaValue>)[k];
+    }
+    return v;
+}
+
+// Render a LuaValue for the SENSITIVE warning list. Scalars go verbatim
+// (JSON-encoded for strings); arrays/objects collapse to a shape hint per
+// 88 §3.3.
+function fmtSensitiveValue(v: LuaValue | undefined): string {
+    if (v === undefined) return "(absent)";
+    if (v === null) return "nil";
+    if (Array.isArray(v)) return `<array of ${v.length} item(s)>`;
+    if (v instanceof Map) return `<table with ${v.size} key(s)>`;
+    if (typeof v === "object") {
+        return `<object with ${Object.keys(v).length} key(s)>`;
+    }
+    if (typeof v === "string") return JSON.stringify(v);
+    return String(v);
+}
+
+// Locate the change that carries a SENSITIVE hit path and format the
+// prev/next for the warning line. Returns "(added) → X" / "Y → (removed)" /
+// "Y → X" depending on the carrier change's kind.
+function formatSensitiveChange(changes: readonly Change[], hitPath: string): string {
+    const segments = hitPath.split(".");
+    for (const c of changes) {
+        if (segments.length < c.path.length) continue;
+        let matches = true;
+        for (let i = 0; i < c.path.length; i++) {
+            if (c.path[i] !== segments[i]) { matches = false; break; }
+        }
+        if (!matches) continue;
+        const tail = segments.slice(c.path.length);
+        if (c.kind === "added") {
+            const next = descendLua(c.next, tail);
+            return `(added) → ${fmtSensitiveValue(next)}`;
+        }
+        if (c.kind === "removed") {
+            const prev = descendLua(c.prev, tail);
+            return `${fmtSensitiveValue(prev)} → (removed)`;
+        }
+        const prev = descendLua(c.prev, tail);
+        const next = descendLua(c.next, tail);
+        // A "changed" parent may leave the SENSITIVE descendant unchanged or
+        // newly present/absent; fmtSensitiveValue handles undefined.
+        return `${fmtSensitiveValue(prev)} → ${fmtSensitiveValue(next)}`;
+    }
+    return "(change)";
+}
 
 export function executeSetupImport(
     opts: SetupImportOptions,
@@ -178,6 +263,24 @@ export function executeSetupImport(
     const loaded = loadSetup(path);
     const { manifest, manifestBytes, files } = loaded;
     const id = shortId(hashBytes(manifestBytes));
+
+    // W34a: hash assertion — first gate after load. opts.expectHash is
+    // already `sha256:<64hex>` (CLI layer normalized & validated the format).
+    // Fail fast before prompting the user about plugins / sensitive keys —
+    // if the file isn't the one they expected, nothing downstream matters.
+    if (opts.expectHash) {
+        const actual = hashBytes(manifestBytes);
+        if (actual !== opts.expectHash) {
+            throw new KindlyError(
+                ErrorCodes.MANIFEST_HASH_MISMATCH,
+                `expected ${opts.expectHash} but Setup hashes to ${actual}`,
+                [
+                    { text: "Verify you received the file you expected." },
+                    { text: "Re-download from the original source." },
+                ],
+            );
+        }
+    }
 
     const shippedPlugins: readonly EmbeddedFile[] = manifest.plugins?.files ?? [];
     const shippedPatches: readonly EmbeddedFile[] = manifest.patches ?? [];
@@ -302,6 +405,58 @@ export function executeSetupImport(
         ? computeReplaceChanges(onDevice, safeFlat, preservedKeys)
         : computeChanges(onDevice, safeFlat);
 
+    // W31: SENSITIVE gate — step 10 of 88 §3.0 pipeline. Collect hits first
+    // (dry-run preview needs them for [SENSITIVE] markers). Then, only if NOT
+    // dry-run, enforce acceptance. Content warning per 88 §3.5 — --dry-run
+    // skips the throw but keeps the hit list.
+    const sensitiveHitSet = new Set<string>();
+    for (const c of changes) {
+        for (const p of changeHitsSensitive(c)) sensitiveHitSet.add(p);
+    }
+    const sensitiveHits = [...sensitiveHitSet].sort();
+
+    if (!opts.dryRun && sensitiveHits.length > 0) {
+        const accepted = opts.acceptKey ?? new Set<string>();
+        const blocking = opts.acceptSensitive
+            ? []
+            : sensitiveHits.filter((p) => !accepted.has(p));
+        if (blocking.length > 0) {
+            const list = blocking
+                .map((p) => `  [${sensitiveDomain(p)}] ${p}: ${formatSensitiveChange(changes, p)}`)
+                .join("\n");
+            throw new KindlyError(
+                ErrorCodes.SENSITIVE_REQUIRES_ACK,
+                `this Setup modifies ${blocking.length} security-sensitive setting(s):\n${list}`,
+                [
+                    { text: "Review with: kindly setup inspect <file>" },
+                    { text: "Accept all changes.", command: "kindly setup import <file> --accept-sensitive" },
+                    { text: "Accept specific keys.", command: "kindly setup import <file> --accept-key=<key,key,...>" },
+                ],
+            );
+        }
+    }
+
+    // W31a: extra_plugin_paths dual gate (88 §4.3). Even after
+    // --accept-sensitive (or --accept-key=extra_plugin_paths) clears the
+    // SENSITIVE check, this key needs the SAME --accept-plugins consent the
+    // fat-files path requires — a settings-only redirect of KOReader's
+    // plugin loader still ends in "Lua code from a path you don't fully
+    // control runs on your device." Two flags, two distinct mental models.
+    if (!opts.dryRun && !opts.acceptPlugins
+        && sensitiveHits.includes("extra_plugin_paths")) {
+        const newPath = formatSensitiveChange(changes, "extra_plugin_paths");
+        throw new KindlyError(
+            ErrorCodes.FAT_REQUIRES_ACK,
+            `this Setup sets extra_plugin_paths — KOReader will load Lua plugins from the listed directories. ` +
+            `Any Lua code in those paths will execute on your Kindle with full device access.\n` +
+            `  extra_plugin_paths: ${newPath}`,
+            [
+                { text: "Inspect the path the Setup sets.", command: "kindly setup inspect <file>" },
+                { text: "Pass --accept-plugins to consent to plugin code execution." },
+            ],
+        );
+    }
+
     const willInstallPlugins = !!opts.acceptPlugins && shippedPlugins.length > 0;
     const willInstallPatches = !!opts.acceptPatches && shippedPatches.length > 0;
     const writeSettings = changes.length > 0;
@@ -320,12 +475,18 @@ export function executeSetupImport(
         skippedPatches: opts.skipPatches ? shippedPatches.length : 0,
         inertPluginToggles,
         refusedSecrets,
+        sensitiveHits,
         backupPath: null,
         snapshotDir: null,
         fatSnapshotPath: null,
         compat: compatSummary,
         ...(manifest.meta.author ? { author: manifest.meta.author } : {}),
         ...(manifest.meta.description ? { description: manifest.meta.description } : {}),
+        ...(manifest.meta.source_url ? { sourceUrl: manifest.meta.source_url } : {}),
+        ...(manifest.meta.version ? { version: manifest.meta.version } : {}),
+        ...(manifest.meta.author_key_id ? { authorKeyId: manifest.meta.author_key_id } : {}),
+        ...(manifest.meta.supersedes?.length
+            ? { supersedes: [...manifest.meta.supersedes] } : {}),
         shippedPluginCount: shippedPlugins.length,
         shippedPatchCount: shippedPatches.length,
         ...(schemaFindings ? { schemaFindings } : {}),

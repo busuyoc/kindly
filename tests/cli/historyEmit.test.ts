@@ -209,10 +209,12 @@ describe("history emission — setup import", () => {
         const { env: exportEnv } = makeEnv(workdir, kindle.root);
         await main(["setup", "export", "test-setup", "--output", exportPath], exportEnv);
 
-        // Mutate the device so the import is not a no-op.
+        // Mutate the device so the import is not a no-op. Toggle night_mode
+        // only — leave home_dir alone (it's SENSITIVE and would need
+        // --accept-sensitive, which is tested elsewhere).
         writeFileSync(kindle.settingsPath, `return {
     ["night_mode"] = true,
-    ["home_dir"] = "/different",
+    ["home_dir"] = "/mnt/books",
 }
 `);
 
@@ -288,7 +290,7 @@ describe("history emission — --label flag", () => {
 
         writeFileSync(kindle.settingsPath, `return {
     ["night_mode"] = true,
-    ["home_dir"] = "/different",
+    ["home_dir"] = "/mnt/books",
 }
 `);
 

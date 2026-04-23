@@ -25,6 +25,7 @@ import {
 } from "node:fs";
 import { dirname, basename, join } from "node:path";
 import { parseSettingsFile } from "../lua/reader.ts";
+import { rotateBackups } from "./backupRotation.ts";
 
 export type SafeWriteOptions = {
     /** Where to archive pre-write snapshots. Defaults to <cwd>/.kindly/backups. */
@@ -139,6 +140,8 @@ export function safeWrite(
         }
         throw verifyErr;
     }
+
+    if (backupPath) rotateBackups(backupDir);
 
     return {
         path,

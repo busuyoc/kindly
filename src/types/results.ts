@@ -15,6 +15,41 @@ import type { LuaValue } from "../lua/writer.ts";
 import type { HistoryEntryWithIndex } from "../history/reader.ts";
 import type { PluginEntry, PluginWithState } from "../catalog/reader.ts";
 import type { PluginHashReport } from "../catalog/verify.ts";
+import type { ScanCategory } from "../setup/luaScan.ts";
+
+// W36/W37: Lua static scanner results. Spec: docs/93. Attached to
+// SetupInspectResult / SetupImportResult when the Setup ships plugins
+// or patches. Catalog MATCH verdicts suppress findings on a per-file
+// basis — `suppressedByCatalog` is the count of files that were silenced
+// this way, surfaced so the user can see "we scanned and found nothing
+// new" vs. "we didn't scan at all".
+
+export interface ScanFinding {
+    /** Plugin folder name (e.g. "statistics.koplugin"), or the sentinel
+     *  `"(patch)"` for patches/*.lua. */
+    plugin: string;
+    /** Path relative to the plugin folder (or the patches/ dir). */
+    file: string;
+    /** 1-indexed line number. */
+    line: number;
+    category: ScanCategory;
+    /** Short label of the matched pattern (os.execute, require(<net>), …). */
+    label: string;
+    /** Offending source line, trimmed and capped at 80 chars. */
+    snippet: string;
+}
+
+export interface ScanReport {
+    /** All unsuppressed findings. Sorted by (plugin, file, line). */
+    findings: ScanFinding[];
+    /** Files the pipeline actually ran the scanner against. */
+    filesScanned: number;
+    /** Total bytes of source read. Bounded by W34c extraction caps. */
+    bytesScanned: number;
+    /** Files skipped because their hash matched a MATCH verdict in the
+     *  PluginHashReport. Catalog curators already reviewed those bytes. */
+    suppressedByCatalog: number;
+}
 
 export interface DiffGroupEntry {
     /** Joined dotted path, e.g. "footer.align" or "avoid_flashing_ui". */
@@ -241,6 +276,10 @@ export interface SetupInspectResult {
         threshold: number;
         sampleKeys: string[];
     };
+    /** W36/W37: Lua static scanner report. Present when the Setup ships
+     *  plugins or patches. Absent for lean (settings-only) Setups since
+     *  there's no Lua to scan. */
+    scanReport?: ScanReport;
 }
 
 export interface SetupExportResult {
@@ -355,6 +394,10 @@ export interface SetupImportResult {
          *  the scope of the wipe. */
         sampleKeys: string[];
     } | null;
+    /** W36/W37: Lua static scanner report. Null when the Setup ships no
+     *  plugins or patches, or when --skip-plugins + --skip-patches leave
+     *  nothing to scan. */
+    scanReport: ScanReport | null;
 }
 
 export interface HistoryResult {

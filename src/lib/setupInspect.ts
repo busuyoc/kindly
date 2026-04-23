@@ -16,8 +16,9 @@ import {
 } from "../schema/diff.ts";
 import { collectSensitiveFromSettings, sensitiveDomain } from "../schema/classify.ts";
 import { groupChanges } from "../taxonomy/group.ts";
-import type { SetupInspectResult } from "../types/results.ts";
-import { loadSetup } from "./importSetup.ts";
+import type { ScanReport, SetupInspectResult } from "../types/results.ts";
+import { scanShippedLuaFiles } from "../catalog/scanPipeline.ts";
+import { computePluginHashReport, loadSetup } from "./importSetup.ts";
 
 export interface SetupInspectOptions {
     /** When set, compute a settings-preview diff against the chosen baseline. */
@@ -30,7 +31,7 @@ export function executeSetupInspect(
     opts: SetupInspectOptions = {},
 ): SetupInspectResult {
     const path = resolve(env.cwd, fileArg);
-    const { manifest, manifestBytes, isFat } = loadSetup(path);
+    const { manifest, manifestBytes, isFat, files } = loadSetup(path);
 
     const rawText = manifestBytes.toString("utf8");
     const rawHash = hashBytes(manifestBytes);
@@ -74,7 +75,33 @@ export function executeSetupInspect(
         ...(isCanonical ? {} : { canonicalHash: manifestHash(manifest) }),
         ...previewAndWarnings(manifest, opts.preview, env),
         ...securityBlock(manifest),
+        ...scannerBlock(manifest, files),
     };
+}
+
+// W36/W37: scan shipped Lua files for dangerous call patterns. Suppresses
+// findings for plugins whose hashes MATCH the catalog — spec §5.2. Inspect
+// runs the scanner even when the user isn't planning to import; the point
+// is to let them see what's in there.
+function scannerBlock(
+    manifest: SetupManifest,
+    files: Map<string, Buffer>,
+): { scanReport?: ScanReport } {
+    const plugins = manifest.plugins?.files ?? [];
+    const patches = manifest.patches ?? [];
+    if (plugins.length === 0 && patches.length === 0) return {};
+    // Inspect has no mount → no device version. Pass null; version-skew
+    // in the hash report goes unknown, which doesn't affect suppression.
+    const hashReport = plugins.length > 0
+        ? computePluginHashReport(plugins, files, null)
+        : null;
+    const report = scanShippedLuaFiles({
+        shippedPlugins: plugins,
+        shippedPatches: patches,
+        files,
+        hashReport,
+    });
+    return { scanReport: report };
 }
 
 // Assemble the preview payload (if requested) plus any replace-mode

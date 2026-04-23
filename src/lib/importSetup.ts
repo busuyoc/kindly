@@ -39,7 +39,8 @@ import {
     findInertToggles, installPatches, installPluginFiles,
     listInstalledPluginFolders,
 } from "../setup/files.ts";
-import type { SetupImportResult } from "../types/results.ts";
+import type { ScanReport, SetupImportResult } from "../types/results.ts";
+import { scanShippedLuaFiles } from "../catalog/scanPipeline.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
 
@@ -305,7 +306,7 @@ function computeReplaceWarnings(
 // `koreader_hash_version` vs the device's detected version.
 // Catalog load failures fall back to a `null` report — hash verification is
 // best-effort; we don't want a stale catalog JSON to break imports.
-function computePluginHashReport(
+export function computePluginHashReport(
     shippedPlugins: readonly EmbeddedFile[],
     fileBytes: Map<string, Buffer>,
     deviceVersion: string | null,
@@ -435,6 +436,40 @@ export function executeSetupImport(
                 [{ text: "Regenerate the catalog against the device's KOReader version, or drop --strict-imports if the findings are expected." }],
             );
         }
+    }
+
+    // W36/W37: Lua static scanner over shipped plugins + patches. Runs
+    // after the hash report so we can suppress findings on catalogued
+    // files that MATCH (docs/93 §5.2). Scans whether or not the user
+    // accepted plugins — --dry-run should show findings too.
+    const willScan = shippedPlugins.length > 0 || shippedPatches.length > 0;
+    const scanReport: ScanReport | null = willScan
+        ? scanShippedLuaFiles({
+            shippedPlugins,
+            shippedPatches,
+            files,
+            hashReport: pluginHashReport,
+        })
+        : null;
+
+    // W36/W37 strict gate: any unsuppressed scanner finding blocks under
+    // --strict-imports. Reuses STRICT_IMPORT_BLOCKED — docs/93 §5.3.
+    if (opts.strictImports && scanReport && scanReport.findings.length > 0) {
+        const preview = scanReport.findings.slice(0, 5).map(
+            (f) => `  [${f.category}] ${f.plugin}/${f.file}:${f.line}`,
+        ).join("\n");
+        const more = scanReport.findings.length > 5
+            ? `\n  … and ${scanReport.findings.length - 5} more`
+            : "";
+        throw new KindlyError(
+            ErrorCodes.STRICT_IMPORT_BLOCKED,
+            `--strict-imports: ${scanReport.findings.length} Lua scanner finding(s) in shipped code:\n${preview}${more}`,
+            [
+                { text: "Review the findings.", command: "kindly setup inspect <file>" },
+                { text: "If the shipped plugin is bundled and curated, the hash should match the catalog; regenerate the catalog if it drifted." },
+                { text: "Drop --strict-imports if the findings are expected." },
+            ],
+        );
     }
 
     let compatSummary: SetupImportResult["compat"] = null;
@@ -631,6 +666,7 @@ export function executeSetupImport(
         pluginHashReport,
         compat: compatSummary,
         replaceWarnings: replaceWarningPayload,
+        scanReport,
         ...(manifest.meta.author ? { author: manifest.meta.author } : {}),
         ...(manifest.meta.description ? { description: manifest.meta.description } : {}),
         ...(manifest.meta.source_url ? { sourceUrl: manifest.meta.source_url } : {}),

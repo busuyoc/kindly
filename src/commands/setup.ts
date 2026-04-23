@@ -329,6 +329,8 @@ export function renderSetupInspect(result: SetupInspectResult, env: CliEnv): voi
         info(env, dim(env, `  first: ${sampleKeys.join(", ")}${removedUserKeys > sampleKeys.length ? ", ..." : ""}`));
     }
 
+    if (result.scanReport) renderScanReport(result.scanReport, env);
+
     if (result.preview) {
         const { preview } = result;
         const totalChanges = preview.changes.length;
@@ -804,6 +806,36 @@ function renderPluginHashReport(
     }
 }
 
+// W36/W37 (docs/93 §8): print a scanner-findings block. Findings on files
+// whose hash matched the catalog were already suppressed by scanPipeline —
+// what's printed here is novel or tampered code. One line per finding with
+// category tag, file:line, and a short snippet for context.
+function renderScanReport(report: NonNullable<SetupInspectResult["scanReport"]>, env: CliEnv): void {
+    if (report.findings.length === 0) {
+        if (report.suppressedByCatalog > 0) {
+            info(env, dim(env,
+                `  scanner: ${report.filesScanned} file(s) scanned, ${report.suppressedByCatalog} suppressed by catalog — no novel findings`,
+            ));
+        }
+        return;
+    }
+    const uniqueFiles = new Set(
+        report.findings.map((f) => `${f.plugin}/${f.file}`),
+    );
+    warn(env,
+        `scanner findings: ${report.findings.length} across ${uniqueFiles.size} file(s)`,
+    );
+    if (report.suppressedByCatalog > 0) {
+        info(env, dim(env, `  (${report.suppressedByCatalog} plugin(s) suppressed by catalog hash match)`));
+    }
+    for (const f of report.findings) {
+        const tag = paint(env, "red", `[${f.category}]`);
+        const loc = `${f.plugin}/${f.file}:${f.line}`;
+        stderrLine(env, `    ${tag}  ${loc}`);
+        if (f.snippet) stderrLine(env, dim(env, `      -- ${f.snippet}`));
+    }
+}
+
 // W33 (91 §4) + 88 §3.5: in dry-run we summarize the SENSITIVE hits as a
 // distinct block at the top of the preview. The gate didn't throw (dry-run
 // skips it), so the block stands in for the would-have-been error message.
@@ -843,6 +875,7 @@ export function renderSetupImport(
     // whether it matches the curated catalog. Emitted before compat/schema
     // so the decision surface is consolidated near the top.
     renderPluginHashReport(result, env, renderOpts.safetySnapshot);
+    if (result.scanReport) renderScanReport(result.scanReport, env);
 
     if (result.compat) {
         env.stdout.write(`  compat check:\n`);

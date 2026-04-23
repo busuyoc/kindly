@@ -222,7 +222,7 @@ describe("setup inspect / import — compat display", () => {
         stderr.reset();
 
         const code = await main(["setup", "import", out, "--dry-run"], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(stdout.value).toContain("koreader >= 2024.03");
         expect(stdout.value).toContain("koreader <= 2025.12");
         expect(stdout.value).toContain("kindle-pw5");

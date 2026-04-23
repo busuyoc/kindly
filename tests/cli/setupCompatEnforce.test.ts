@@ -108,7 +108,7 @@ describe("setup import — compat enforcement (happy path)", () => {
         });
 
         const code = await main(["setup", "import", p], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(out.value).toContain("detected: koreader=v2026.03, device=kindle");
         expect((parseSettings(kindle.settingsPath) as Record<string, unknown>).refresh_rate).toBe(2);
     });
@@ -120,7 +120,7 @@ describe("setup import — compat enforcement (happy path)", () => {
         writeManifest(p, { compat: { device: ["kindle-pw5"] } });
 
         const code = await main(["setup", "import", p], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
     });
 });
 
@@ -133,7 +133,7 @@ describe("setup import — compat enforcement (blocking)", () => {
 
         const before = readFileSync(kindle.settingsPath, "utf8");
         const code = await main(["setup", "import", p], env);
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         expect(err.value).toContain("older than required");
         expect(err.value).toContain("--force");
         expect(readFileSync(kindle.settingsPath, "utf8")).toBe(before);
@@ -146,7 +146,7 @@ describe("setup import — compat enforcement (blocking)", () => {
         writeManifest(p, { compat: { koreader_version_max: "2024.11" } });
 
         const code = await main(["setup", "import", p], env);
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         expect(err.value).toContain("newer than required");
     });
 
@@ -157,7 +157,7 @@ describe("setup import — compat enforcement (blocking)", () => {
         writeManifest(p, { compat: { device: ["kobo-libra2", "kobo-clara"] } });
 
         const code = await main(["setup", "import", p], env);
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         expect(err.value).toContain("kobo-libra2");
         expect(err.value).toContain("kindle");
     });
@@ -174,7 +174,7 @@ describe("setup import — compat enforcement (blocking)", () => {
         });
 
         const code = await main(["setup", "import", p], env);
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         expect(err.value).toMatch(/older than required/);
         expect(err.value).toMatch(/kobo-libra2/);
     });
@@ -186,7 +186,7 @@ describe("setup import — compat enforcement (blocking)", () => {
         writeManifest(p, { compat: { koreader_version_min: "2099.01" } });
 
         const code = await main(["setup", "import", p, "--dry-run"], env);
-        expect(code).toBe(1);
+        expect(code).toBe(3);
     });
 });
 
@@ -198,7 +198,7 @@ describe("setup import — compat enforcement (--force)", () => {
         writeManifest(p, { compat: { koreader_version_min: "2099.01" } });
 
         const code = await main(["setup", "import", p, "--force"], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(err.value).toContain("older than required");
         expect(err.value).toContain("--force");
         expect((parseSettings(kindle.settingsPath) as Record<string, unknown>).refresh_rate).toBe(2);
@@ -213,7 +213,7 @@ describe("setup import — compat enforcement (unverifiable soft path)", () => {
         writeManifest(p, { compat: { koreader_version_min: "2024.03" } });
 
         const code = await main(["setup", "import", p], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(err.value).toContain("could not read git-rev");
     });
 
@@ -224,7 +224,7 @@ describe("setup import — compat enforcement (unverifiable soft path)", () => {
         writeManifest(p, { compat: { device: ["kindle"] } });
 
         const code = await main(["setup", "import", p], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(err.value).toContain("could not detect device family");
     });
 
@@ -235,7 +235,7 @@ describe("setup import — compat enforcement (unverifiable soft path)", () => {
         writeManifest(p, { compat: { koreader_version_min: "not-a-version" } });
 
         const code = await main(["setup", "import", p], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(err.value).toMatch(/not a parseable KOReader version/);
     });
 });

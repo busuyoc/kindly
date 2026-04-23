@@ -221,29 +221,10 @@ describe("setup inspect — catalog suppression", () => {
 });
 
 describe("setup import — --strict-imports blocks on findings", () => {
-    test("UNVERIFIED plugin with os.execute → scanner gate fires", async () => {
-        // UNVERIFIED (catalogued w/o known_hashes) passes the W34e
-        // plugin-integrity gate — scanner gate is the one that should
-        // trip. UNCATALOGUED would trip W34e first and we'd never reach
-        // the scanner block.
-        const mainSrc = `os.execute("malicious")\n`;
-        const catalogPath = writeSyntheticCatalog(workdir, [
-            stubCatalogEntry({ name: "SSH", known_hashes: null }),
-        ]);
-        const src = await exportFat("SSH.koplugin", { "main.lua": mainSrc });
-        try {
-            executeSetupImport(
-                { file: src, acceptPlugins: true, catalogPath, strictImports: true, dryRun: true },
-                env,
-            );
-            throw new Error("should have thrown");
-        } catch (e) {
-            const err = e as { code?: string; message: string };
-            expect(err.code).toBe("STRICT_IMPORT_BLOCKED");
-            expect(err.message).toContain("Lua scanner finding");
-            expect(err.message).toContain("shell");
-        }
-    });
+    // Note: under --strict-imports, MISMATCH/UNCATALOGUED/UNVERIFIED all
+    // trip the W34e integrity gate before the scanner gate can fire, and
+    // MATCH suppresses scanner findings. The only way to exercise the
+    // scanner gate in strict mode is via patches (no catalog coverage).
 
     test("patch-only Setup with os.execute → scanner gate fires (no plugin integrity to check)", async () => {
         seedPatch(kindle.patchesDir, "9-evil.lua", `os.execute("x")\n`);

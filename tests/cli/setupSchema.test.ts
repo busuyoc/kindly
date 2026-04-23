@@ -72,7 +72,7 @@ describe("setup import — schema validation default (warn, proceed)", () => {
         writeManifest(p, { nightmode: true });  // THE typo from field testing
 
         const code = await main(["setup", "import", p], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(err.value).toMatch(/unknown key/i);
         expect(err.value).toContain("nightmode");
     });
@@ -84,7 +84,7 @@ describe("setup import — schema validation default (warn, proceed)", () => {
         writeManifest(p, { night_mode: "yes" });  // bool key, string value
 
         const code = await main(["setup", "import", p], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(err.value).toMatch(/type mismatch/i);
         expect(err.value).toContain("night_mode");
         expect(err.value).toContain("expected boolean");
@@ -112,20 +112,20 @@ describe("setup import — --strict", () => {
 
         const before = readFileSync(kindle.settingsPath, "utf8");
         const code = await main(["setup", "import", p, "--strict"], env);
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         expect(err.value).toContain("nightmode");
         expect(err.value).toMatch(/--strict/);
         expect(readFileSync(kindle.settingsPath, "utf8")).toBe(before);
     });
 
-    test("type mismatch + --strict → exit 1", async () => {
+    test("type mismatch + --strict → exit 3", async () => {
         const kindle = makeFakeKindle();
         const { env } = makeEnv(workdir, kindle.root, setupsDir);
         const p = join(workdir, "m.kset.yaml");
         writeManifest(p, { night_mode: 42 });
 
         const code = await main(["setup", "import", p, "--strict"], env);
-        expect(code).toBe(1);
+        expect(code).toBe(3);
     });
 });
 
@@ -137,7 +137,7 @@ describe("setup import — --allow-unknown-keys", () => {
         writeManifest(p, { nightmode: true });
 
         const code = await main(["setup", "import", p, "--allow-unknown-keys"], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(err.value).not.toMatch(/unknown key/i);
     });
 
@@ -148,7 +148,7 @@ describe("setup import — --allow-unknown-keys", () => {
         writeManifest(p, { night_mode: 42, custom_plugin_key: true });
 
         const code = await main(["setup", "import", p, "--allow-unknown-keys"], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(err.value).not.toMatch(/unknown key/i);
         expect(err.value).toMatch(/type mismatch/i);
         expect(err.value).toContain("night_mode");
@@ -159,11 +159,11 @@ describe("setup import — --allow-unknown-keys", () => {
         const { env } = makeEnv(workdir, kindle.root, setupsDir);
         const p1 = join(workdir, "typo-only.kset.yaml");
         writeManifest(p1, { nightmode: true });
-        expect(await main(["setup", "import", p1, "--strict", "--allow-unknown-keys"], env)).toBe(0);
+        expect(await main(["setup", "import", p1, "--strict", "--allow-unknown-keys"], env)).toBe(4);
 
         const p2 = join(workdir, "mismatch.kset.yaml");
         writeManifest(p2, { night_mode: 5 });
-        expect(await main(["setup", "import", p2, "--strict", "--allow-unknown-keys"], env)).toBe(1);
+        expect(await main(["setup", "import", p2, "--strict", "--allow-unknown-keys"], env)).toBe(3);
     });
 });
 
@@ -188,7 +188,7 @@ describe("setup export — schema validation on exported subset", () => {
         expect(err.value).toContain("made_up_key");
     });
 
-    test("--strict on export with a made-up key → exit 1, no file written", async () => {
+    test("--strict on export with a made-up key → exit 3, no file written", async () => {
         const root = mkdtempSync(join(tmpdir(), "kindly-sch-dev-"));
         const kor = join(root, "koreader");
         mkdirSync(kor);
@@ -202,7 +202,7 @@ describe("setup export — schema validation on exported subset", () => {
         const { env } = makeEnv(workdir, root, setupsDir);
         const out = join(workdir, "out.kset.yaml");
         const code = await main(["setup", "export", "dev", "--strict", "--output", out], env);
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         expect(() => readFileSync(out, "utf8")).toThrow();
     });
 });

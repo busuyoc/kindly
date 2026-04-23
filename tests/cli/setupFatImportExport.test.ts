@@ -232,7 +232,7 @@ describe("setup import — fat gating", () => {
         const before = readFileSync(kindle.settingsPath, "utf8");
 
         const code = await main(["setup", "import", src], env);
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         // Disclosure was printed before the refusal.
         expect(stdout.value).toContain("ships executable code");
         expect(stdout.value).toContain("SSH.koplugin");
@@ -247,7 +247,7 @@ describe("setup import — fat gating", () => {
         const src = await exportFatFixture();
         await freshKindle();
         const code = await main(["setup", "import", src, "--accept-plugins"], env);
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         expect(stderr.value).toMatch(/--accept-patches|--skip-patches/);
     });
 
@@ -274,7 +274,7 @@ describe("setup import — fat installation", () => {
             "setup", "import", src,
             "--accept-plugins", "--accept-patches",
         ], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
 
         expect(existsSync(join(kindle.pluginsDir, "SSH.koplugin", "main.lua"))).toBe(true);
         expect(readFileSync(join(kindle.pluginsDir, "SSH.koplugin", "main.lua"), "utf8"))
@@ -292,7 +292,7 @@ describe("setup import — fat installation", () => {
             "setup", "import", src,
             "--accept-plugins", "--skip-patches",
         ], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(existsSync(join(kindle.pluginsDir, "SSH.koplugin", "main.lua"))).toBe(true);
         expect(existsSync(join(kindle.patchesDir, "2-autoflash.lua"))).toBe(false);
         expect(stdout.value).toMatch(/--skip-patches.*NOT installed/i);
@@ -306,7 +306,7 @@ describe("setup import — fat installation", () => {
             "setup", "import", src,
             "--skip-plugins", "--skip-patches",
         ], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(readdirSync(kindle.pluginsDir).length).toBe(0);
         expect(readdirSync(kindle.patchesDir).length).toBe(0);
     });
@@ -319,7 +319,7 @@ describe("setup import — fat installation", () => {
             "setup", "import", src,
             "--accept-plugins", "--accept-patches", "--dry-run",
         ], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(readFileSync(kindle.settingsPath, "utf8")).toBe(before);
         expect(readdirSync(kindle.pluginsDir).length).toBe(0);
         expect(readdirSync(kindle.patchesDir).length).toBe(0);
@@ -336,7 +336,7 @@ describe("setup import — fat installation", () => {
             "setup", "import", src,
             "--accept-plugins", "--accept-patches",
         ], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(existsSync(join(kindle.pluginsDir, "SSH.koplugin", "STALE.lua"))).toBe(false);
         expect(existsSync(join(kindle.pluginsDir, "SSH.koplugin", "main.lua"))).toBe(true);
     });
@@ -350,7 +350,7 @@ describe("setup import — fat installation", () => {
             "setup", "import", src,
             "--accept-plugins", "--accept-patches",
         ], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(readFileSync(join(kindle.patchesDir, "2-autoflash.lua"), "utf8"))
             .toContain("original autoflash");
     });
@@ -376,7 +376,7 @@ describe("setup import — fat safety snapshot", () => {
             "setup", "import", src,
             "--accept-plugins", "--accept-patches",
         ], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
 
         // The safety snapshot lives under workdir/.kindly/pre-import/<iso>/.
         const preImport = join(workdir, ".kindly", "pre-import");
@@ -400,7 +400,7 @@ describe("setup import — fat safety snapshot", () => {
             "--accept-plugins", "--accept-patches",
             "--no-safety-snapshot",
         ], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
 
         const preImport = join(workdir, ".kindly", "pre-import");
         const exists = existsSync(preImport);
@@ -425,7 +425,7 @@ describe("setup import — fat idempotence", () => {
 
         stdout.reset(); stderr.reset();
         const code = await main(["setup", "import", src, "--accept-plugins", "--accept-patches"], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(readFileSync(join(kindle.pluginsDir, "SSH.koplugin", "main.lua"), "utf8"))
             .toBe(afterFirst);
         expect(readFileSync(join(kindle.patchesDir, "2-autoflash.lua"), "utf8"))

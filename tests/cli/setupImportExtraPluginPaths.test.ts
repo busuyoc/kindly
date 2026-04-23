@@ -78,7 +78,7 @@ describe("setup import — W31a extra_plugin_paths dual gate", () => {
             ["setup", "import", manifestPath, "--accept-sensitive"],
             env,
         );
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         expect(stderr.value).toContain("extra_plugin_paths");
         expect(stderr.value).toContain("Lua plugins");
         expect(stderr.value).toContain("--accept-plugins");
@@ -95,7 +95,7 @@ describe("setup import — W31a extra_plugin_paths dual gate", () => {
                 "--accept-key=extra_plugin_paths"],
             env,
         );
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         expect(stderr.value).toContain("extra_plugin_paths");
         expect(stderr.value).toContain("--accept-plugins");
     });
@@ -108,7 +108,7 @@ describe("setup import — W31a extra_plugin_paths dual gate", () => {
             ["setup", "import", manifestPath, "--accept-plugins"],
             env,
         );
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         // SENSITIVE message, not the W31a one.
         expect(stderr.value).toContain("security-sensitive");
         expect(stderr.value).toContain("[code-exec]");
@@ -123,7 +123,7 @@ describe("setup import — W31a extra_plugin_paths dual gate", () => {
                 "--accept-sensitive", "--accept-plugins"],
             env,
         );
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(readFileSync(kindle.settingsPath, "utf8"))
             .toContain("extra_plugin_paths");
     });
@@ -137,7 +137,7 @@ describe("setup import — W31a extra_plugin_paths dual gate", () => {
                 "--accept-key=extra_plugin_paths", "--accept-plugins"],
             env,
         );
-        expect(code).toBe(0);
+        expect(code).toBe(4);
     });
 
     test("--dry-run skips W31a (content gate per 88 §3.5)", async () => {
@@ -148,7 +148,7 @@ describe("setup import — W31a extra_plugin_paths dual gate", () => {
             ["setup", "import", manifestPath, "--dry-run"],
             env,
         );
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(stdout.value).toContain("[SENSITIVE]");
         expect(stdout.value).toContain("extra_plugin_paths");
         // No FAT_REQUIRES_ACK message in dry-run.
@@ -163,7 +163,7 @@ describe("setup import — W31a extra_plugin_paths dual gate", () => {
             ["setup", "import", manifestPath, "--accept-sensitive"],
             env,
         );
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(stderr.value).not.toContain("Lua plugins");
     });
 
@@ -175,7 +175,7 @@ describe("setup import — W31a extra_plugin_paths dual gate", () => {
             ["setup", "import", manifestPath, "--accept-sensitive", "--json"],
             env,
         );
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         const payload = JSON.parse(stderr.value);
         expect(payload.status).toBe("error");
         expect(payload.error.code).toBe("FAT_REQUIRES_ACK");

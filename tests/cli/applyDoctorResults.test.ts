@@ -178,9 +178,9 @@ describe("executeDoctor typed result", () => {
 });
 
 describe("doctor --json", () => {
-    test("healthy device → ok envelope, exit 0", async () => {
+    test("healthy device → ok envelope, exit 4", async () => {
         const code = await main(["doctor", "--json"], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         const { data, status } = JSON.parse(stdout.value);
         expect(status).toBe("ok");
         expect(data.ok).toBe(true);

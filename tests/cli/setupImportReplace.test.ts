@@ -112,7 +112,7 @@ describe("replace mode — top-level wipe of USER keys", () => {
             settings: { refresh_rate: 2, screen_warmth: 60 },
         }));
         const code = await main(["setup", "import", manifestPath], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
 
         const after = onDevice(kindle.settingsPath);
         // Declared keys applied.
@@ -128,7 +128,7 @@ describe("replace mode — top-level wipe of USER keys", () => {
             settings: { refresh_rate: 2 },
         }));
         const code = await main(["setup", "import", manifestPath], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
 
         const after = onDevice(kindle.settingsPath);
         expect(after.zlibrary_password).toBe("hunter2");
@@ -208,7 +208,7 @@ describe("replace mode — diff preview", () => {
             settings: { refresh_rate: 2, brand_new_key: "x" },
         }));
         const code = await main(["setup", "import", manifestPath, "--dry-run"], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
 
         expect(stdout.value).toContain("replace mode");
         expect(stdout.value).toMatch(/\+ brand_new_key/);
@@ -232,7 +232,7 @@ describe("replace mode — secret denylist still applies", () => {
             },
         }));
         const code = await main(["setup", "import", manifestPath], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
 
         const after = onDevice(kindle.settingsPath);
         expect(after.refresh_rate).toBe(2);
@@ -262,7 +262,7 @@ describe("replace mode — no-op detection", () => {
         }));
         const before = readFileSync(narrow.settingsPath, "utf8");
         const code = await main(["setup", "import", p], env2);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(readFileSync(narrow.settingsPath, "utf8")).toBe(before);
         expect(existsSync(join(workdir2, ".kindly", "pre-import"))).toBe(false);
     });
@@ -275,7 +275,7 @@ describe("replace mode — --dry-run does not write", () => {
         }));
         const before = readFileSync(kindle.settingsPath, "utf8");
         const code = await main(["setup", "import", manifestPath, "--dry-run"], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(readFileSync(kindle.settingsPath, "utf8")).toBe(before);
     });
 });
@@ -285,13 +285,13 @@ describe("replace mode — idempotence", () => {
         writeManifestFile(manifestPath, makeReplaceManifest({
             settings: { refresh_rate: 2, screen_warmth: 60 },
         }));
-        expect(await main(["setup", "import", manifestPath], env)).toBe(0);
+        expect(await main(["setup", "import", manifestPath], env)).toBe(4);
         const afterFirst = readFileSync(kindle.settingsPath, "utf8");
 
         const out2 = new StringWriter();
         const err2 = new StringWriter();
         const env2 = { ...env, stdout: out2, stderr: err2 };
-        expect(await main(["setup", "import", manifestPath], env2)).toBe(0);
+        expect(await main(["setup", "import", manifestPath], env2)).toBe(4);
         expect(out2.value).toContain("no changes needed");
         expect(readFileSync(kindle.settingsPath, "utf8")).toBe(afterFirst);
     });
@@ -345,7 +345,7 @@ describe("replace mode — W34d large-removal warning", () => {
             ["setup", "import", manifestPath, "--dry-run", "--json"],
             env,
         );
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         const payload = JSON.parse(stdout.value);
         expect(payload.status).toBe("ok");
         expect(payload.data.replaceWarnings).toBeDefined();
@@ -367,7 +367,7 @@ describe("replace mode — W34d large-removal warning", () => {
             ["setup", "import", manifestPath, "--dry-run", "--json"],
             env,
         );
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         const payload = JSON.parse(stdout.value);
         expect(payload.data.replaceWarnings).toBeNull();
     });
@@ -385,7 +385,7 @@ describe("replace mode — W34d large-removal warning", () => {
             ["setup", "import", manifestPath, "--strict-imports", "--json"],
             env,
         );
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         const payload = JSON.parse(stderr.value);
         expect(payload.error.code).toBe("STRICT_IMPORT_BLOCKED");
         expect(payload.error.message).toContain("59");
@@ -407,7 +407,7 @@ describe("replace mode — W34d large-removal warning", () => {
             ["setup", "import", manifestPath, "--dry-run"],
             env,
         );
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(stderr.value).toContain("remove 59");
         expect(stderr.value).toContain("threshold 50");
     });

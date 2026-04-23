@@ -287,7 +287,7 @@ describe("W33 anti-anchor-trust — §4", () => {
             { settings: { home_dir: "/mnt/evil", night_mode: true } },
         ));
         const code = await main(["setup", "import", manifestPath, "--dry-run"], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         const idxSensitive = stdout.value.indexOf("security-sensitive");
         const idxAuthor = stdout.value.indexOf("Alice");
         expect(idxSensitive).toBeGreaterThanOrEqual(0);

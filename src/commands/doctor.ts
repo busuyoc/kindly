@@ -94,7 +94,9 @@ export async function runDoctor(argv: readonly string[], env: CliEnv): Promise<n
     const result = executeDoctor(env);
     if (env.jsonMode) emitJson(env, "doctor", result);
     else renderDoctor(result, env);
-    return result.ok ? 0 : 1;
+    if (!result.ok) return 1;
+    const hasWarnings = result.checks.some((c) => c.severity === "warning");
+    return hasWarnings ? 4 : 0;
 }
 
 export const doctorHelp = `

@@ -7,7 +7,7 @@ import { ArgError } from "./cli/args.ts";
 import { LuaParseError } from "./lua/reader.ts";
 import { defaultEnv, type CliEnv } from "./cli/env.ts";
 import { errLine } from "./cli/log.ts";
-import { KindlyError } from "./types/errors.ts";
+import { KindlyError, POLICY_BLOCK_CODES } from "./types/errors.ts";
 import { emitJsonError } from "./cli/json.ts";
 import { writeTraceEntry, hashArgv } from "./cli/trace.ts";
 
@@ -86,6 +86,13 @@ Automation:
 Other:
   help <cmd>   print that command's help
   --version    print the kindly version and exit
+
+Exit codes:
+  0  success
+  1  runtime error
+  2  argument validation error
+  3  blocked by policy (pass a flag to override)
+  4  success with warnings
 
 Run \`kindly <command> --help\` (or \`kindly help <command>\`) for per-command options.
 `.trim();
@@ -178,6 +185,7 @@ async function runMain(argv: readonly string[], env: CliEnv): Promise<number> {
         if (jsonMode) {
             emitJsonError(env, cmdName, e);
             if (e instanceof ArgError) return 2;
+            if (e instanceof KindlyError && POLICY_BLOCK_CODES.has(e.code)) return 3;
             return 1;
         }
 
@@ -199,7 +207,7 @@ async function runMain(argv: readonly string[], env: CliEnv): Promise<number> {
                 env.stderr.write(`  hint: ${r.text}\n`);
                 if (r.command) env.stderr.write(`  try:  ${r.command}\n`);
             }
-            return 1;
+            return POLICY_BLOCK_CODES.has(e.code) ? 3 : 1;
         }
         errLine(env, (e as Error).message ?? String(e));
         return 1;

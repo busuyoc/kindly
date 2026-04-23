@@ -150,7 +150,7 @@ describe("setup import --json", () => {
             ["setup", "import", manifestPath, "--json"],
             env,
         );
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         const { command, status, data } = JSON.parse(stdout.value);
         expect(command).toBe("setup import");
         expect(status).toBe("ok");
@@ -178,7 +178,7 @@ describe("setup import --json", () => {
             ["setup", "import", manifestPath, "--dry-run", "--json"],
             env,
         );
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         const { data } = JSON.parse(stdout.value);
         expect(data.mode).toBe("dry-run");
         expect(readFileSync(kindle.settingsPath, "utf8")).toBe(before);
@@ -192,7 +192,7 @@ describe("setup import --json", () => {
             ["setup", "import", manifestPath, "--json"],
             env,
         );
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         const { data } = JSON.parse(stdout.value);
         expect(data.mode).toBe("no-op");
         expect(data.changes).toHaveLength(0);
@@ -214,7 +214,7 @@ describe("setup import --json", () => {
             ["setup", "import", manifestPath, "--json"],
             env,
         );
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         const payload = JSON.parse(stderr.value);
         expect(payload.status).toBe("error");
         expect(payload.error.code).toBe("FAT_REQUIRES_ACK");
@@ -230,7 +230,7 @@ describe("setup import --json", () => {
             ["setup", "import", manifestPath, "--strict", "--json"],
             env,
         );
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         const payload = JSON.parse(stderr.value);
         expect(payload.status).toBe("error");
         expect(payload.error.code).toBe("SCHEMA_VIOLATION");

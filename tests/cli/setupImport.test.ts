@@ -95,7 +95,7 @@ describe("setup import — happy path", () => {
         }));
 
         const code = await main(["setup", "import", manifestPath], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
 
         const after = onDevice(kindle.settingsPath);
         expect(after.refresh_rate).toBe(2);                // changed
@@ -152,13 +152,13 @@ describe("setup import — happy path", () => {
 });
 
 describe("setup import — no-op when identical", () => {
-    test("no changes needed → exit 0, no write, no snapshot", async () => {
+    test("no changes needed → exit 4 (schema findings), no write, no snapshot", async () => {
         writeManifestFile(manifestPath, makeManifest({
             settings: { refresh_rate: 8, avoid_flashing_ui: false },
         }));
         const before = readFileSync(kindle.settingsPath, "utf8");
         const code = await main(["setup", "import", manifestPath], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(stdout.value).toContain("no changes needed");
 
         // File unchanged
@@ -173,7 +173,7 @@ describe("setup import — dry-run", () => {
         writeManifestFile(manifestPath, makeManifest({ settings: { refresh_rate: 2 } }));
         const before = readFileSync(kindle.settingsPath, "utf8");
         const code = await main(["setup", "import", manifestPath, "--dry-run"], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(stdout.value).toMatch(/dry-run/);
         expect(readFileSync(kindle.settingsPath, "utf8")).toBe(before);
         expect(existsSync(join(workdir, ".kindly", "pre-import"))).toBe(false);
@@ -195,7 +195,7 @@ describe("setup import — secret-denylist at import boundary", () => {
         }));
 
         const code = await main(["setup", "import", manifestPath], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
 
         const after = onDevice(kindle.settingsPath);
         expect(after.refresh_rate).toBe(2);                  // legit change
@@ -242,7 +242,7 @@ describe("setup import — compat verification (detection unavailable)", () => {
             settings: { refresh_rate: 2 },
         }));
         const code = await main(["setup", "import", manifestPath], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect((onDevice(kindle.settingsPath) as Record<string, unknown>).refresh_rate).toBe(2);
     });
 });
@@ -262,7 +262,7 @@ describe("setup import — out-of-scope guards", () => {
         }));
         const before = readFileSync(kindle.settingsPath, "utf8");
         const code = await main(["setup", "import", manifestPath], env);
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         expect(stderr.value).toMatch(/--accept-plugins|--skip-plugins/);
         expect(readFileSync(kindle.settingsPath, "utf8")).toBe(before);
     });
@@ -277,7 +277,7 @@ describe("setup import — out-of-scope guards", () => {
             settings: { refresh_rate: 2 },
         }));
         const code = await main(["setup", "import", manifestPath], env);
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         expect(stderr.value).toMatch(/--accept-patches|--skip-patches/);
     });
 });
@@ -289,7 +289,7 @@ describe("setup import — --no-safety-snapshot", () => {
             ["setup", "import", manifestPath, "--no-safety-snapshot"],
             env,
         );
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         // Archive dir should NOT exist.
         expect(existsSync(join(workdir, ".kindly", "pre-import"))).toBe(false);
         // But the .old sibling (KOReader's own fallback) must still be there.
@@ -348,14 +348,14 @@ describe("setup import — idempotence", () => {
             plugins: { disabled: ["SSH"] },
         }));
 
-        expect(await main(["setup", "import", manifestPath], env)).toBe(0);
+        expect(await main(["setup", "import", manifestPath], env)).toBe(4);
         const afterFirst = readFileSync(kindle.settingsPath, "utf8");
 
         // Fresh stdout/stderr so we can check "no changes".
         const out2 = new StringWriter();
         const err2 = new StringWriter();
         const env2 = { ...env, stdout: out2, stderr: err2 };
-        expect(await main(["setup", "import", manifestPath], env2)).toBe(0);
+        expect(await main(["setup", "import", manifestPath], env2)).toBe(4);
         expect(out2.value).toContain("no changes needed");
         expect(readFileSync(kindle.settingsPath, "utf8")).toBe(afterFirst);
     });

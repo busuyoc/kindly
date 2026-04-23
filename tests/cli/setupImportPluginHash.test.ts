@@ -2,12 +2,11 @@
 // pipeline (89 §4, §5, §9).
 //
 // Exercises the real `executeSetupImport` path: fat Setup → canonical
-// import → pluginHashReport on the typed result. Real catalog cases
-// (UNVERIFIED / UNCATALOGUED) use the committed catalog. MATCH /
-// MISMATCH / version-skew cases inject a per-test catalog via the
-// `catalogPath` testability hook on SetupImportOptions — no mutation
-// of the committed catalog file, no reload dance, no parallelism
-// hazards.
+// import → pluginHashReport on the typed result. All verdict-shape
+// assertions inject a per-test catalog via the `catalogPath` testability
+// hook on SetupImportOptions — no mutation of the committed catalog file,
+// no reload dance, no parallelism hazards. UNCATALOGUED falls through to
+// the real catalog by picking a name not in it.
 
 import { describe, test, expect, beforeEach } from "bun:test";
 import {
@@ -147,16 +146,20 @@ async function exportFat(
     return outPath;
 }
 
-// ---- UNVERIFIED / UNCATALOGUED (real catalog) ------------------------------
+// ---- UNVERIFIED / UNCATALOGUED verdict paths -------------------------------
 
-describe("pluginHashReport — UNVERIFIED / UNCATALOGUED with today's catalog", () => {
-    test("SSH in catalog without known_hashes → UNVERIFIED verdict", async () => {
-        // Today's committed catalog has SSH but no known_hashes.
+describe("pluginHashReport — UNVERIFIED / UNCATALOGUED verdicts", () => {
+    test("catalog entry with null known_hashes → UNVERIFIED verdict", async () => {
+        const catalogPath = writeSyntheticCatalog(workdir, [
+            stubCatalogEntry({ name: "SSH", known_hashes: null }),
+        ]);
         const src = await exportFat("SSH.koplugin", {
             "main.lua": "-- ssh\n",
             "_meta.lua": "-- meta\n",
         });
-        const r = executeSetupImport({ file: src, acceptPlugins: true }, env);
+        const r = executeSetupImport(
+            { file: src, acceptPlugins: true, catalogPath }, env,
+        );
         expect(r.pluginHashReport).not.toBeNull();
         const v = r.pluginHashReport!.verdicts.find((x) => "name" in x && x.name === "SSH");
         expect(v?.status).toBe("UNVERIFIED");
@@ -362,7 +365,7 @@ describe("setup import --json — pluginHashReport is present", () => {
             "setup", "import", src,
             "--accept-plugins", "--dry-run", "--json",
         ], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         const { status, data } = JSON.parse(stdout.value);
         expect(status).toBe("ok");
         expect(data.pluginHashReport).toBeDefined();
@@ -378,7 +381,7 @@ describe("setup import --json — pluginHashReport is present", () => {
             "setup", "import", src,
             "--skip-plugins", "--dry-run", "--json",
         ], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         const { data } = JSON.parse(stdout.value);
         expect(data.pluginHashReport).toBeNull();
     });

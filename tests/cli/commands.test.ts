@@ -273,7 +273,7 @@ describe("init", () => {
 describe("doctor", () => {
     test("all green on a healthy fake Kindle", async () => {
         const code = await main(["doctor"], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(stdout.value).toContain("Kindle mount:");
         expect(stdout.value).toContain("settings.reader.lua");
         expect(stdout.value).toContain("parseable");

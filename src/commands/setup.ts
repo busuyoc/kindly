@@ -1072,7 +1072,14 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
             safetySnapshot: flags["safety-snapshot"] !== false,
         });
     }
-    return 0;
+    const hasWarnings = !!(
+        result.sensitiveHits.length > 0
+        || (result.pluginHashReport?.verdicts.some((v) => v.status !== "MATCH"))
+        || (result.scanReport?.findings.length)
+        || result.schemaFindings
+        || result.replaceWarnings
+    );
+    return hasWarnings ? 4 : 0;
 }
 
 // Archive the pre-install state of plugin dirs and patch files into

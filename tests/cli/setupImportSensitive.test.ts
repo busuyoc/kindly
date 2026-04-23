@@ -77,7 +77,7 @@ describe("setup import — SENSITIVE gate blocks", () => {
             settings: { home_dir: "/mnt/evil" },
         }));
         const code = await main(["setup", "import", manifestPath], env);
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         expect(stderr.value).toContain("security-sensitive");
         expect(stderr.value).toContain("home_dir");
         expect(stderr.value).toContain("[directory]");
@@ -94,7 +94,7 @@ describe("setup import — SENSITIVE gate blocks", () => {
             },
         }));
         const code = await main(["setup", "import", manifestPath], env);
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         expect(stderr.value).toContain("SSH_port");
         expect(stderr.value).toContain("[ssh]");
         expect(stderr.value).toContain("debug");
@@ -111,7 +111,7 @@ describe("setup import — SENSITIVE gate blocks", () => {
             ["setup", "import", manifestPath, "--force"],
             env,
         );
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         expect(stderr.value).toContain("security-sensitive");
     });
 });
@@ -125,7 +125,7 @@ describe("setup import — SENSITIVE subtree carriers (88 §4.7)", () => {
             },
         }));
         const code = await main(["setup", "import", manifestPath], env);
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         expect(stderr.value).toContain("security-sensitive");
         expect(stderr.value).toContain("kosync.custom_server");
         expect(stderr.value).toContain("[network]");
@@ -148,7 +148,7 @@ describe("setup import — SENSITIVE subtree carriers (88 §4.7)", () => {
             settings: { refresh_rate: 8 },  // omits kosync → removal
         }));
         const code = await main(["setup", "import", manifestPath], env);
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         expect(stderr.value).toContain("security-sensitive");
         expect(stderr.value).toContain("kosync.custom_server");
     });
@@ -178,7 +178,7 @@ describe("setup import — acceptance flags", () => {
             ["setup", "import", manifestPath, "--accept-sensitive"],
             env,
         );
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(readFileSync(kindle.settingsPath, "utf8")).toContain("SSH_port");
         expect(readFileSync(kindle.settingsPath, "utf8")).toContain("debug");
     });
@@ -191,7 +191,7 @@ describe("setup import — acceptance flags", () => {
             ["setup", "import", manifestPath, "--accept-key=SSH_port"],
             env,
         );
-        expect(code).toBe(0);
+        expect(code).toBe(4);
     });
 
     test("--accept-key=<partial> still blocks on un-listed SENSITIVE hits", async () => {
@@ -202,7 +202,7 @@ describe("setup import — acceptance flags", () => {
             ["setup", "import", manifestPath, "--accept-key=SSH_port"],
             env,
         );
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         expect(stderr.value).toContain("debug");
         // Only the unaccepted key is listed as blocking.
         expect(stderr.value).toContain("modifies 1 security-sensitive");
@@ -216,7 +216,7 @@ describe("setup import — acceptance flags", () => {
             ["setup", "import", manifestPath, "--accept-key=SSH_port,debug"],
             env,
         );
-        expect(code).toBe(0);
+        expect(code).toBe(4);
     });
 
     test("--accept-key=<nested> accepts dotted paths (kosync.custom_server)", async () => {
@@ -230,7 +230,7 @@ describe("setup import — acceptance flags", () => {
                 "--accept-key=kosync.custom_server"],
             env,
         );
-        expect(code).toBe(0);
+        expect(code).toBe(4);
     });
 
     test("--accept-key=<unknown> → ArgError (exit 2), not silent acceptance", async () => {
@@ -261,7 +261,7 @@ describe("setup import — acceptance flags", () => {
 });
 
 describe("setup import — dry-run interaction (88 §3.5)", () => {
-    test("--dry-run with SENSITIVE change → exits 0 without acceptance", async () => {
+    test("--dry-run with SENSITIVE change → exits 4 without acceptance", async () => {
         writeManifestFile(manifestPath, makeManifest({
             settings: { SSH_port: 2222 },
         }));
@@ -269,7 +269,7 @@ describe("setup import — dry-run interaction (88 §3.5)", () => {
             ["setup", "import", manifestPath, "--dry-run"],
             env,
         );
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(stderr.value).not.toContain("security-sensitive");
     });
 
@@ -308,7 +308,7 @@ describe("setup import — dry-run interaction (88 §3.5)", () => {
                 "--dry-run", "--accept-sensitive"],
             env,
         );
-        expect(code).toBe(0);
+        expect(code).toBe(4);
     });
 });
 
@@ -335,7 +335,7 @@ describe("setup import — no-trigger edge cases", () => {
             settings: { night_mode: true, refresh_rate: 4 },
         }));
         const code = await main(["setup", "import", manifestPath], env);
-        expect(code).toBe(0);
+        expect(code).toBe(4);
     });
 
     test("--accept-key for a key that isn't actually changing → silently ignored (88 §4.6)", async () => {
@@ -372,7 +372,7 @@ describe("setup import — JSON error envelope", () => {
             ["setup", "import", manifestPath, "--json"],
             env,
         );
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         const payload = JSON.parse(stderr.value);
         expect(payload.status).toBe("error");
         expect(payload.error.code).toBe("SENSITIVE_REQUIRES_ACK");
@@ -391,7 +391,7 @@ describe("setup import — --strict-imports (W34e)", () => {
             ["setup", "import", manifestPath, "--strict-imports"],
             env,
         );
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         expect(stderr.value).toContain("--strict-imports");
         expect(stderr.value).toContain("SSH_port");
         expect(stderr.value).toContain("debug");
@@ -407,7 +407,7 @@ describe("setup import — --strict-imports (W34e)", () => {
             ["setup", "import", manifestPath, "--strict-imports", "--json"],
             env,
         );
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         const payload = JSON.parse(stderr.value);
         expect(payload.status).toBe("error");
         expect(payload.error.code).toBe("STRICT_IMPORT_BLOCKED");
@@ -441,7 +441,7 @@ describe("setup import — --strict-imports (W34e)", () => {
         expect(stderr.value).toContain("--accept-key");
     });
 
-    test("clean USER-only change + --strict-imports → exit 0", async () => {
+    test("clean USER-only change + --strict-imports → exit 4", async () => {
         writeManifestFile(manifestPath, makeManifest({
             settings: { night_mode: true, refresh_rate: 4 },
         }));
@@ -449,7 +449,7 @@ describe("setup import — --strict-imports (W34e)", () => {
             ["setup", "import", manifestPath, "--strict-imports"],
             env,
         );
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(stderr.value).not.toContain("STRICT_IMPORT_BLOCKED");
         expect(readFileSync(kindle.settingsPath, "utf8")).toContain("night_mode");
     });
@@ -466,7 +466,7 @@ describe("setup import — --strict-imports (W34e)", () => {
             ["setup", "import", manifestPath, "--dry-run", "--strict-imports"],
             env,
         );
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         expect(stderr.value).toContain("--strict-imports");
         expect(stderr.value).toContain("SSH_port");
     });

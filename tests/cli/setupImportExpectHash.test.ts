@@ -74,7 +74,7 @@ beforeEach(() => {
 });
 
 describe("setup import --expect-hash — match", () => {
-    test("matching hash (lean) → import proceeds, exit 0", async () => {
+    test("matching hash (lean) → import proceeds, exit 4", async () => {
         const { hash } = writeManifestFile(manifestPath, makeManifest({
             settings: { refresh_rate: 2 },
         }));
@@ -82,7 +82,7 @@ describe("setup import --expect-hash — match", () => {
             ["setup", "import", manifestPath, "--expect-hash", hash],
             env,
         );
-        expect(code).toBe(0);
+        expect(code).toBe(4);
         expect(stderr.value).not.toContain("MANIFEST_HASH_MISMATCH");
     });
 
@@ -96,7 +96,7 @@ describe("setup import --expect-hash — match", () => {
             ["setup", "import", manifestPath, "--expect-hash", hash],
             env,
         );
-        expect(code).toBe(0);
+        expect(code).toBe(4);
     });
 
     test("bare hex accepted → normalized to sha256:, import proceeds", async () => {
@@ -109,12 +109,12 @@ describe("setup import --expect-hash — match", () => {
             ["setup", "import", manifestPath, "--expect-hash", bare],
             env,
         );
-        expect(code).toBe(0);
+        expect(code).toBe(4);
     });
 });
 
 describe("setup import --expect-hash — mismatch", () => {
-    test("mismatched hash → MANIFEST_HASH_MISMATCH, exit 1, no writes", async () => {
+    test("mismatched hash → MANIFEST_HASH_MISMATCH, exit 3, no writes", async () => {
         writeManifestFile(manifestPath, makeManifest({
             settings: { refresh_rate: 2 },
         }));
@@ -125,7 +125,7 @@ describe("setup import --expect-hash — mismatch", () => {
             ["setup", "import", manifestPath, "--expect-hash", wrong],
             env,
         );
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         expect(stderr.value).toContain("expected " + wrong);
         // Settings file untouched.
         expect(readFileSync(kindle.settingsPath, "utf8")).toBe(before);
@@ -144,7 +144,7 @@ describe("setup import --expect-hash — mismatch", () => {
             env,
         );
         // Hash assertion fires before dry-run short-circuit.
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         expect(stderr.value).toContain("expected " + wrong);
     });
 
@@ -158,7 +158,7 @@ describe("setup import --expect-hash — mismatch", () => {
             ["setup", "import", manifestPath, "--force", "--expect-hash", wrong],
             env,
         );
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         expect(stderr.value).toContain("expected " + wrong);
     });
 
@@ -172,7 +172,7 @@ describe("setup import --expect-hash — mismatch", () => {
             ["setup", "import", manifestPath, "--json", "--expect-hash", wrong],
             env,
         );
-        expect(code).toBe(1);
+        expect(code).toBe(3);
         const payload = JSON.parse(stderr.value);
         expect(payload.status).toBe("error");
         expect(payload.error.code).toBe("MANIFEST_HASH_MISMATCH");

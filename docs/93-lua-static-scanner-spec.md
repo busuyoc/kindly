@@ -138,9 +138,10 @@ type ScanReport = {
     findings: ScanFinding[];     // empty when nothing flagged
     filesScanned: number;
     bytesScanned: number;
-    suppressedByCatalog: number; // findings silenced because the file's
-                                 // hash matched a catalog MATCH verdict
-                                 // (§5.2)
+    suppressedByCatalog: number; // .lua FILES skipped because their
+                                 // containing plugin had a catalog MATCH
+                                 // verdict (§5.2). Counts files, not
+                                 // findings or plugins.
 };
 ```
 

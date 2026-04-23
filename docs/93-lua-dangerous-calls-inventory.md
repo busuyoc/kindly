@@ -173,23 +173,25 @@ and process management.
 
 ## 11. W36 scanner implication
 
-This data answers three design questions for the W36 Lua static
-scanner:
+This data answered three design questions for the W36 Lua static
+scanner (shipped in `53467cd`, spec at `93-lua-static-scanner-spec.md`):
 
 **Q: Should the scanner hard-block?**
 No. 28 hits in recommended plugins. Hard-block would reject stock
-KOReader plugins.
+KOReader plugins. → Implemented as catalog-whitelist (see below).
 
 **Q: Should it warn on every hit?**
 No. 95 hits across 17 plugins. Warn-only is noise — every fat Setup
 with a bundled plugin would generate warnings the user can't act on.
+→ Catalog MATCH suppresses; only novel/tampered code surfaces.
 
 **Q: What model works?**
-Catalog-whitelist. W32 already verifies per-file SHA256 for catalogued
-plugins. W36 should flag dangerous calls **only in files whose hash
-does NOT match the catalog**. Known-good files with matching hashes
-get a pass. Modified or uncatalogued files get flagged per-call with
-file:line context.
+Catalog-whitelist. W32 verifies per-file SHA256 for catalogued
+plugins. W36 flags dangerous calls **only in files whose hash does
+NOT match the catalog**. Known-good files with matching hashes get a
+pass. Modified or uncatalogued files get flagged per-call with
+file:line context. Under `--strict-imports`, any unsuppressed finding
+blocks the import.
 
 The 31 uncatalogued hits (localsend, simpleui, pinpadlockscreen,
-zlibrary) would always flag — correct, since kindly can't verify them.
+zlibrary) always flag — correct, since kindly can't verify them.

@@ -132,7 +132,13 @@ export function groupArchivePluginFiles(
         const name = head.slice(0, -".koplugin".length);
         const rel = segments.slice(1).join("/");
         const bytes = fileBytes.get(f.path);
-        if (bytes === undefined) continue;   // archive said it had it but unpack dropped it — skip defensively
+        if (bytes === undefined) {
+            // unpackSetup's contract: every declared file has bytes.
+            // Silently dropping here would hide a pipeline bug — surface it
+            // as malformed so the verdict alerts the caller.
+            malformed.push(f.path);
+            continue;
+        }
         let bucket = plugins.get(name);
         if (!bucket) { bucket = new Map(); plugins.set(name, bucket); }
         bucket.set(rel, bytes);

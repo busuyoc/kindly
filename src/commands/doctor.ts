@@ -1,18 +1,22 @@
 // `kindly doctor` — sanity-check the on-device state. Read-only.
 //
-// Each check returns a line like "✓ KOReader found at /Volumes/Kindle/koreader"
-// or "✗ settings.reader.lua missing — is KOReader installed?". Exit 0 on all
-// pass, 1 if any fail.
+// Findings carry a severity (fatal | error | warning | info) and a
+// category; see 90-w34-doctor-output-spec.md for the full model. Exit
+// policy: fatal or error → 1, warning/info alone → 0.
 //
-// Checks (in order):
-//   - Kindle mount detected
-//   - settings.reader.lua present + readable
-//   - settings.reader.lua parseable (no mid-file corruption)
-//   - .old sibling exists and is parseable (KOReader's own fallback)
+// Categories currently reported:
+//   - mount:    device detection
+//   - settings: settings.reader.lua present / parseable / .old fallback
+//   - schema:   curated-schema freshness + device-key drift (90 §5.1-§5.2)
+//   - catalog:  plugin-catalog freshness + KOReader-version match (§5.3)
+//   - plugins:  W32 hash verification — tampered files and uncatalogued
+//               plugins (§5.4-§5.5)
+//   - disk:     .kindly/ writable, device free space, backups size (§5.6)
+//   - secrets:  on-device secret inventory count (§5.7)
 //
-// Plus a list of on-device secret keys the user needs to rescue to a
-// password manager before a factory reset (doctor is transparent about
-// what kindly isn't tracking).
+// The full sorted list of secret keys (for rescue into a password
+// manager before a factory reset) stays in DoctorResult.secretsPresent
+// and is rendered after the category groups.
 //
 // Pure logic lives in src/lib/doctor.ts; this module is the CLI adapter.
 
@@ -94,10 +98,21 @@ export async function runDoctor(argv: readonly string[], env: CliEnv): Promise<n
 }
 
 export const doctorHelp = `
-kindly doctor — check that kindly can read the device's settings.
+kindly doctor — check that kindly can read and trust the device's state.
 
 usage: kindly doctor [--mount <path>]
 
-Read-only. Reports mount detection, file presence, parseability, KOReader's
-.old fallback, and lists on-device secret keys that kindly won't sync.
+Read-only. Emits findings grouped by category (mount, settings, schema,
+catalog, plugins, disk, secrets) — see 90-w34-doctor-output-spec.md.
+
+Each finding carries one of four severities:
+  ● fatal    kindly cannot operate (mount missing, settings unreadable)
+  ✗ error    concrete integrity breach (tampered plugin code)
+  ⚠ warning  drift / staleness / best-effort failure
+  ✓ info     passing check, or advisory reporting
+
+Exit 1 if any finding is fatal or error; exit 0 for warning or info only.
+
+Also lists on-device secret keys (passwords, PINs) that kindly won't sync,
+so you can rescue them to a password manager before a factory reset.
 `.trim();

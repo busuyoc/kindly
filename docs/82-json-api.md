@@ -221,6 +221,7 @@ shape is stable every invocation.
   //   remediation?: Array<{ text: string; command?: string }>,
   // }
   ```
+- **Per-id `data` shape:** `data` is typed loosely here for forward compatibility, but each stable `id` pins a specific shape (e.g. `plugins.tampered` always carries `{ plugin, file, expected, actual }`). See 90-w34-doctor-output-spec.md §4.3 for the authoritative per-id table — consumers that read `data` should key off `id` first.
 - **Stable check `id`s:** `"mount"`, `"settings_present"`, `"settings_parseable"`, `"old_parseable"` (grandfathered from v0.5). W34+ adds category-prefixed ids like `"plugins.tampered"`, `"catalog.version"`. Additive — new ids may appear; consumers key by `id`, not array index.
 - **Exit policy:** exit `1` iff any finding is `severity: "fatal"` or `"error"`. Warnings and info alone → exit `0` (90-w34-doctor-output-spec.md §2).
 - **Errors:** none in normal operation. `ARG_INVALID` if called with bad flags.

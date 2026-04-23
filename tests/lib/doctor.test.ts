@@ -65,5 +65,69 @@ describe("executeDoctor (library)", () => {
         expect(r.ok).toBe(false);
         expect(r.checks[0]!.id).toBe("mount");
         expect(r.checks[0]!.ok).toBe(false);
+        // 90 §2: mount-missing is fatal (kindly can't function).
+        expect(r.checks[0]!.severity).toBe("fatal");
+    });
+});
+
+describe("executeDoctor — 90 §2/§4 severity taxonomy + exit policy", () => {
+    test("every check carries severity and category", () => {
+        const r = executeDoctor(env);
+        for (const c of r.checks) {
+            expect(["fatal", "error", "warning", "info"]).toContain(c.severity);
+            expect(typeof c.category).toBe("string");
+            expect(c.category.length).toBeGreaterThan(0);
+        }
+    });
+
+    test("legacy `ok` field is derived from severity (back-compat §4.1)", () => {
+        const r = executeDoctor(env);
+        for (const c of r.checks) {
+            const expected = c.severity === "fatal" || c.severity === "error"
+                ? false : true;
+            expect(c.ok).toBe(expected);
+        }
+    });
+
+    test("DoctorResult.ok = no fatal/error findings (§2 exit policy)", () => {
+        // Healthy kindle: all info → ok.
+        expect(executeDoctor(env).ok).toBe(true);
+
+        // Mount missing: one fatal → !ok.
+        const bad: CliEnv = { ...env, mountOverride: "/nonexistent/mount" };
+        expect(executeDoctor(bad).ok).toBe(false);
+    });
+
+    test("checks are ordered (severity desc, category asc, id asc) §4.2", () => {
+        const bad: CliEnv = { ...env, mountOverride: "/nonexistent/mount" };
+        const r = executeDoctor(bad);
+        // Fatal checks come first.
+        const severities = r.checks.map((c) => c.severity);
+        const firstNonFatal = severities.findIndex((s) => s !== "fatal");
+        const afterFatal = firstNonFatal < 0
+            ? []
+            : severities.slice(firstNonFatal);
+        expect(afterFatal.every((s) => s !== "fatal")).toBe(true);
+    });
+
+    test("mount category is 'mount'; settings checks are 'settings'", () => {
+        const r = executeDoctor(env);
+        const cats = Object.fromEntries(r.checks.map((c) => [c.id, c.category]));
+        expect(cats.mount).toBe("mount");
+        expect(cats.settings_present).toBe("settings");
+        expect(cats.settings_parseable).toBe("settings");
+        expect(cats.old_parseable).toBe("settings");
+    });
+
+    test("corrupt .old → warning (not fatal): KOReader fallback, kindly itself fine", () => {
+        // Seed a corrupt .old next to the healthy settings file.
+        const settingsPath = join(fakeKindle, "koreader", "settings.reader.lua");
+        writeFileSync(settingsPath + ".old", "return { not valid lua");
+
+        const r = executeDoctor(env);
+        const oldCheck = r.checks.find((c) => c.id === "old_parseable")!;
+        expect(oldCheck.severity).toBe("warning");
+        // Overall result still ok — kindly keeps working.
+        expect(r.ok).toBe(true);
     });
 });

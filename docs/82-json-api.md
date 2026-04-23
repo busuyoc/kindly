@@ -206,13 +206,23 @@ shape is stable every invocation.
 - **Data:** `DoctorResult`
   ```ts
   {
-    checks: DoctorCheck[],
+    checks: DoctorCheck[],      // ordered (severity desc, category asc, id asc)
     secretsPresent: string[],   // sorted, dotted for nested
-    ok: boolean                 // true iff every check.ok is true
+    ok: boolean                 // true iff no finding is fatal/error (W34 §2)
   }
-  // DoctorCheck: { id: string, label: string, ok: boolean, detail?: string }
+  // DoctorCheck: {
+  //   id: string,
+  //   label: string,
+  //   ok: boolean,              // back-compat: fatal/error → false, else true
+  //   severity: "fatal" | "error" | "warning" | "info",
+  //   category: string,         // mount, settings, schema, catalog, plugins, disk, secrets
+  //   detail?: string,
+  //   data?: Record<string, unknown>,
+  //   remediation?: Array<{ text: string; command?: string }>,
+  // }
   ```
-- **Stable check `id`s:** `"mount"`, `"settings_present"`, `"settings_parseable"`, `"old_parseable"`. Additive — new ids may appear; consumers key by `id`, not array index.
+- **Stable check `id`s:** `"mount"`, `"settings_present"`, `"settings_parseable"`, `"old_parseable"` (grandfathered from v0.5). W34+ adds category-prefixed ids like `"plugins.tampered"`, `"catalog.version"`. Additive — new ids may appear; consumers key by `id`, not array index.
+- **Exit policy:** exit `1` iff any finding is `severity: "fatal"` or `"error"`. Warnings and info alone → exit `0` (90-w34-doctor-output-spec.md §2).
 - **Errors:** none in normal operation. `ARG_INVALID` if called with bad flags.
 
 ### 3.5 `snapshot`

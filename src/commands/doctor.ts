@@ -19,7 +19,7 @@
 import { parseArgs, type FlagSpecs } from "../cli/args.ts";
 import type { CliEnv } from "../cli/env.ts";
 import { dim, info, paint } from "../cli/log.ts";
-import type { DoctorResult } from "../types/results.ts";
+import type { DoctorResult, DoctorCheck, DoctorSeverity } from "../types/results.ts";
 import { emitJson } from "../cli/json.ts";
 import { executeDoctor } from "../lib/doctor.ts";
 
@@ -32,12 +32,39 @@ const FLAGS = {
     },
 } as const satisfies FlagSpecs;
 
+function severityMark(env: CliEnv, s: DoctorSeverity): string {
+    switch (s) {
+        case "fatal":   return paint(env, "red",    "●");
+        case "error":   return paint(env, "red",    "✗");
+        case "warning": return paint(env, "yellow", "⚠");
+        case "info":    return paint(env, "green",  "✓");
+    }
+}
+
 export function renderDoctor(result: DoctorResult, env: CliEnv): void {
+    // 90 §6.1: group by category, header only when ≥ 1 finding. Checks
+    // already arrive in (severity desc, category asc, id asc) order.
+    const byCategory = new Map<string, DoctorCheck[]>();
     for (const c of result.checks) {
-        const mark = c.ok ? paint(env, "green", "✓") : paint(env, "red", "✗");
-        let line = `${mark} ${c.label}`;
-        if (c.detail) line += "  " + dim(env, c.detail);
-        info(env, line);
+        const arr = byCategory.get(c.category) ?? [];
+        arr.push(c);
+        byCategory.set(c.category, arr);
+    }
+
+    let first = true;
+    for (const [cat, arr] of byCategory) {
+        if (!first) info(env, "");
+        first = false;
+        info(env, cat);
+        for (const c of arr) {
+            let line = `  ${severityMark(env, c.severity)} ${c.label}`;
+            if (c.detail) line += "  " + dim(env, c.detail);
+            info(env, line);
+            for (const r of c.remediation ?? []) {
+                info(env, dim(env, `     ${r.text}`));
+                if (r.command) info(env, dim(env, `     $ ${r.command}`));
+            }
+        }
     }
 
     // Only show the secrets section when the main checks got far enough

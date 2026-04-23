@@ -89,24 +89,48 @@ export interface ApplyResult {
     bytesWritten: number;
 }
 
+/** Four-level severity (90 §2). `fatal` = kindly cannot function; `error`
+ *  = user state broken but kindly works; `warning` = out of date / risky;
+ *  `info` = advisory/inventory. Exit policy: any fatal/error → 1. */
+export type DoctorSeverity = "fatal" | "error" | "warning" | "info";
+
 export interface DoctorCheck {
-    /** Short identifier — stable across versions so scripts can key off it. */
+    /** Short identifier — stable across versions so scripts can key off it.
+     *  New checks use `category.name` (e.g. "plugins.tampered"); legacy
+     *  ids (`mount`, `settings_present`, `settings_parseable`,
+     *  `old_parseable`) are grandfathered. */
     id: string;
     /** Human label for the check. */
     label: string;
-    /** Pass/fail. Any false → overall failure. */
+    /** Kept for back-compat with v0.5 consumers (90 §4.1). Derived from
+     *  severity: `fatal`/`error` → false, `warning`/`info` → true. */
     ok: boolean;
-    /** Extra context (file paths, error messages, counts). Optional. */
+    /** 90 §2. Required. */
+    severity: DoctorSeverity;
+    /** 90 §3 category prefix (mount, settings, schema, catalog, plugins,
+     *  disk, secrets). Derivable from `id` for new checks; stored so
+     *  consumers don't have to parse the id. */
+    category: string;
+    /** Extra context (file paths, error messages, counts). */
     detail?: string;
+    /** Structured payload. Shape is keyed by `id` (90 §4.3) — consumers
+     *  cast to the per-id type, ignore `data` for unknown ids. */
+    data?: Record<string, unknown>;
+    /** Zero or more remediation hints, same shape as KindlyError. */
+    remediation?: Array<{ text: string; command?: string }>;
 }
 
 export interface DoctorResult {
-    /** Every check run, in order. */
+    /** Every check run, ordered `(severity desc, category asc, id asc)`
+     *  per 90 §4.2 — this is both the rendering and JSON serialization
+     *  order. */
     checks: DoctorCheck[];
     /** Secret keys present on-device that kindly won't sync. Sorted, dotted
      *  for nested (e.g. "cre.0.password"). Useful as a checklist pre-reset. */
     secretsPresent: string[];
-    /** True iff all checks passed. */
+    /** True iff no finding is severity `fatal` or `error` (90 §2, §4.2).
+     *  Warnings and info do NOT fail the check — doctor is run eagerly by
+     *  nervous users; red is reserved for state that blocks the next apply. */
     ok: boolean;
 }
 

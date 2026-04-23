@@ -204,4 +204,34 @@ describe("doctor --json", () => {
         expect(status).toBe("ok");
         expect(data.ok).toBe(false);
     });
+
+    test("JSON carries severity + category (90 §4)", async () => {
+        await main(["doctor", "--json"], env);
+        const { data } = JSON.parse(stdout.value);
+        const c0 = data.checks[0];
+        expect(["fatal", "error", "warning", "info"]).toContain(c0.severity);
+        expect(typeof c0.category).toBe("string");
+    });
+});
+
+describe("doctor text renderer — 90 §6.1 grouped-by-category", () => {
+    test("prints category header before each group on healthy device", async () => {
+        await main(["doctor"], env);
+        // Healthy: `mount` group + `settings` group visible as headers.
+        expect(stdout.value).toMatch(/^mount$/m);
+        expect(stdout.value).toMatch(/^settings$/m);
+        // And the info marker (✓) appears.
+        expect(stdout.value).toContain("✓");
+    });
+
+    test("fatal mount failure renders with ● symbol", async () => {
+        const bad: CliEnv = {
+            ...env,
+            mountOverride: "/nonexistent/mount",
+            stdout: new StringWriter(),
+            stderr: new StringWriter(),
+        };
+        await main(["doctor"], bad);
+        expect((bad.stdout as StringWriter).value).toContain("●");
+    });
 });

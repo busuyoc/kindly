@@ -12,6 +12,18 @@ import { classifyKey, isSecretPath } from "../schema/classify.ts";
 import type { LuaValue } from "../lua/writer.ts";
 import { type CliEnv, resolveMount } from "../cli/env.ts";
 import type { DoctorResult, DoctorCheck, DoctorSeverity } from "../types/results.ts";
+import { loadPluginCatalog } from "../catalog/reader.ts";
+import {
+    fileRole, groupArchivePluginFiles, verifyPluginAgainstCatalog,
+} from "../catalog/verify.ts";
+import { collectPluginDirs } from "../setup/files.ts";
+
+export interface DoctorOptions {
+    /** Testability hook — override the plugin catalog path. Production
+     *  leaves this undefined so `loadPluginCatalog` reads the committed
+     *  `data/catalog/plugins.bundled.v1.json`. Not exposed on the CLI. */
+    catalogPath?: string;
+}
 
 const SEVERITY_RANK: Record<DoctorSeverity, number> = {
     fatal: 0, error: 1, warning: 2, info: 3,
@@ -22,7 +34,7 @@ function okFromSeverity(s: DoctorSeverity): boolean {
     return s === "warning" || s === "info";
 }
 
-export function executeDoctor(env: CliEnv): DoctorResult {
+export function executeDoctor(env: CliEnv, opts: DoctorOptions = {}): DoctorResult {
     const checks: DoctorCheck[] = [];
 
     let mount;
@@ -105,7 +117,109 @@ export function executeDoctor(env: CliEnv): DoctorResult {
         });
     }
 
+    // W34b: plugins.* findings (90 §5.4, §5.5). Walk the on-device
+    // plugins dir, verify against the catalog in "full" mode (doctor
+    // wants missing files reported, unlike import's subset mode).
+    checks.push(...runPluginHashChecks(mount.pluginsDir, opts.catalogPath));
+
     return finalize(checks, findSecrets(parsed));
+}
+
+/** Run plugin-hash checks against the on-device `plugins/` dir. Returns
+ *  zero or more DoctorChecks: one `plugins.hashes_verified` summary
+ *  (always, if catalog loaded), one `plugins.tampered` per modified
+ *  file, and at most one `plugins.uncatalogued` listing plugin names
+ *  not in the catalog. Returns [] silently when the catalog can't be
+ *  loaded — this is doctor, not a hard dependency. */
+function runPluginHashChecks(
+    pluginsDir: string, catalogPath?: string,
+): DoctorCheck[] {
+    let catalog;
+    try { catalog = loadPluginCatalog(catalogPath); }
+    catch { return []; }
+
+    const { declared, files } = collectPluginDirs(pluginsDir);
+    const grouped = groupArchivePluginFiles(declared, files);
+
+    let verified = 0;
+    const tamperedFindings: DoctorCheck[] = [];
+    const uncataloguedPlugins: string[] = [];
+
+    for (const [name, pluginFiles] of grouped.plugins) {
+        const v = verifyPluginAgainstCatalog(
+            name, pluginFiles as Map<string, Uint8Array>, catalog, "full",
+        );
+        if (v.status === "MATCH") {
+            verified++;
+        } else if (v.status === "UNCATALOGUED") {
+            uncataloguedPlugins.push(name);
+        } else if (v.status === "MISMATCH") {
+            let onlyExtras = true;
+            for (const f of v.files) {
+                if (f.status === "modified") {
+                    onlyExtras = false;
+                    const role = fileRole(f.file);
+                    tamperedFindings.push({
+                        id: "plugins.tampered",
+                        category: "plugins",
+                        severity: role === "code" ? "error" : "warning",
+                        ok: role !== "code",
+                        label: `${name}.koplugin/${f.file}: ${role} tampered`,
+                        detail: `expected ${f.expected}; actual ${f.actual}`,
+                        data: {
+                            plugin: name, file: f.file,
+                            expected: f.expected, actual: f.actual,
+                        },
+                        remediation: [{
+                            text: "Reinstall the plugin from the KOReader source tree, or remove the file if not needed.",
+                        }],
+                    });
+                } else if (f.status === "extra") {
+                    // Extra file in catalogued plugin → treat the plugin as
+                    // having uncatalogued content (90 §5.5).
+                    onlyExtras = onlyExtras && true;
+                }
+                // missing: advisory-only (89 §5.4), no finding.
+            }
+            const hasExtras = v.files.some((f) => f.status === "extra");
+            if (onlyExtras && hasExtras) uncataloguedPlugins.push(name);
+        }
+        // UNVERIFIED / MALFORMED_STRUCTURE: silent (catalog predates W32
+        // hashing for this plugin, or someone dropped loose files under
+        // plugins/ — neither is actionable for doctor).
+    }
+
+    const summary: DoctorCheck = {
+        id: "plugins.hashes_verified",
+        category: "plugins",
+        severity: tamperedFindings.length > 0 || uncataloguedPlugins.length > 0
+            ? "warning" : "info",
+        ok: true,
+        label: `${verified} verified, ${tamperedFindings.length} tampered, ${uncataloguedPlugins.length} uncatalogued`,
+        data: {
+            verified,
+            tampered: tamperedFindings.length,
+            uncatalogued: uncataloguedPlugins.length,
+        },
+    };
+    summary.ok = okFromSeverity(summary.severity);
+
+    const findings: DoctorCheck[] = [summary, ...tamperedFindings];
+    if (uncataloguedPlugins.length > 0) {
+        // 90 §1: third-party / uncatalogued plugins produce `info`
+        // severity, not `warning`. We don't want to nag every niche
+        // community plugin.
+        findings.push({
+            id: "plugins.uncatalogued",
+            category: "plugins",
+            severity: "info",
+            ok: true,
+            label: `${uncataloguedPlugins.length} uncatalogued plugin(s) installed`,
+            detail: uncataloguedPlugins.sort().join(", "),
+            data: { plugins: uncataloguedPlugins.sort() },
+        });
+    }
+    return findings;
 }
 
 function finalize(checks: DoctorCheck[], secretsPresent: string[]): DoctorResult {

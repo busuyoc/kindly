@@ -103,10 +103,15 @@ Append-only registry. Never renumbered, never reused.
 | `OUTPUT_EXISTS` | 1 | `pull` / `setup export` would overwrite an existing file and `--force` wasn't passed. |
 | `YAML_NOT_FOUND` | 1 | `diff` / `apply` couldn't find the YAML file. |
 | `ARCHIVE_NOT_FOUND` | 1 | `restore` couldn't find the tarball. |
+| `ARCHIVE_UNSAFE_PATH` | 1 | v0.11 (W34b). Tar archive contains a `../`-escaping entry or a symlink — refused by `restore` / `rollback` / `setup import` before any extraction. |
+| `ARCHIVE_TOO_LARGE` | 1 | v0.11 (W34c). Archive's summed uncompressed member sizes or compression ratio exceeds the bomb-guard threshold — refused in the listing step. |
 | `SNAPSHOT_INVALID` | 1 | `rollback` directory missing, not a directory, or empty (no `settings.reader.lua` or `plugins-patches.tar.gz`). |
 | `SCHEMA_VIOLATION` | 1 | `setup export --strict` / `setup import --strict` found unknown keys or type mismatches in settings. |
 | `COMPAT_INCOMPATIBLE` | 1 | `setup import` manifest declares compat constraints that don't match this device; pass `--force` to override. |
 | `FAT_REQUIRES_ACK` | 1 | `setup import` of a fat `.kset` (plugin files / patches) without `--accept-plugins` / `--accept-patches` (or `--skip-*`). |
+| `SENSITIVE_REQUIRES_ACK` | 1 | v0.11 (W31). `setup import` changes one or more SENSITIVE-class keys without `--accept-sensitive` / `--accept-key=<name>`. See `88-sensitive-keys-spec.md`. |
+| `STRICT_IMPORT_BLOCKED` | 1 | v0.11 (W34e). `setup import --strict-imports` refused because one of: SENSITIVE key change, plugin hash mismatch, uncatalogued plugin. Zero writes. |
+| `MANIFEST_HASH_MISMATCH` | 1 | v0.11 (W34a). `setup import --expect-hash <sha256>` refused because the loaded Setup's hash doesn't match the expected value. |
 | `SETUP_INVALID` | 1 | `.kset` / `.kset.yaml` is malformed or not a valid Setup manifest (reserved — not yet emitted at every parse site). |
 | `UNKNOWN` | 1 | Internal error; a non-`KindlyError` exception leaked. Please file a bug. |
 
@@ -221,6 +226,8 @@ shape is stable every invocation.
   //   remediation?: Array<{ text: string; command?: string }>,
   // }
   ```
+- **Severity taxonomy:** `fatal` (kindly cannot function), `error` (user state broken but kindly works), `warning` (out of date / risky), `info` (advisory / inventory). See [`90-w34-doctor-output-spec.md`](./90-w34-doctor-output-spec.md) §2 for the full model.
+- **Category taxonomy:** `mount`, `settings`, `schema`, `catalog`, `plugins`, `disk`, `secrets`. Spec-defined set; new categories require a 90 §3 amendment. Additive — consumers MUST ignore unknown category strings.
 - **Per-id `data` shape:** `data` is typed loosely here for forward compatibility, but each stable `id` pins a specific shape (e.g. `plugins.tampered` always carries `{ plugin, file, expected, actual }`). See 90-w34-doctor-output-spec.md §4.3 for the authoritative per-id table — consumers that read `data` should key off `id` first.
 - **Stable check `id`s:** `"mount"`, `"settings_present"`, `"settings_parseable"`, `"old_parseable"` (grandfathered from v0.5). W34+ adds category-prefixed ids like `"plugins.tampered"`, `"catalog.version"`. Additive — new ids may appear; consumers key by `id`, not array index.
 - **Exit policy:** exit `1` iff any finding is `severity: "fatal"` or `"error"`. Warnings and info alone → exit `0` (90-w34-doctor-output-spec.md §2).
@@ -259,7 +266,7 @@ Extract a tar.gz archive onto the device.
   }
   ```
 - **Flags affecting shape:** `--dry-run` → `mode: "dry-run"`, `fileCount: 0`. `--no-safety-snapshot` → `safetySnapshotPath: null`.
-- **Errors:** `ARCHIVE_NOT_FOUND`, `MOUNT_*`, `ARG_INVALID`.
+- **Errors:** `ARCHIVE_NOT_FOUND`, `ARCHIVE_UNSAFE_PATH` (W34b: path-escape or symlink entries), `ARCHIVE_TOO_LARGE` (W34c: bomb guard), `MOUNT_*`, `ARG_INVALID`.
 
 ### 3.7 `rollback`
 
@@ -317,6 +324,14 @@ touch unless `--vs-device` is passed.
       settingsPath?: string,    // set only when mode === "vs-device"
       changes: Change[],        // see §4
       grouped: Record<string, DiffGroupEntry[]>   // same shape as diff (§3.2)
+    },
+    security?: {                // W34f — present only when the manifest
+                                // declares one or more SENSITIVE-class keys
+      total: number,            // total SENSITIVE hit count (dotted paths)
+      byDomain: Record<         // threat domain → sorted dotted paths;
+        string,                 //   domains: ssh, network, code-exec,
+        string[]                //   debug, fs-path, other (see 88)
+      >
     }
   }
   ```
@@ -407,7 +422,12 @@ plugin files / patches, and write a pre-import safety snapshot.
   `SETTINGS_NOT_FOUND`, `LUA_PARSE_FAILED`, `SCHEMA_VIOLATION` (with
   `--strict`), `COMPAT_INCOMPATIBLE` (without `--force`),
   `FAT_REQUIRES_ACK` (without `--accept-plugins` / `--accept-patches` or
-  `--skip-*`).
+  `--skip-*`), `SENSITIVE_REQUIRES_ACK` (without `--accept-sensitive` when
+  the manifest touches SENSITIVE keys), `STRICT_IMPORT_BLOCKED` (with
+  `--strict-imports` when any SENSITIVE change, hash mismatch, or
+  uncatalogued plugin is present), `MANIFEST_HASH_MISMATCH` (with
+  `--expect-hash` when the value doesn't match), `ARCHIVE_UNSAFE_PATH` /
+  `ARCHIVE_TOO_LARGE` (fat `.kset` extraction guards).
 - **Note:** the fat-disclosure preview text that text mode prints to stdout
   before any gate check is **suppressed in `--json` mode** — the envelope
   is the only thing on stdout on success; gate errors go to stderr as usual.

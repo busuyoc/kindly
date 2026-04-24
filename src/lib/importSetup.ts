@@ -24,8 +24,7 @@ import { safeWrite } from "../fs/safeWrite.ts";
 import { createTarGz } from "../fs/archive.ts";
 import { type CliEnv, resolveMount } from "../cli/env.ts";
 import { hashBytes, shortId } from "../setup/canonical.ts";
-import { buildBaseContext } from "../gates/context.ts";
-import { runGates, throwFirstBlocking } from "../gates/orchestrator.ts";
+import { runPhase } from "../gates/orchestrator.ts";
 import { MANIFEST_HASH_ASSERT } from "../gates/definitions/identity.ts";
 import {
     PLUGINS_REQUIRE_ACK,
@@ -321,41 +320,23 @@ export function executeSetupImport(
     const shippedPlugins: readonly EmbeddedFile[] = manifest.plugins?.files ?? [];
     const shippedPatches: readonly EmbeddedFile[] = manifest.patches ?? [];
 
-    // Phase 1 gate run: IDENTITY + CONSENT-FAT. All inputs are available
-    // right after loadSetup + manifest parse.
-    //   MANIFEST_HASH_ASSERT (IDENTITY)   — Step 5
-    //   PLUGINS_REQUIRE_ACK  (CONSENT)    — Step 6
-    //   PATCHES_REQUIRE_ACK  (CONSENT)    — Step 6
-    // Fail fast — if the file isn't what the user expected or ships code
-    // they haven't consented to, nothing downstream matters.
-    {
-        const phase1Registry = [
-            MANIFEST_HASH_ASSERT,
-            PLUGINS_REQUIRE_ACK,
-            PATCHES_REQUIRE_ACK,
-        ];
-        const phase1Ctx = buildBaseContext({
-            boundary: "import",
-            dryRun: opts.dryRun ?? false,
-            strictImports: opts.strictImports ?? false,
-            opts: {
-                expectHash: opts.expectHash,
-                manifestBytes,
-                shippedPluginsCount: shippedPlugins.length,
-                shippedPatchesCount: shippedPatches.length,
-                acceptPlugins: !!opts.acceptPlugins,
-                skipPlugins: !!opts.skipPlugins,
-                acceptPatches: !!opts.acceptPatches,
-                skipPatches: !!opts.skipPatches,
-            },
-        });
-        const phase1Report = runGates("import", phase1Ctx, {
-            dryRun: opts.dryRun ?? false,
-            strictImports: opts.strictImports ?? false,
-            registry: phase1Registry,
-        });
-        if (phase1Report.blocked) throwFirstBlocking(phase1Report, phase1Registry);
-    }
+    // Phase 1 — IDENTITY + CONSENT-FAT. Fail fast pre-mount.
+    runPhase({
+        boundary: "import",
+        registry: [MANIFEST_HASH_ASSERT, PLUGINS_REQUIRE_ACK, PATCHES_REQUIRE_ACK],
+        dryRun: opts.dryRun ?? false,
+        strictImports: opts.strictImports ?? false,
+        opts: {
+            expectHash: opts.expectHash,
+            manifestBytes,
+            shippedPluginsCount: shippedPlugins.length,
+            shippedPatchesCount: shippedPatches.length,
+            acceptPlugins: !!opts.acceptPlugins,
+            skipPlugins: !!opts.skipPlugins,
+            acceptPatches: !!opts.acceptPatches,
+            skipPatches: !!opts.skipPatches,
+        },
+    });
 
     const mountEnv = opts.mount ? { ...env, mountOverride: opts.mount } : env;
     const mount = resolveMount(mountEnv);
@@ -402,27 +383,14 @@ export function executeSetupImport(
         })
         : null;
 
-    // Phase 2: INTEGRITY gates (Step 7). Strict-mode enforcement on
-    // plugin-hash verdicts + Lua scanner findings. Gate bodies are pure
-    // predicates; the underlying report computation above stays inline.
-    {
-        const phase2Registry = [STRICT_PLUGIN_HASH_CHECK, STRICT_SCANNER_FINDINGS];
-        const phase2Ctx = buildBaseContext({
-            boundary: "import",
-            dryRun: opts.dryRun ?? false,
-            strictImports: opts.strictImports ?? false,
-            opts: {
-                pluginHashReport,
-                scanReport,
-            },
-        });
-        const phase2Report = runGates("import", phase2Ctx, {
-            dryRun: opts.dryRun ?? false,
-            strictImports: opts.strictImports ?? false,
-            registry: phase2Registry,
-        });
-        if (phase2Report.blocked) throwFirstBlocking(phase2Report, phase2Registry);
-    }
+    // Phase 2 — INTEGRITY (strict-mode plugin-hash + scanner gates).
+    runPhase({
+        boundary: "import",
+        registry: [STRICT_PLUGIN_HASH_CHECK, STRICT_SCANNER_FINDINGS],
+        dryRun: opts.dryRun ?? false,
+        strictImports: opts.strictImports ?? false,
+        opts: { pluginHashReport, scanReport },
+    });
 
     // Compute compat + schema results inline — they populate both the gate
     // inputs (Phase 3 below) AND the SetupImportResult render fields.
@@ -434,28 +402,20 @@ export function executeSetupImport(
         ? validateSettings(manifest.settings as Record<string, unknown>, loadSchema())
         : null;
 
-    // Phase 3: COMPAT + SHAPE gates (Step 8).
-    {
-        const phase3Registry = [COMPAT_INCOMPATIBLE, SCHEMA_VIOLATION];
-        const phase3Ctx = buildBaseContext({
-            boundary: "import",
-            dryRun: opts.dryRun ?? false,
-            strictImports: opts.strictImports ?? false,
-            opts: {
-                compatResult: compatResultRaw,
-                schemaFindings: schemaReportRaw,
-                force: !!opts.force,
-                strict: !!opts.strict,
-                allowUnknownKeys: !!opts.allowUnknownKeys,
-            },
-        });
-        const phase3Report = runGates("import", phase3Ctx, {
-            dryRun: opts.dryRun ?? false,
-            strictImports: opts.strictImports ?? false,
-            registry: phase3Registry,
-        });
-        if (phase3Report.blocked) throwFirstBlocking(phase3Report, phase3Registry);
-    }
+    // Phase 3 — COMPAT + SHAPE (compat check + schema strictness).
+    runPhase({
+        boundary: "import",
+        registry: [COMPAT_INCOMPATIBLE, SCHEMA_VIOLATION],
+        dryRun: opts.dryRun ?? false,
+        strictImports: opts.strictImports ?? false,
+        opts: {
+            compatResult: compatResultRaw,
+            schemaFindings: schemaReportRaw,
+            force: !!opts.force,
+            strict: !!opts.strict,
+            allowUnknownKeys: !!opts.allowUnknownKeys,
+        },
+    });
 
     // Compat summary for the result envelope.
     let compatSummary: SetupImportResult["compat"] = null;
@@ -530,40 +490,26 @@ export function executeSetupImport(
     // the SetupImportResult.replaceWarnings render field.
     const replaceWarningPayload = computeReplaceWarnings(manifest.apply_mode, changes);
 
-    // Phase 4: DESTRUCTION + CONSENT + DUAL gates (Step 9).
-    //   STRICT_REPLACE_REMOVAL_CAP    — strict-imports only
-    //   STRICT_SENSITIVE_CHANGES      — strict-imports only
-    //   SENSITIVE_REQUIRES_ACK        — non-dry-run user consent path
-    //   EXTRA_PLUGIN_PATHS_DUAL       — non-dry-run, needs --accept-plugins
-    //
-    // Order matters for the first-block message: STRICT_REPLACE first
-    // (matches pre-refactor), then STRICT_SENSITIVE, then consumer-ack.
-    {
-        const phase4Registry = [
+    // Phase 4 — DESTRUCTION + CONSENT + DUAL. Block-order matches
+    // pre-refactor: strict-replace → strict-sensitive → consumer-ack → dual.
+    runPhase({
+        boundary: "import",
+        registry: [
             STRICT_REPLACE_REMOVAL_CAP,
             STRICT_SENSITIVE_CHANGES,
             SENSITIVE_REQUIRES_ACK,
             EXTRA_PLUGIN_PATHS_DUAL,
-        ];
-        const phase4Ctx = buildBaseContext({
-            boundary: "import",
-            dryRun: opts.dryRun ?? false,
-            strictImports: opts.strictImports ?? false,
-            opts: {
-                changes,
-                replaceWarnings: replaceWarningPayload,
-                acceptSensitive: !!opts.acceptSensitive,
-                acceptKey: opts.acceptKey,
-                acceptPlugins: !!opts.acceptPlugins,
-            },
-        });
-        const phase4Report = runGates("import", phase4Ctx, {
-            dryRun: opts.dryRun ?? false,
-            strictImports: opts.strictImports ?? false,
-            registry: phase4Registry,
-        });
-        if (phase4Report.blocked) throwFirstBlocking(phase4Report, phase4Registry);
-    }
+        ],
+        dryRun: opts.dryRun ?? false,
+        strictImports: opts.strictImports ?? false,
+        opts: {
+            changes,
+            replaceWarnings: replaceWarningPayload,
+            acceptSensitive: !!opts.acceptSensitive,
+            acceptKey: opts.acceptKey,
+            acceptPlugins: !!opts.acceptPlugins,
+        },
+    });
 
     const willInstallPlugins = !!opts.acceptPlugins && shippedPlugins.length > 0;
     const willInstallPatches = !!opts.acceptPatches && shippedPatches.length > 0;

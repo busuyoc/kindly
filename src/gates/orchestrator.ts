@@ -163,6 +163,41 @@ export function runGates(
 }
 
 /**
+ * Run a single phase: build a context from the provided inputs, run the
+ * given registry subset, and throw if anything blocks. One-liner for
+ * each phase-gate-run in a multi-phase consumer (e.g. lib/importSetup.ts).
+ *
+ * Consolidates the "build ctx → run gates → throw if blocked" boilerplate
+ * into one helper so each phase is declarative.
+ */
+export function runPhase(input: {
+    boundary: GateBoundary;
+    registry: ReadonlyArray<GateDefinition>;
+    opts: Record<string, unknown>;
+    dryRun: boolean;
+    strictImports: boolean;
+}): GateReport {
+    // Defer the import of buildBaseContext to avoid a circular import
+    // (context.ts imports types.ts only; orchestrator.ts imports context
+    // here via require-style dynamic import) — but we actually just
+    // construct the shape inline since it's trivial.
+    const ctx: GateContext = {
+        boundary: input.boundary,
+        dryRun: input.dryRun,
+        strictImports: input.strictImports,
+        opts: input.opts,
+        producers: {},
+    };
+    const report = runGates(input.boundary, ctx, {
+        dryRun: input.dryRun,
+        strictImports: input.strictImports,
+        registry: input.registry,
+    });
+    if (report.blocked) throwFirstBlocking(report, input.registry);
+    return report;
+}
+
+/**
  * Translate a blocking GateReport into a thrown KindlyError — the
  * user-facing failure mode the pre-refactor inline gates produced.
  *

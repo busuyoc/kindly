@@ -85,11 +85,12 @@ Update this table as steps complete. Date format: YYYY-MM-DD.
 
 | Step | Title                                           | Status      | Commit   | Date      |
 |------|-------------------------------------------------|-------------|----------|-----------|
-| 0    | Branch + plan doc                               | in-progress | —        | 2026-04-24|
-| 1    | `src/fs/safeRead.ts` + label migration          | queued      | —        | —         |
-| 2    | `src/cli/sanitize.ts` + wiring                  | queued      | —        | —         |
-| 3    | `data/classify/settings.v1.json` + projections  | queued      | —        | —         |
-| 4    | `src/gates/` scaffold                           | queued      | —        | —         |
+| 0    | Branch + plan doc                               | ✅ done     | d95f207  | 2026-04-24|
+| 1    | `src/fs/safeRead.ts` + label migration          | ✅ done     | cfba788  | 2026-04-24|
+| 1a   | safeRead derived-from-mount → REJECT symlinks   | ✅ done     | 841279e  | 2026-04-24|
+| 2    | `src/cli/sanitize.ts` + wiring                  | ✅ done     | 103ec9a  | 2026-04-24|
+| 3    | `data/classify/settings.v1.json` + projections  | ✅ done     | 0136ed4  | 2026-04-24|
+| 4    | `src/gates/` scaffold                           | in-progress | —        | —         |
 | 5    | Proof gate: MANIFEST_HASH_ASSERT                | queued      | —        | —         |
 | 6    | CONSENT gates (3)                               | queued      | —        | —         |
 | 7    | INTEGRITY gates (2)                             | queued      | —        | —         |
@@ -102,6 +103,9 @@ Update this table as steps complete. Date format: YYYY-MM-DD.
 | 14   | history.jsonl gate events                       | queued      | —        | —         |
 | 15   | doctor integration                              | queued      | —        | —         |
 | 16   | Architecture drift test                         | queued      | —        | —         |
+
+**Baseline test count as of Step 2 merge: 1216 pass / 0 fail / 1 skip.**
+All subsequent steps hold green-commit invariant against this number.
 
 ## Parallelism
 

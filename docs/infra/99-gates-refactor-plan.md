@@ -40,6 +40,45 @@ Non-goals for this refactor:
 **Every commit leaves `bun test` green.** Broken tests do not cross commit
 boundaries. If a step breaks, fix-in-place or revert before moving on.
 
+## Worked example — why registry, not refactor flavor
+
+S89 motivates the refactor structurally (apply has no gates, and the
+YAML-merge trust model is upside-down). **S340/S341** is the sharper
+maintainability example:
+
+Two of the 14 inline gates in `importSetup.ts` forgot the `!opts.dryRun`
+check. They block on `--dry-run` when they shouldn't. Worse: two sibling
+gates that both consume `sensitiveHits` (the input) have OPPOSITE dry-run
+semantics, and the divergence is entirely implicit in control flow:
+
+| Site                                      | dry-run behavior | Rationale                                     |
+|-------------------------------------------|------------------|-----------------------------------------------|
+| `importSetup.ts:594` STRICT_SENSITIVE     | fires always     | CI preflight needs it to block the preview    |
+| `importSetup.ts:605` SENSITIVE_REQUIRES_ACK | skips in dry-run | user needs to preview without consent gate    |
+
+Both behaviors are correct. The problem is they read as
+`if (opts.strictImports && ...)` vs `if (!opts.dryRun && ...)` and a new
+gate author has to rediscover the distinction every time. S340/S341 are
+the predictable failure mode of that implicitness.
+
+Post-refactor, each gate declares:
+
+```ts
+firesIn: "always" | "non-dry-run" | "strict-imports-only"
+```
+
+The field is required at registration. You cannot add a gate without
+answering "does this fire in dry-run?" — which is exactly the question
+the current inline pattern lets you skip silently.
+
+**S340/S341 cannot exist in the post-refactor architecture.** That's the
+concrete maintainability payoff — not "it's prettier" or "it scales
+better," but "a specific class of bug becomes unrepresentable." S89 is
+the other side of the same coin: the apply path has zero gates because
+the current style made it easy to ship `executeApply` without thinking
+through which gates apply; the registry makes gate-set-per-boundary an
+explicit declaration (`appliesAt: ("import" | "apply")[]`).
+
 ## Progress tracker
 
 Update this table as steps complete. Date format: YYYY-MM-DD.

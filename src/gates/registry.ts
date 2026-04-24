@@ -10,16 +10,16 @@
 // ./definitions/*.ts and appending them here.
 
 import type { GateDefinition } from "./types.ts";
+import { MANIFEST_HASH_ASSERT } from "./definitions/identity.ts";
 
-// Import gate definitions as they land. Each file exports one or more
-// GateDefinition objects; the flat array below concatenates them in
-// declaration order (which is the firing order — orchestrator iterates
-// the array and a blocking gate's error is the first one the CLI surfaces).
-//
-// import { MANIFEST_HASH_ASSERT } from "./definitions/identity.ts";
+// Each gate definition lives in its own category file under ./definitions/.
+// The flat array below concatenates them in declaration order — which is
+// also the firing order when the orchestrator iterates. A blocking gate's
+// error is the first block the CLI surfaces.
 
 export const GATES: ReadonlyArray<GateDefinition> = [
-    // (populated by Steps 5-9)
+    MANIFEST_HASH_ASSERT,
+    // (more land here as Steps 6-11 port each gate category)
 ];
 
 /** For tests / internal tooling: override the registry in a scoped way. */

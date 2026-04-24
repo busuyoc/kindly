@@ -104,6 +104,13 @@ export interface GateDefinition {
      *  bypass flag matches. */
     errorCode: keyof typeof ErrorCodes;
 
+    /** Static remediation hints shown when the gate blocks. Dynamic
+     *  details (actual mismatch values, variable paths, etc.) belong in
+     *  the block message. Empty/omitted → no remediation, which a
+     *  few gates legitimately have (e.g. hash mismatch is its own
+     *  remediation). */
+    remediation?: Array<{ text: string; command?: string }>;
+
     /** Pure predicate: reads ctx, returns a GateResult. No side effects,
      *  no throws — blocking is expressed via GateResult.kind==="block". */
     check: (ctx: GateContext) => GateResult;

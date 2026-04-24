@@ -7,9 +7,9 @@
 // as gates that depend on producers are ported.
 
 import type { Producer } from "../types.ts";
-
-// import { sensitiveHits } from "./sensitiveHits.ts";
+import { manifestIdentity } from "./manifestIdentity.ts";
 
 export const PRODUCERS: Readonly<Record<string, Producer<unknown>>> = {
-    // (populated alongside gate migration)
+    manifestIdentity,
+    // (more land here alongside each gate migration)
 };

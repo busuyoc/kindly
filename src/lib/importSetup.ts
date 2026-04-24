@@ -24,6 +24,8 @@ import { safeWrite } from "../fs/safeWrite.ts";
 import { createTarGz } from "../fs/archive.ts";
 import { type CliEnv, resolveMount } from "../cli/env.ts";
 import { hashBytes, shortId } from "../setup/canonical.ts";
+import { buildBaseContext } from "../gates/context.ts";
+import { runGates, throwFirstBlocking } from "../gates/orchestrator.ts";
 import { parseManifest, SetupSchemaError, type EmbeddedFile, type SetupManifest } from "../setup/schema.ts";
 import { unpackSetup } from "../setup/unpack.ts";
 import { checkCompat, formatCompatIssue } from "../setup/compat.ts";
@@ -352,22 +354,27 @@ export function executeSetupImport(
     const { manifest, manifestBytes, files } = loaded;
     const id = shortId(hashBytes(manifestBytes));
 
-    // W34a: hash assertion — first gate after load. opts.expectHash is
-    // already `sha256:<64hex>` (CLI layer normalized & validated the format).
+    // Phase 1 gate run: IDENTITY gates. Just MANIFEST_HASH_ASSERT at Step 5
+    // of the gates refactor. More gates fold into this phase as Steps 6-9
+    // port each category (see docs/infra/99-gates-refactor-plan.md).
+    //
     // Fail fast before prompting the user about plugins / sensitive keys —
     // if the file isn't the one they expected, nothing downstream matters.
-    if (opts.expectHash) {
-        const actual = hashBytes(manifestBytes);
-        if (actual !== opts.expectHash) {
-            throw new KindlyError(
-                ErrorCodes.MANIFEST_HASH_MISMATCH,
-                `expected ${opts.expectHash} but Setup hashes to ${actual}`,
-                [
-                    { text: "Verify you received the file you expected." },
-                    { text: "Re-download from the original source." },
-                ],
-            );
-        }
+    {
+        const phase1Ctx = buildBaseContext({
+            boundary: "import",
+            dryRun: opts.dryRun ?? false,
+            strictImports: opts.strictImports ?? false,
+            opts: {
+                expectHash: opts.expectHash,
+                manifestBytes,
+            },
+        });
+        const phase1Report = runGates("import", phase1Ctx, {
+            dryRun: opts.dryRun ?? false,
+            strictImports: opts.strictImports ?? false,
+        });
+        if (phase1Report.blocked) throwFirstBlocking(phase1Report);
     }
 
     const shippedPlugins: readonly EmbeddedFile[] = manifest.plugins?.files ?? [];

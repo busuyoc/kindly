@@ -13,6 +13,7 @@
 
 import { GATES } from "./registry.ts";
 import { PRODUCERS } from "./producers/index.ts";
+import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import type {
     GateBoundary,
     GateContext,
@@ -159,4 +160,39 @@ export function runGates(
         blocked: blockingGates.length > 0,
         blockingGates,
     };
+}
+
+/**
+ * Translate a blocking GateReport into a thrown KindlyError — the
+ * user-facing failure mode the pre-refactor inline gates produced.
+ *
+ * Uses the first blocking gate's message (dynamic) plus the gate
+ * definition's static remediation. Tests with injected registries pass
+ * their registry via the second arg.
+ *
+ * Only call this when `report.blocked === true`. Never returns.
+ */
+export function throwFirstBlocking(
+    report: GateReport,
+    registry: ReadonlyArray<GateDefinition> = GATES,
+): never {
+    const first = report.fired.find((f) => f.result.kind === "block");
+    if (!first || first.result.kind !== "block") {
+        throw new Error(
+            "throwFirstBlocking called with non-blocking report — " +
+            "caller should check report.blocked first",
+        );
+    }
+    const gate = registry.find((g) => g.id === first.id);
+    if (!gate) {
+        throw new Error(
+            `throwFirstBlocking: gate "${first.id}" is in the report but ` +
+            "not in the supplied registry",
+        );
+    }
+    throw new KindlyError(
+        ErrorCodes[gate.errorCode],
+        first.result.message,
+        gate.remediation ?? [],
+    );
 }

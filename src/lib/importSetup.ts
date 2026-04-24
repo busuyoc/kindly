@@ -36,6 +36,8 @@ import {
     STRICT_PLUGIN_HASH_CHECK,
     STRICT_SCANNER_FINDINGS,
 } from "../gates/definitions/integrity.ts";
+import { COMPAT_INCOMPATIBLE } from "../gates/definitions/compat.ts";
+import { SCHEMA_VIOLATION } from "../gates/definitions/shape.ts";
 import { formatSensitiveChange as formatSensitiveChangeShared } from "../gates/sensitiveFormat.ts";
 import { parseManifest, SetupSchemaError, type EmbeddedFile, type SetupManifest } from "../setup/schema.ts";
 import { unpackSetup } from "../setup/unpack.ts";
@@ -419,22 +421,44 @@ export function executeSetupImport(
         if (phase2Report.blocked) throwFirstBlocking(phase2Report, phase2Registry);
     }
 
+    // Compute compat + schema results inline — they populate both the gate
+    // inputs (Phase 3 below) AND the SetupImportResult render fields.
+    const detectedForCompat = { version: detectedVersion, family: detectedFamily };
+    const compatResultRaw = manifest.compat
+        ? checkCompat(manifest.compat, detectedForCompat)
+        : null;
+    const schemaReportRaw = manifest.settings
+        ? validateSettings(manifest.settings as Record<string, unknown>, loadSchema())
+        : null;
+
+    // Phase 3: COMPAT + SHAPE gates (Step 8).
+    {
+        const phase3Registry = [COMPAT_INCOMPATIBLE, SCHEMA_VIOLATION];
+        const phase3Ctx = buildBaseContext({
+            boundary: "import",
+            dryRun: opts.dryRun ?? false,
+            strictImports: opts.strictImports ?? false,
+            opts: {
+                compatResult: compatResultRaw,
+                schemaFindings: schemaReportRaw,
+                force: !!opts.force,
+                strict: !!opts.strict,
+                allowUnknownKeys: !!opts.allowUnknownKeys,
+            },
+        });
+        const phase3Report = runGates("import", phase3Ctx, {
+            dryRun: opts.dryRun ?? false,
+            strictImports: opts.strictImports ?? false,
+            registry: phase3Registry,
+        });
+        if (phase3Report.blocked) throwFirstBlocking(phase3Report, phase3Registry);
+    }
+
+    // Compat summary for the result envelope.
     let compatSummary: SetupImportResult["compat"] = null;
-    if (manifest.compat) {
-        const detected = { version: detectedVersion, family: detectedFamily };
-        const cr = checkCompat(manifest.compat, detected);
-
-        const blocking = cr.blocking.map(formatCompatIssue);
-        const unverifiable = cr.unverifiable.map(formatCompatIssue);
-
-        if (cr.blocking.length > 0 && !opts.force) {
-            throw new KindlyError(
-                ErrorCodes.COMPAT_INCOMPATIBLE,
-                `Setup is not compatible with this device:\n  ${blocking.join("\n  ")}`,
-                [{ text: "Pass --force to import anyway.", command: "kindly setup import <file> --force" }],
-            );
-        }
-
+    if (manifest.compat && compatResultRaw) {
+        const blocking = compatResultRaw.blocking.map(formatCompatIssue);
+        const unverifiable = compatResultRaw.unverifiable.map(formatCompatIssue);
         compatSummary = {
             declared: {
                 ...(manifest.compat.koreader_version_min ? { koreaderVersionMin: manifest.compat.koreader_version_min } : {}),
@@ -442,38 +466,21 @@ export function executeSetupImport(
                 ...(manifest.compat.device?.length ? { device: [...manifest.compat.device] } : {}),
             },
             detected: {
-                koreaderVersion: detected.version?.raw ?? null,
-                deviceFamily: detected.family,
+                koreaderVersion: detectedForCompat.version?.raw ?? null,
+                deviceFamily: detectedForCompat.family,
             },
             unverifiable,
             blocking,
-            forced: cr.blocking.length > 0 && !!opts.force,
+            forced: compatResultRaw.blocking.length > 0 && !!opts.force,
         };
     }
 
+    // Schema findings for the result envelope (surfaced only when non-empty).
     let schemaFindings: ValidationReport | undefined;
-    if (manifest.settings) {
-        const report = validateSettings(manifest.settings as Record<string, unknown>, loadSchema());
-        const hasUnknowns = report.unknownKeys.length > 0;
-        const hasMismatches = report.typeMismatches.length > 0;
-        const showUnknowns = !opts.allowUnknownKeys;
-        const schemaBlocks = !!opts.strict
-            && ((showUnknowns && hasUnknowns) || hasMismatches);
-        if (schemaBlocks) {
-            // formatValidationReport is 1-arg; `showUnknowns` is a
-            // render-layer concern and doesn't affect the error text.
-            void showUnknowns;
-            const msg = formatValidationReport(report);
-            throw new KindlyError(
-                ErrorCodes.SCHEMA_VIOLATION,
-                `${msg}\n--strict: aborting due to schema findings.`,
-                [
-                    { text: "Review the listed keys — likely typos or plugin-scoped unknowns." },
-                    { text: "Re-run without --strict, or pass --allow-unknown-keys if you're sure." },
-                ],
-            );
-        }
-        if (hasUnknowns || hasMismatches) schemaFindings = report;
+    if (schemaReportRaw
+        && (schemaReportRaw.unknownKeys.length > 0
+            || schemaReportRaw.typeMismatches.length > 0)) {
+        schemaFindings = schemaReportRaw;
     }
 
     const toggledNames: string[] = [...(manifest.plugins?.disabled ?? [])];

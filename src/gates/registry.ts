@@ -20,6 +20,8 @@ import {
     STRICT_PLUGIN_HASH_CHECK,
     STRICT_SCANNER_FINDINGS,
 } from "./definitions/integrity.ts";
+import { COMPAT_INCOMPATIBLE } from "./definitions/compat.ts";
+import { SCHEMA_VIOLATION } from "./definitions/shape.ts";
 
 // Each gate definition lives in its own category file under ./definitions/.
 // The flat array below concatenates them in declaration order — which is
@@ -32,8 +34,10 @@ export const GATES: ReadonlyArray<GateDefinition> = [
     PATCHES_REQUIRE_ACK,
     STRICT_PLUGIN_HASH_CHECK,
     STRICT_SCANNER_FINDINGS,
+    COMPAT_INCOMPATIBLE,
+    SCHEMA_VIOLATION,
     SENSITIVE_REQUIRES_ACK,
-    // (more land here as Steps 8-11 port each gate category)
+    // (more land here as Steps 9-11 port each gate category)
 ];
 
 /** For tests / internal tooling: override the registry in a scoped way. */

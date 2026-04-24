@@ -14,3 +14,5 @@ export {
     STRICT_PLUGIN_HASH_CHECK,
     STRICT_SCANNER_FINDINGS,
 } from "./integrity.ts";
+export { COMPAT_INCOMPATIBLE } from "./compat.ts";
+export { SCHEMA_VIOLATION } from "./shape.ts";

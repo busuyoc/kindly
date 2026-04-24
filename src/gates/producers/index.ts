@@ -11,11 +11,15 @@ import { manifestIdentity } from "./manifestIdentity.ts";
 import { sensitiveHits } from "./sensitiveHits.ts";
 import { pluginHashReport } from "./pluginHashReport.ts";
 import { scanReport } from "./scanReport.ts";
+import { compatResult } from "./compatResult.ts";
+import { schemaFindings } from "./schemaFindings.ts";
 
 export const PRODUCERS: Readonly<Record<string, Producer<unknown>>> = {
     manifestIdentity,
     sensitiveHits,
     pluginHashReport,
     scanReport,
+    compatResult,
+    schemaFindings,
     // (more land here alongside each gate migration)
 };

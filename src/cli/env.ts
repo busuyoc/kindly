@@ -11,19 +11,31 @@ import { join } from "node:path";
 import type { KindleMount } from "../device/kindle.ts";
 import { detectKindleMount, kindleMountAt, isKindleMount } from "../device/kindle.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
+import { sanitizeForTerminal } from "./sanitize.ts";
 
+// Writer is the minimal sink abstraction every CLI output path goes
+// through. All writes default to `sanitizeForTerminal` — attacker-
+// controlled strings that slip into error messages, manifest fields, or
+// JSON payloads cannot inject OSC title-change sequences or other
+// control bytes into the user's terminal (red-team S282/S283/S284).
+// Callers that have already produced safe bytes — or legitimately need
+// to emit raw bytes (tests that inspect ANSI, serve.ts relay) — use
+// `writeRaw()`.
 export interface Writer {
     write(s: string): void;
+    writeRaw(s: string): void;
 }
 
 export class StreamWriter implements Writer {
     constructor(private stream: NodeJS.WritableStream) {}
-    write(s: string): void { this.stream.write(s); }
+    write(s: string): void { this.stream.write(sanitizeForTerminal(s)); }
+    writeRaw(s: string): void { this.stream.write(s); }
 }
 
 export class StringWriter implements Writer {
     private chunks: string[] = [];
-    write(s: string): void { this.chunks.push(s); }
+    write(s: string): void { this.chunks.push(sanitizeForTerminal(s)); }
+    writeRaw(s: string): void { this.chunks.push(s); }
     get value(): string { return this.chunks.join(""); }
     reset(): void { this.chunks = []; }
 }

@@ -97,8 +97,9 @@ Update this table as steps complete. Date format: YYYY-MM-DD.
 | 8    | COMPAT + SHAPE gates (2)                        | queued      | —        | —         |
 | 9    | DESTRUCTION + DUAL gates (3)                    | queued      | —        | —         |
 | 10   | Finalize `importSetup.ts`                       | ✅ partial  | 9920b38  | 2026-04-24|
-| 11   | YAML_SHAPE_NORMAL gate (S89 fix)                | ✅ done     | (next)   | 2026-04-24|
-| 12   | Apply gate parity                               | in-progress | —        | —         |
+| 11   | YAML_SHAPE_NORMAL gate (S89 fix)                | ✅ done     | d40cfa4  | 2026-04-24|
+| 12   | Apply gate parity                               | ✅ mvp      | (next)   | 2026-04-24|
+| 12b  | Apply SENSITIVE/DESTRUCTIVE gates + provenance  | deferred    | —        | —         |
 | 13   | Provenance marker phase 1                       | queued      | —        | —         |
 | 14   | history.jsonl gate events                       | queued      | —        | —         |
 | 15   | doctor integration                              | queued      | —        | —         |

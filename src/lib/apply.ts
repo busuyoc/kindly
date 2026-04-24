@@ -18,6 +18,8 @@ import { type CliEnv, resolveMount } from "../cli/env.ts";
 import type { ApplyResult } from "../types/results.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
+import { runPhase } from "../gates/orchestrator.ts";
+import { YAML_SHAPE_NORMAL } from "../gates/definitions/shape.ts";
 
 export interface ApplyOptions {
     file?: string;
@@ -40,6 +42,26 @@ export function executeApply(opts: ApplyOptions, env: CliEnv): ApplyResult {
     const onDeviceSrc = readText(mount.settingsPath, "derived-from-mount");
     const onDevice = parseSettingsFile(onDeviceSrc) as Record<string, LuaValue>;
     const fromYaml = yamlToLua(readText(yamlPath, "user-provided")) as Record<string, LuaValue>;
+
+    // Apply-side gate run — Step 12 of the gates refactor. YAML_SHAPE_NORMAL
+    // is the S89 activation: a crafted YAML with `kosync: null`, `kosync:
+    // []`, `kosync.userkey: ~`, or a top-level SECRET key (e.g.
+    // `zlibrary_password: ~`) would otherwise get through the shallow-merge
+    // and wipe on-device SECRETs. Fires always (including --dry-run):
+    // shape rejection has zero false-positive risk and the preview output
+    // should reflect the same block the write would.
+    //
+    // Additional apply gates (SENSITIVE_REQUIRES_ACK behind
+    // --untrusted-yaml; DESTRUCTIVE_YAML_SHAPE for mass-removal) are
+    // queued for Step 12b — they have real FP risk on legitimate user
+    // edits and want their own activation/flag surface.
+    runPhase({
+        boundary: "apply",
+        registry: [YAML_SHAPE_NORMAL],
+        dryRun: opts.dryRun ?? false,
+        strictImports: false,
+        opts: { yamlSettings: fromYaml },
+    });
 
     const changes = computeChanges(onDevice, fromYaml);
 

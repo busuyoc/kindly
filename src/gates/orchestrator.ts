@@ -36,6 +36,12 @@ export interface GateReport {
     blockingGates: string[];
 }
 
+/** Called once per gate whose result is `bypass` or `block`. `pass`
+ *  results do NOT trigger the logger (too noisy). The orchestrator
+ *  calls this synchronously; consumers typically write to
+ *  `.kindly/gate-events.jsonl` via `appendGateEvent`. */
+export type GateEventLogger = (fired: FiredGate) => void;
+
 export interface RunGatesOptions {
     dryRun?: boolean;
     strictImports?: boolean;
@@ -44,6 +50,9 @@ export interface RunGatesOptions {
     registry?: ReadonlyArray<GateDefinition>;
     /** Optional override for producer map — same reason. */
     producers?: Readonly<Record<string, Producer<unknown>>>;
+    /** Called for each bypass/block outcome. No-op by default — consumers
+     *  that want observability pass a logger. */
+    logger?: GateEventLogger;
 }
 
 function shouldFire(
@@ -151,8 +160,10 @@ export function runGates(
     for (const gate of firing) {
         const raw = gate.check(ctx);
         const resolved = applyBypass(gate, raw, ctx);
-        fired.push({ id: gate.id, boundary, result: resolved });
+        const entry: FiredGate = { id: gate.id, boundary, result: resolved };
+        fired.push(entry);
         if (resolved.kind === "block") blockingGates.push(gate.id);
+        if (opts.logger && resolved.kind !== "pass") opts.logger(entry);
     }
 
     return {
@@ -176,11 +187,9 @@ export function runPhase(input: {
     opts: Record<string, unknown>;
     dryRun: boolean;
     strictImports: boolean;
+    /** Step 14: observability hook. Called for bypass/block events. */
+    logger?: GateEventLogger;
 }): GateReport {
-    // Defer the import of buildBaseContext to avoid a circular import
-    // (context.ts imports types.ts only; orchestrator.ts imports context
-    // here via require-style dynamic import) — but we actually just
-    // construct the shape inline since it's trivial.
     const ctx: GateContext = {
         boundary: input.boundary,
         dryRun: input.dryRun,
@@ -192,6 +201,7 @@ export function runPhase(input: {
         dryRun: input.dryRun,
         strictImports: input.strictImports,
         registry: input.registry,
+        logger: input.logger,
     });
     if (report.blocked) throwFirstBlocking(report, input.registry);
     return report;

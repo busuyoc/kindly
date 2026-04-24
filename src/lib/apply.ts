@@ -20,6 +20,7 @@ import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
 import { runPhase } from "../gates/orchestrator.ts";
 import { YAML_SHAPE_NORMAL } from "../gates/definitions/shape.ts";
+import { appendGateEvent } from "../history/gateLog.ts";
 
 export interface ApplyOptions {
     file?: string;
@@ -61,6 +62,22 @@ export function executeApply(opts: ApplyOptions, env: CliEnv): ApplyResult {
         dryRun: opts.dryRun ?? false,
         strictImports: false,
         opts: { yamlSettings: fromYaml },
+        logger: (fired) => {
+            if (fired.result.kind === "bypass") {
+                appendGateEvent(env, {
+                    gate_id: fired.id,
+                    boundary: fired.boundary,
+                    kind: "bypass",
+                    bypass_flag: fired.result.byFlag,
+                });
+            } else if (fired.result.kind === "block") {
+                appendGateEvent(env, {
+                    gate_id: fired.id,
+                    boundary: fired.boundary,
+                    kind: "block",
+                });
+            }
+        },
     });
 
     const changes = computeChanges(onDevice, fromYaml);

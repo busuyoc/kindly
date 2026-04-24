@@ -24,7 +24,8 @@ import { safeWrite } from "../fs/safeWrite.ts";
 import { createTarGz } from "../fs/archive.ts";
 import { type CliEnv, resolveMount } from "../cli/env.ts";
 import { hashBytes, shortId } from "../setup/canonical.ts";
-import { runPhase } from "../gates/orchestrator.ts";
+import { runPhase, type GateEventLogger } from "../gates/orchestrator.ts";
+import { appendGateEvent } from "../history/gateLog.ts";
 import { MANIFEST_HASH_ASSERT } from "../gates/definitions/identity.ts";
 import {
     PLUGINS_REQUIRE_ACK,
@@ -320,6 +321,25 @@ export function executeSetupImport(
     const shippedPlugins: readonly EmbeddedFile[] = manifest.plugins?.files ?? [];
     const shippedPatches: readonly EmbeddedFile[] = manifest.patches ?? [];
 
+    // Gate observability logger — emits a .kindly/gate-events.jsonl line
+    // for each bypass/block. Shared across all four phases.
+    const gateLogger: GateEventLogger = (fired) => {
+        if (fired.result.kind === "bypass") {
+            appendGateEvent(env, {
+                gate_id: fired.id,
+                boundary: fired.boundary,
+                kind: "bypass",
+                bypass_flag: fired.result.byFlag,
+            });
+        } else if (fired.result.kind === "block") {
+            appendGateEvent(env, {
+                gate_id: fired.id,
+                boundary: fired.boundary,
+                kind: "block",
+            });
+        }
+    };
+
     // Phase 1 — IDENTITY + SHAPE + CONSENT-FAT. Fail fast pre-mount.
     //   MANIFEST_HASH_ASSERT     Step 5
     //   YAML_SHAPE_NORMAL (S89)  Step 11 — rejects SECRET-class keys or
@@ -328,6 +348,7 @@ export function executeSetupImport(
     //                            silently destroy on-device secrets.
     //   PLUGINS/PATCHES_REQUIRE_ACK  Step 6
     runPhase({
+        logger: gateLogger,
         boundary: "import",
         registry: [
             MANIFEST_HASH_ASSERT,
@@ -397,6 +418,7 @@ export function executeSetupImport(
 
     // Phase 2 — INTEGRITY (strict-mode plugin-hash + scanner gates).
     runPhase({
+        logger: gateLogger,
         boundary: "import",
         registry: [STRICT_PLUGIN_HASH_CHECK, STRICT_SCANNER_FINDINGS],
         dryRun: opts.dryRun ?? false,
@@ -416,6 +438,7 @@ export function executeSetupImport(
 
     // Phase 3 — COMPAT + SHAPE (compat check + schema strictness).
     runPhase({
+        logger: gateLogger,
         boundary: "import",
         registry: [COMPAT_INCOMPATIBLE, SCHEMA_VIOLATION],
         dryRun: opts.dryRun ?? false,
@@ -505,6 +528,7 @@ export function executeSetupImport(
     // Phase 4 — DESTRUCTION + CONSENT + DUAL. Block-order matches
     // pre-refactor: strict-replace → strict-sensitive → consumer-ack → dual.
     runPhase({
+        logger: gateLogger,
         boundary: "import",
         registry: [
             STRICT_REPLACE_REMOVAL_CAP,

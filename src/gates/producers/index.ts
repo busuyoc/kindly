@@ -13,6 +13,8 @@ import { pluginHashReport } from "./pluginHashReport.ts";
 import { scanReport } from "./scanReport.ts";
 import { compatResult } from "./compatResult.ts";
 import { schemaFindings } from "./schemaFindings.ts";
+import { changes } from "./changes.ts";
+import { replaceWarnings } from "./replaceWarnings.ts";
 
 export const PRODUCERS: Readonly<Record<string, Producer<unknown>>> = {
     manifestIdentity,
@@ -21,5 +23,7 @@ export const PRODUCERS: Readonly<Record<string, Producer<unknown>>> = {
     scanReport,
     compatResult,
     schemaFindings,
-    // (more land here alongside each gate migration)
+    changes,
+    replaceWarnings,
+    // (Step 11 adds normalizedYaml for YAML_SHAPE_NORMAL)
 };

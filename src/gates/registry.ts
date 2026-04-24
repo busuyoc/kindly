@@ -15,7 +15,10 @@ import {
     PLUGINS_REQUIRE_ACK,
     PATCHES_REQUIRE_ACK,
     SENSITIVE_REQUIRES_ACK,
+    STRICT_SENSITIVE_CHANGES,
 } from "./definitions/consent.ts";
+import { STRICT_REPLACE_REMOVAL_CAP } from "./definitions/destruction.ts";
+import { EXTRA_PLUGIN_PATHS_DUAL } from "./definitions/dual.ts";
 import {
     STRICT_PLUGIN_HASH_CHECK,
     STRICT_SCANNER_FINDINGS,
@@ -36,8 +39,12 @@ export const GATES: ReadonlyArray<GateDefinition> = [
     STRICT_SCANNER_FINDINGS,
     COMPAT_INCOMPATIBLE,
     SCHEMA_VIOLATION,
+    STRICT_REPLACE_REMOVAL_CAP,
+    STRICT_SENSITIVE_CHANGES,
     SENSITIVE_REQUIRES_ACK,
-    // (more land here as Steps 9-11 port each gate category)
+    EXTRA_PLUGIN_PATHS_DUAL,
+    // (Step 11 adds YAML_SHAPE_NORMAL; Step 12 extends SENSITIVE/DESTRUCTIVE
+    //  gates to appliesAt: [\"apply\"] for apply gate parity)
 ];
 
 /** For tests / internal tooling: override the registry in a scoped way. */

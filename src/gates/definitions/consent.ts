@@ -75,6 +75,43 @@ export const PATCHES_REQUIRE_ACK: GateDefinition = {
 };
 
 /**
+ * STRICT_SENSITIVE_CHANGES — W34e.
+ *
+ * Under --strict-imports, any SENSITIVE change blocks — no per-key
+ * --accept-key escape, no --accept-sensitive waiver (enforcement is
+ * at the CLI layer: the flags are mutually exclusive with --strict-imports).
+ *
+ * Fires in dry-run too so `--dry-run --strict-imports` preflights can
+ * refuse the preview with a non-zero exit. Same message shape as the
+ * consumer SENSITIVE_REQUIRES_ACK but different trigger + message prefix.
+ */
+export const STRICT_SENSITIVE_CHANGES: GateDefinition = {
+    id: "STRICT_SENSITIVE_CHANGES",
+    category: "CONSENT",
+    appliesAt: ["import"],
+    requires: ["sensitiveHits"],
+    firesIn: "strict-imports-only",
+    bypassFlags: [],
+    errorCode: "STRICT_IMPORT_BLOCKED",
+    remediation: [
+        { text: "Use a hand-audited import (drop --strict-imports) to accept any of these." },
+    ],
+    check: (ctx) => {
+        const hits = ctx.producers.sensitiveHits as string[];
+        if (hits.length === 0) return { kind: "pass" };
+        const changes = (ctx.opts.changes as Change[] | undefined) ?? [];
+        const list = hits
+            .map((p) => `  [${sensitiveDomain(p)}] ${p}: ${formatSensitiveChange(changes, p)}`)
+            .join("\n");
+        return {
+            kind: "block",
+            message:
+                `--strict-imports: Setup modifies ${hits.length} security-sensitive setting(s):\n${list}`,
+        };
+    },
+};
+
+/**
  * SENSITIVE_REQUIRES_ACK — Setup changes include SENSITIVE-class keys
  * (network endpoints, SSH, code-exec, filesystem redirects, service
  * autostart, debug).

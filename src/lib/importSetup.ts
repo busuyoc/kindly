@@ -31,7 +31,10 @@ import {
     PLUGINS_REQUIRE_ACK,
     PATCHES_REQUIRE_ACK,
     SENSITIVE_REQUIRES_ACK,
+    STRICT_SENSITIVE_CHANGES,
 } from "../gates/definitions/consent.ts";
+import { STRICT_REPLACE_REMOVAL_CAP } from "../gates/definitions/destruction.ts";
+import { EXTRA_PLUGIN_PATHS_DUAL } from "../gates/definitions/dual.ts";
 import {
     STRICT_PLUGIN_HASH_CHECK,
     STRICT_SCANNER_FINDINGS,
@@ -523,51 +526,35 @@ export function executeSetupImport(
     }
     const sensitiveHits = [...sensitiveHitSet].sort();
 
-    // W34d + W34e strict gate: a replace-mode Setup that wipes more than
-    // REPLACE_REMOVAL_WARN_THRESHOLD top-level USER keys is almost certainly
-    // not what a CI pipeline intended to import. Refuse before the SENSITIVE
-    // check so the error message points at the right thing.
+    // W34d computed once; feeds both the DESTRUCTION gate (Phase 4) and
+    // the SetupImportResult.replaceWarnings render field.
     const replaceWarningPayload = computeReplaceWarnings(manifest.apply_mode, changes);
-    if (opts.strictImports && replaceWarningPayload) {
-        const sample = replaceWarningPayload.sampleKeys.join(", ");
-        throw new KindlyError(
-            ErrorCodes.STRICT_IMPORT_BLOCKED,
-            `--strict-imports: replace-mode Setup would remove ${replaceWarningPayload.removedUserKeys} top-level USER key(s) ` +
-            `(threshold ${replaceWarningPayload.threshold}). First few: ${sample}`,
-            [{ text: "Verify the Setup's apply_mode and the device state are what you expect, or drop --strict-imports." }],
-        );
-    }
 
-    // W34e strict mode: any SENSITIVE hit blocks, acceptance overrides
-    // are ignored (and forbidden at the CLI layer). Runs in dry-run too —
-    // CI uses --dry-run + --strict-imports as a "is this safe to import?"
-    // preflight and must get a non-zero exit if the answer is no.
-    if (opts.strictImports && sensitiveHits.length > 0) {
-        const list = sensitiveHits
-            .map((p) => `  [${sensitiveDomain(p)}] ${p}: ${formatSensitiveChange(changes, p)}`)
-            .join("\n");
-        throw new KindlyError(
-            ErrorCodes.STRICT_IMPORT_BLOCKED,
-            `--strict-imports: Setup modifies ${sensitiveHits.length} security-sensitive setting(s):\n${list}`,
-            [{ text: "Use a hand-audited import (drop --strict-imports) to accept any of these." }],
-        );
-    }
-
-    // Phase 4 gate run: CONSENT-SENSITIVE (Step 6).
-    // STRICT_SENSITIVE_CHANGES above and EXTRA_PLUGIN_PATHS_DUAL below
-    // remain inline until Step 9 — they have distinct trigger conditions
-    // (strict-mode only; dual-flag semantics) that want their own gate
-    // entries.
+    // Phase 4: DESTRUCTION + CONSENT + DUAL gates (Step 9).
+    //   STRICT_REPLACE_REMOVAL_CAP    — strict-imports only
+    //   STRICT_SENSITIVE_CHANGES      — strict-imports only
+    //   SENSITIVE_REQUIRES_ACK        — non-dry-run user consent path
+    //   EXTRA_PLUGIN_PATHS_DUAL       — non-dry-run, needs --accept-plugins
+    //
+    // Order matters for the first-block message: STRICT_REPLACE first
+    // (matches pre-refactor), then STRICT_SENSITIVE, then consumer-ack.
     {
-        const phase4Registry = [SENSITIVE_REQUIRES_ACK];
+        const phase4Registry = [
+            STRICT_REPLACE_REMOVAL_CAP,
+            STRICT_SENSITIVE_CHANGES,
+            SENSITIVE_REQUIRES_ACK,
+            EXTRA_PLUGIN_PATHS_DUAL,
+        ];
         const phase4Ctx = buildBaseContext({
             boundary: "import",
             dryRun: opts.dryRun ?? false,
             strictImports: opts.strictImports ?? false,
             opts: {
                 changes,
+                replaceWarnings: replaceWarningPayload,
                 acceptSensitive: !!opts.acceptSensitive,
                 acceptKey: opts.acceptKey,
+                acceptPlugins: !!opts.acceptPlugins,
             },
         });
         const phase4Report = runGates("import", phase4Ctx, {
@@ -576,27 +563,6 @@ export function executeSetupImport(
             registry: phase4Registry,
         });
         if (phase4Report.blocked) throwFirstBlocking(phase4Report, phase4Registry);
-    }
-
-    // W31a: extra_plugin_paths dual gate (88 §4.3). Even after
-    // --accept-sensitive (or --accept-key=extra_plugin_paths) clears the
-    // SENSITIVE check, this key needs the SAME --accept-plugins consent the
-    // fat-files path requires — a settings-only redirect of KOReader's
-    // plugin loader still ends in "Lua code from a path you don't fully
-    // control runs on your device." Two flags, two distinct mental models.
-    if (!opts.dryRun && !opts.acceptPlugins
-        && sensitiveHits.includes("extra_plugin_paths")) {
-        const newPath = formatSensitiveChange(changes, "extra_plugin_paths");
-        throw new KindlyError(
-            ErrorCodes.FAT_REQUIRES_ACK,
-            `this Setup sets extra_plugin_paths — KOReader will load Lua plugins from the listed directories. ` +
-            `Any Lua code in those paths will execute on your Kindle with full device access.\n` +
-            `  extra_plugin_paths: ${newPath}`,
-            [
-                { text: "Inspect the path the Setup sets.", command: "kindly setup inspect <file>" },
-                { text: "Pass --accept-plugins to consent to plugin code execution." },
-            ],
-        );
     }
 
     const willInstallPlugins = !!opts.acceptPlugins && shippedPlugins.length > 0;

@@ -9,7 +9,10 @@ export {
     PLUGINS_REQUIRE_ACK,
     PATCHES_REQUIRE_ACK,
     SENSITIVE_REQUIRES_ACK,
+    STRICT_SENSITIVE_CHANGES,
 } from "./consent.ts";
+export { STRICT_REPLACE_REMOVAL_CAP } from "./destruction.ts";
+export { EXTRA_PLUGIN_PATHS_DUAL } from "./dual.ts";
 export {
     STRICT_PLUGIN_HASH_CHECK,
     STRICT_SCANNER_FINDINGS,

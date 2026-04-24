@@ -32,6 +32,10 @@ import {
     PATCHES_REQUIRE_ACK,
     SENSITIVE_REQUIRES_ACK,
 } from "../gates/definitions/consent.ts";
+import {
+    STRICT_PLUGIN_HASH_CHECK,
+    STRICT_SCANNER_FINDINGS,
+} from "../gates/definitions/integrity.ts";
 import { formatSensitiveChange as formatSensitiveChangeShared } from "../gates/sensitiveFormat.ts";
 import { parseManifest, SetupSchemaError, type EmbeddedFile, type SetupManifest } from "../setup/schema.ts";
 import { unpackSetup } from "../setup/unpack.ts";
@@ -377,26 +381,7 @@ export function executeSetupImport(
             : null
     );
 
-    // W34e strict gate: refuse if any plugin fails to MATCH the catalog.
-    // Runs even in --dry-run so CI can validate without touching device.
-    // UNVERIFIED also blocks — otherwise an attacker can impersonate any
-    // catalogued-but-unhashed plugin folder name and slip S2-style
-    // lexically-obfuscated payloads past --strict-imports entirely.
-    if (opts.strictImports && pluginHashReport) {
-        const bad = pluginHashReport.verdicts.filter((v) => v.status !== "MATCH");
-        if (bad.length > 0) {
-            const list = bad
-                .map((v) => v.status === "MALFORMED_STRUCTURE"
-                    ? `  [MALFORMED_STRUCTURE] ${v.paths.length} path(s) outside <name>.koplugin/`
-                    : `  [${v.status}] ${v.name}`)
-                .join("\n");
-            throw new KindlyError(
-                ErrorCodes.STRICT_IMPORT_BLOCKED,
-                `--strict-imports: ${bad.length} plugin integrity finding(s):\n${list}`,
-                [{ text: "Regenerate the catalog against the device's KOReader version, or drop --strict-imports if the findings are expected." }],
-            );
-        }
-    }
+    // STRICT_PLUGIN_HASH_CHECK moved to the phase-2 gate run below (Step 7).
 
     // W36/W37: Lua static scanner over shipped plugins + patches. Runs
     // after the hash report so we can suppress findings on catalogued
@@ -412,24 +397,26 @@ export function executeSetupImport(
         })
         : null;
 
-    // W36/W37 strict gate: any unsuppressed scanner finding blocks under
-    // --strict-imports. Reuses STRICT_IMPORT_BLOCKED — docs/93 §5.3.
-    if (opts.strictImports && scanReport && scanReport.findings.length > 0) {
-        const preview = scanReport.findings.slice(0, 5).map(
-            (f) => `  [${f.category}] ${f.plugin}/${f.file}:${f.line}`,
-        ).join("\n");
-        const more = scanReport.findings.length > 5
-            ? `\n  … and ${scanReport.findings.length - 5} more`
-            : "";
-        throw new KindlyError(
-            ErrorCodes.STRICT_IMPORT_BLOCKED,
-            `--strict-imports: ${scanReport.findings.length} Lua scanner finding(s) in shipped code:\n${preview}${more}`,
-            [
-                { text: "Review the findings.", command: "kindly setup inspect <file>" },
-                { text: "If the shipped plugin is bundled and curated, the hash should match the catalog; regenerate the catalog if it drifted." },
-                { text: "Drop --strict-imports if the findings are expected." },
-            ],
-        );
+    // Phase 2: INTEGRITY gates (Step 7). Strict-mode enforcement on
+    // plugin-hash verdicts + Lua scanner findings. Gate bodies are pure
+    // predicates; the underlying report computation above stays inline.
+    {
+        const phase2Registry = [STRICT_PLUGIN_HASH_CHECK, STRICT_SCANNER_FINDINGS];
+        const phase2Ctx = buildBaseContext({
+            boundary: "import",
+            dryRun: opts.dryRun ?? false,
+            strictImports: opts.strictImports ?? false,
+            opts: {
+                pluginHashReport,
+                scanReport,
+            },
+        });
+        const phase2Report = runGates("import", phase2Ctx, {
+            dryRun: opts.dryRun ?? false,
+            strictImports: opts.strictImports ?? false,
+            registry: phase2Registry,
+        });
+        if (phase2Report.blocked) throwFirstBlocking(phase2Report, phase2Registry);
     }
 
     let compatSummary: SetupImportResult["compat"] = null;

@@ -9,9 +9,13 @@
 import type { Producer } from "../types.ts";
 import { manifestIdentity } from "./manifestIdentity.ts";
 import { sensitiveHits } from "./sensitiveHits.ts";
+import { pluginHashReport } from "./pluginHashReport.ts";
+import { scanReport } from "./scanReport.ts";
 
 export const PRODUCERS: Readonly<Record<string, Producer<unknown>>> = {
     manifestIdentity,
     sensitiveHits,
+    pluginHashReport,
+    scanReport,
     // (more land here alongside each gate migration)
 };

@@ -16,6 +16,10 @@ import {
     PATCHES_REQUIRE_ACK,
     SENSITIVE_REQUIRES_ACK,
 } from "./definitions/consent.ts";
+import {
+    STRICT_PLUGIN_HASH_CHECK,
+    STRICT_SCANNER_FINDINGS,
+} from "./definitions/integrity.ts";
 
 // Each gate definition lives in its own category file under ./definitions/.
 // The flat array below concatenates them in declaration order — which is
@@ -26,8 +30,10 @@ export const GATES: ReadonlyArray<GateDefinition> = [
     MANIFEST_HASH_ASSERT,
     PLUGINS_REQUIRE_ACK,
     PATCHES_REQUIRE_ACK,
+    STRICT_PLUGIN_HASH_CHECK,
+    STRICT_SCANNER_FINDINGS,
     SENSITIVE_REQUIRES_ACK,
-    // (more land here as Steps 7-11 port each gate category)
+    // (more land here as Steps 8-11 port each gate category)
 ];
 
 /** For tests / internal tooling: override the registry in a scoped way. */

@@ -10,3 +10,7 @@ export {
     PATCHES_REQUIRE_ACK,
     SENSITIVE_REQUIRES_ACK,
 } from "./consent.ts";
+export {
+    STRICT_PLUGIN_HASH_CHECK,
+    STRICT_SCANNER_FINDINGS,
+} from "./integrity.ts";

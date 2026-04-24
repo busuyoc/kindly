@@ -195,7 +195,7 @@ Files:
 
 DoD: branch exists, plan doc committed, memory entry indexed.
 
-### Step 1 — safeRead (PARALLEL AGENT)
+### Step 1 — safeRead (PARALLEL AGENT + CORRECTION)
 
 Files:
 - NEW `src/fs/safeRead.ts`
@@ -205,10 +205,10 @@ Files:
 Exports:
 ```typescript
 export type PathProvenance =
-  | "user-provided"       // argv, --mount, --file, positional
-  | "derived-from-mount"  // join(mount.root, ...)
-  | "derived-from-cwd"    // .kindly/ local tree
-  | "extracted-archive";  // tmpdir post tar-extract
+  | "user-provided"       // argv, --mount, --file, positional — user consented
+  | "derived-from-mount"  // join(mount.root, ...)            — mount-content is UNTRUSTED
+  | "derived-from-cwd"    // .kindly/ local tree              — host is TCB
+  | "extracted-archive";  // tmpdir post tar-extract          — UNTRUSTED
 
 export function readText(path: string, prov: PathProvenance): string
 export function readBytes(path: string, prov: PathProvenance): Buffer
@@ -218,14 +218,41 @@ export function statNoFollow(path: string, prov: PathProvenance): Stats
 export function copyFile(src: string, srcProv: PathProvenance, dst: string, dstProv: PathProvenance): void
 ```
 
-Behavior:
-- `extracted-archive` → always uses `lstatSync` first, throws on symlink
-- All other provenances preserve current behavior (symlink follow allowed)
+**Behavior — CORRECTED after initial design review**:
 
-The win is labeling, not new enforcement. Existing symlink rejections in
-`src/setup/unpack.ts` are consolidated via this helper.
+The first draft of this step treated `derived-from-mount` as "preserve current
+behavior (follow symlinks)." Review correctly identified this as a hole. The
+mount is attacker-plantable content (USB-writable, historically-pwned via
+KOReader RCE, or shared hardware). A `settings.reader.lua → ~/.ssh/id_rsa`
+symlink on the Kindle filesystem would exfiltrate host secrets through
+LuaParseError message leak (S281 class) or via pull writing the attacker's
+value into `kindly.yaml`. Closes **S211 / S241 / S242 / S243** (Batch K).
 
-DoD: suite green, `tests/fs/safeRead.test.ts` passes, all callsites labeled.
+Correct behavior by provenance:
+
+| Provenance             | Symlink follow  | Rationale                              |
+|------------------------|-----------------|----------------------------------------|
+| `user-provided`        | ✓ follow        | User typed the path; their consent     |
+| `derived-from-cwd`     | ✓ follow        | Host is the TCB                        |
+| `derived-from-mount`   | ✗ REJECT        | Mount-content is untrusted data        |
+| `extracted-archive`    | ✗ REJECT        | Untrusted (tar)                        |
+
+Mount symlink rejection uses `lstatSync` at the boundary with a structured
+error ("refusing to follow symlink at mount-derived path — mount is treated
+as untrusted data"). The user's escape hatch for legitimate symlinked
+Kindle content is a future `--trust-mount` flag (out of scope for Step 1);
+if the need surfaces, record as a deferred item.
+
+Existing explicit symlink rejections in `src/setup/unpack.ts` consolidate via
+the `extracted-archive` helper.
+
+**If the agent shipped with the initial flawed design (follow on
+derived-from-mount), a remediation commit after Agent 1 completion must:
+flip the `derived-from-mount` branch to reject, update tests, re-run
+suite.** Callsite labels don't change — the enforcement moves up.
+
+DoD: suite green, `tests/fs/safeRead.test.ts` passes with per-provenance
+coverage including mount-symlink-reject, all callsites labeled.
 
 ### Step 2 — sanitize (PARALLEL AGENT)
 

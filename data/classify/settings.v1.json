@@ -1,0 +1,81 @@
+{
+  "$schema_version": 1,
+  "curated_at": "2026-04-24",
+  "note": "Three-axis classification for settings.reader.lua keys. Sibling asset to data/schemas/ and data/taxonomy/. Top-level keys and dotted nested paths both live under 'keys'. Missing axes default to exfil=normal, change=none, hygiene=persistent. Add a key: edit one row. Referenced by src/schema/classify.ts.",
+  "axes": {
+    "exfil": {
+      "secret": "Plaintext credentials / PII. Never emit the value to YAML, JSON, logs, or the terminal. Denylist is hard — if in doubt, mark as secret.",
+      "normal": "The value may leave the device. Default."
+    },
+    "change": {
+      "none": "Default. Changing this key crosses no trust boundary.",
+      "sensitive-network": "Changing this key redirects a network endpoint (OTA, proxy, server URL, OPDS catalog).",
+      "sensitive-ssh": "Changing this key modifies SSH server policy (port, autostart, auth mode).",
+      "sensitive-code-exec": "Changing this key causes Lua code from attacker-chosen paths to execute.",
+      "sensitive-fs": "Changing this key redirects where KOReader reads/writes files.",
+      "sensitive-debug": "Changing this key toggles debug instrumentation that widens the attack surface.",
+      "sensitive-service": "Changing this key enables/configures a network service bound on the device.",
+      "destructive": "Reserved. A key whose null-ing or removal is catastrophic (e.g. a future top-level that if wiped would nuke user state). Not yet used."
+    },
+    "hygiene": {
+      "persistent": "Default. Round-trips through YAML without issue.",
+      "ephemeral": "Flaps on every device interaction (open file, migrate, last-check timestamp). Dropped in 'minimal' pull mode; kept only with --full."
+    }
+  },
+  "keys": {
+    "LocalSend_autostart":          {"change": "sensitive-service"},
+    "LocalSend_ext_dirs":           {"change": "sensitive-fs"},
+    "LocalSend_last_update_check":  {"hygiene": "ephemeral"},
+    "LocalSend_pin":                {"exfil": "secret"},
+    "LocalSend_port":               {"change": "sensitive-service"},
+    "LocalSend_save_dir":           {"change": "sensitive-fs"},
+    "SSH_allow_no_password":        {"change": "sensitive-ssh"},
+    "SSH_autostart":                {"change": "sensitive-ssh"},
+    "SSH_key_only_auth":            {"change": "sensitive-ssh"},
+    "SSH_port":                     {"change": "sensitive-ssh"},
+    "block_start_time":             {"hygiene": "ephemeral"},
+    "calibre_wireless_password":    {"exfil": "secret"},
+    "calibre_wireless_url":         {"change": "sensitive-network"},
+    "closed_rotation_mode":         {"hygiene": "ephemeral"},
+    "current_tries_number":         {"hygiene": "ephemeral"},
+    "currently_blocked":            {"hygiene": "ephemeral"},
+    "debug":                        {"change": "sensitive-debug"},
+    "device_id":                    {"exfil": "secret"},
+    "download_dir":                 {"change": "sensitive-fs"},
+    "extra_plugin_paths":           {"change": "sensitive-code-exec"},
+    "home_dir":                     {"change": "sensitive-fs"},
+    "http_proxy":                   {"change": "sensitive-network"},
+    "http_proxy_enabled":           {"change": "sensitive-network"},
+    "httpinspector_autostart":      {"change": "sensitive-service"},
+    "httpinspector_port":           {"change": "sensitive-service"},
+    "inbox_dir":                    {"change": "sensitive-fs"},
+    "kosync.custom_server":         {"change": "sensitive-network"},
+    "kosync.userkey":               {"exfil": "secret"},
+    "kosync.username":              {"exfil": "secret"},
+    "last_migration_date":          {"hygiene": "ephemeral"},
+    "lastdir":                      {"hygiene": "ephemeral"},
+    "lastfile":                     {"hygiene": "ephemeral"},
+    "menu_search_string":           {"hygiene": "ephemeral"},
+    "navbar_homescreen_flow_recent_fp": {"hygiene": "ephemeral"},
+    "opds_servers":                 {"change": "sensitive-network"},
+    "ota_server":                   {"change": "sensitive-network"},
+    "pinpadlock_message":           {"exfil": "secret"},
+    "pinpadlock_pin_code":          {"exfil": "secret"},
+    "quickstart_shown_version":     {"hygiene": "ephemeral"},
+    "quote_deck_pos":               {"hygiene": "ephemeral"},
+    "screensaver_message":          {"exfil": "secret"},
+    "trans_server":                 {"change": "sensitive-network"},
+    "wifi_was_on":                  {"hygiene": "ephemeral"},
+    "zlib_user_id":                 {"exfil": "secret"},
+    "zlib_user_key":                {"exfil": "secret"},
+    "zlibrary_base_url":            {"change": "sensitive-network"},
+    "zlibrary_password":            {"exfil": "secret"},
+    "zlibrary_username":            {"exfil": "secret"}
+  },
+  "rules": [
+    {"suffix": "_initial_default_setup_done",  "set": {"hygiene": "ephemeral"}},
+    {"suffix": "_initial_default_setup_done2", "set": {"hygiene": "ephemeral"}},
+    {"regex": "^simpleui_defaults_v\\d+$",     "set": {"hygiene": "ephemeral"}},
+    {"regex": "_migrated_v\\d+$",              "set": {"hygiene": "ephemeral"}}
+  ]
+}

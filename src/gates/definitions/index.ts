@@ -5,3 +5,8 @@
 // the category files.
 
 export { MANIFEST_HASH_ASSERT } from "./identity.ts";
+export {
+    PLUGINS_REQUIRE_ACK,
+    PATCHES_REQUIRE_ACK,
+    SENSITIVE_REQUIRES_ACK,
+} from "./consent.ts";

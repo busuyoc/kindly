@@ -11,6 +11,11 @@
 
 import type { GateDefinition } from "./types.ts";
 import { MANIFEST_HASH_ASSERT } from "./definitions/identity.ts";
+import {
+    PLUGINS_REQUIRE_ACK,
+    PATCHES_REQUIRE_ACK,
+    SENSITIVE_REQUIRES_ACK,
+} from "./definitions/consent.ts";
 
 // Each gate definition lives in its own category file under ./definitions/.
 // The flat array below concatenates them in declaration order — which is
@@ -19,7 +24,10 @@ import { MANIFEST_HASH_ASSERT } from "./definitions/identity.ts";
 
 export const GATES: ReadonlyArray<GateDefinition> = [
     MANIFEST_HASH_ASSERT,
-    // (more land here as Steps 6-11 port each gate category)
+    PLUGINS_REQUIRE_ACK,
+    PATCHES_REQUIRE_ACK,
+    SENSITIVE_REQUIRES_ACK,
+    // (more land here as Steps 7-11 port each gate category)
 ];
 
 /** For tests / internal tooling: override the registry in a scoped way. */

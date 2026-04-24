@@ -26,6 +26,13 @@ import { type CliEnv, resolveMount } from "../cli/env.ts";
 import { hashBytes, shortId } from "../setup/canonical.ts";
 import { buildBaseContext } from "../gates/context.ts";
 import { runGates, throwFirstBlocking } from "../gates/orchestrator.ts";
+import { MANIFEST_HASH_ASSERT } from "../gates/definitions/identity.ts";
+import {
+    PLUGINS_REQUIRE_ACK,
+    PATCHES_REQUIRE_ACK,
+    SENSITIVE_REQUIRES_ACK,
+} from "../gates/definitions/consent.ts";
+import { formatSensitiveChange as formatSensitiveChangeShared } from "../gates/sensitiveFormat.ts";
 import { parseManifest, SetupSchemaError, type EmbeddedFile, type SetupManifest } from "../setup/schema.ts";
 import { unpackSetup } from "../setup/unpack.ts";
 import { checkCompat, formatCompatIssue } from "../setup/compat.ts";
@@ -225,63 +232,11 @@ export type ImportResultWithExtras = SetupImportResult & {
     schemaFindings?: ValidationReport;
 };
 
-// Descend into a LuaValue by a dotted-path tail. Returns undefined if any
-// segment can't be traversed (scalar, array, map, or missing key).
-function descendLua(value: LuaValue | undefined, tail: readonly string[]): LuaValue | undefined {
-    let v: LuaValue | undefined = value;
-    for (const k of tail) {
-        if (v === null || typeof v !== "object" || Array.isArray(v) || v instanceof Map) {
-            return undefined;
-        }
-        v = (v as Record<string, LuaValue>)[k];
-    }
-    return v;
-}
-
-// Render a LuaValue for the SENSITIVE warning list. Scalars go verbatim
-// (JSON-encoded for strings); arrays/objects collapse to a shape hint per
-// 88 §3.3.
-function fmtSensitiveValue(v: LuaValue | undefined): string {
-    if (v === undefined) return "(absent)";
-    if (v === null) return "nil";
-    if (Array.isArray(v)) return `<array of ${v.length} item(s)>`;
-    if (v instanceof Map) return `<table with ${v.size} key(s)>`;
-    if (typeof v === "object") {
-        return `<object with ${Object.keys(v).length} key(s)>`;
-    }
-    if (typeof v === "string") return JSON.stringify(v);
-    return String(v);
-}
-
-// Locate the change that carries a SENSITIVE hit path and format the
-// prev/next for the warning line. Returns "(added) → X" / "Y → (removed)" /
-// "Y → X" depending on the carrier change's kind.
-function formatSensitiveChange(changes: readonly Change[], hitPath: string): string {
-    const segments = hitPath.split(".");
-    for (const c of changes) {
-        if (segments.length < c.path.length) continue;
-        let matches = true;
-        for (let i = 0; i < c.path.length; i++) {
-            if (c.path[i] !== segments[i]) { matches = false; break; }
-        }
-        if (!matches) continue;
-        const tail = segments.slice(c.path.length);
-        if (c.kind === "added") {
-            const next = descendLua(c.next, tail);
-            return `(added) → ${fmtSensitiveValue(next)}`;
-        }
-        if (c.kind === "removed") {
-            const prev = descendLua(c.prev, tail);
-            return `${fmtSensitiveValue(prev)} → (removed)`;
-        }
-        const prev = descendLua(c.prev, tail);
-        const next = descendLua(c.next, tail);
-        // A "changed" parent may leave the SENSITIVE descendant unchanged or
-        // newly present/absent; fmtSensitiveValue handles undefined.
-        return `${fmtSensitiveValue(prev)} → ${fmtSensitiveValue(next)}`;
-    }
-    return "(change)";
-}
+// Sensitive-change formatting helpers now live in src/gates/sensitiveFormat.ts
+// and are imported above as `formatSensitiveChangeShared`. A thin alias keeps
+// the in-file call sites (STRICT_SENSITIVE_CHANGES, EXTRA_PLUGIN_PATHS_DUAL,
+// still inline until Step 9) reading as they did pre-refactor.
+const formatSensitiveChange = formatSensitiveChangeShared;
 
 // W34d: if this is a replace-mode Setup and the top-level removal count
 // crosses the threshold, return a warning payload so renderers can surface
@@ -354,13 +309,22 @@ export function executeSetupImport(
     const { manifest, manifestBytes, files } = loaded;
     const id = shortId(hashBytes(manifestBytes));
 
-    // Phase 1 gate run: IDENTITY gates. Just MANIFEST_HASH_ASSERT at Step 5
-    // of the gates refactor. More gates fold into this phase as Steps 6-9
-    // port each category (see docs/infra/99-gates-refactor-plan.md).
-    //
-    // Fail fast before prompting the user about plugins / sensitive keys —
-    // if the file isn't the one they expected, nothing downstream matters.
+    const shippedPlugins: readonly EmbeddedFile[] = manifest.plugins?.files ?? [];
+    const shippedPatches: readonly EmbeddedFile[] = manifest.patches ?? [];
+
+    // Phase 1 gate run: IDENTITY + CONSENT-FAT. All inputs are available
+    // right after loadSetup + manifest parse.
+    //   MANIFEST_HASH_ASSERT (IDENTITY)   — Step 5
+    //   PLUGINS_REQUIRE_ACK  (CONSENT)    — Step 6
+    //   PATCHES_REQUIRE_ACK  (CONSENT)    — Step 6
+    // Fail fast — if the file isn't what the user expected or ships code
+    // they haven't consented to, nothing downstream matters.
     {
+        const phase1Registry = [
+            MANIFEST_HASH_ASSERT,
+            PLUGINS_REQUIRE_ACK,
+            PATCHES_REQUIRE_ACK,
+        ];
         const phase1Ctx = buildBaseContext({
             boundary: "import",
             dryRun: opts.dryRun ?? false,
@@ -368,35 +332,20 @@ export function executeSetupImport(
             opts: {
                 expectHash: opts.expectHash,
                 manifestBytes,
+                shippedPluginsCount: shippedPlugins.length,
+                shippedPatchesCount: shippedPatches.length,
+                acceptPlugins: !!opts.acceptPlugins,
+                skipPlugins: !!opts.skipPlugins,
+                acceptPatches: !!opts.acceptPatches,
+                skipPatches: !!opts.skipPatches,
             },
         });
         const phase1Report = runGates("import", phase1Ctx, {
             dryRun: opts.dryRun ?? false,
             strictImports: opts.strictImports ?? false,
+            registry: phase1Registry,
         });
-        if (phase1Report.blocked) throwFirstBlocking(phase1Report);
-    }
-
-    const shippedPlugins: readonly EmbeddedFile[] = manifest.plugins?.files ?? [];
-    const shippedPatches: readonly EmbeddedFile[] = manifest.patches ?? [];
-
-    if (shippedPlugins.length > 0 && !opts.acceptPlugins && !opts.skipPlugins) {
-        throw new KindlyError(
-            ErrorCodes.FAT_REQUIRES_ACK,
-            `this Setup ships ${shippedPlugins.length} plugin file(s) — Lua code that will execute on your Kindle. ` +
-            `Pass --accept-plugins to install, or --skip-plugins to apply settings only.`,
-            [
-                { text: "Review the shipped files before accepting.", command: "kindly setup inspect <file>" },
-            ],
-        );
-    }
-    if (shippedPatches.length > 0 && !opts.acceptPatches && !opts.skipPatches) {
-        throw new KindlyError(
-            ErrorCodes.FAT_REQUIRES_ACK,
-            `this Setup ships ${shippedPatches.length} patch file(s) — Lua code that will execute on your Kindle. ` +
-            `Pass --accept-patches to install, or --skip-patches to apply settings only.`,
-            [],
-        );
+        if (phase1Report.blocked) throwFirstBlocking(phase1Report, phase1Registry);
     }
 
     const mountEnv = opts.mount ? { ...env, mountOverride: opts.mount } : env;
@@ -610,25 +559,29 @@ export function executeSetupImport(
         );
     }
 
-    if (!opts.dryRun && sensitiveHits.length > 0) {
-        const accepted = opts.acceptKey ?? new Set<string>();
-        const blocking = opts.acceptSensitive
-            ? []
-            : sensitiveHits.filter((p) => !accepted.has(p));
-        if (blocking.length > 0) {
-            const list = blocking
-                .map((p) => `  [${sensitiveDomain(p)}] ${p}: ${formatSensitiveChange(changes, p)}`)
-                .join("\n");
-            throw new KindlyError(
-                ErrorCodes.SENSITIVE_REQUIRES_ACK,
-                `this Setup modifies ${blocking.length} security-sensitive setting(s):\n${list}`,
-                [
-                    { text: "Review with: kindly setup inspect <file>" },
-                    { text: "Accept all changes.", command: "kindly setup import <file> --accept-sensitive" },
-                    { text: "Accept specific keys.", command: "kindly setup import <file> --accept-key=<key,key,...>" },
-                ],
-            );
-        }
+    // Phase 4 gate run: CONSENT-SENSITIVE (Step 6).
+    // STRICT_SENSITIVE_CHANGES above and EXTRA_PLUGIN_PATHS_DUAL below
+    // remain inline until Step 9 — they have distinct trigger conditions
+    // (strict-mode only; dual-flag semantics) that want their own gate
+    // entries.
+    {
+        const phase4Registry = [SENSITIVE_REQUIRES_ACK];
+        const phase4Ctx = buildBaseContext({
+            boundary: "import",
+            dryRun: opts.dryRun ?? false,
+            strictImports: opts.strictImports ?? false,
+            opts: {
+                changes,
+                acceptSensitive: !!opts.acceptSensitive,
+                acceptKey: opts.acceptKey,
+            },
+        });
+        const phase4Report = runGates("import", phase4Ctx, {
+            dryRun: opts.dryRun ?? false,
+            strictImports: opts.strictImports ?? false,
+            registry: phase4Registry,
+        });
+        if (phase4Report.blocked) throwFirstBlocking(phase4Report, phase4Registry);
     }
 
     // W31a: extra_plugin_paths dual gate (88 §4.3). Even after

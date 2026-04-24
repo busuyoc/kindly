@@ -8,8 +8,10 @@
 
 import type { Producer } from "../types.ts";
 import { manifestIdentity } from "./manifestIdentity.ts";
+import { sensitiveHits } from "./sensitiveHits.ts";
 
 export const PRODUCERS: Readonly<Record<string, Producer<unknown>>> = {
     manifestIdentity,
+    sensitiveHits,
     // (more land here alongside each gate migration)
 };

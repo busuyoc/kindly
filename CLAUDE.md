@@ -56,6 +56,27 @@ No build step — Bun interprets TypeScript directly. No linter configured.
 
 **Flag parsing:** custom parser in `src/cli/args.ts`. No short flags. Supports `--flag`, `--flag=value`, `--no-flag`. Unknown flags → `ArgError`.
 
+## Doc map
+
+Docs are numbered chronologically but group by concern. Load only the group relevant to your task.
+
+```
+docs/
+├── research/    — early project shaping, KOReader ecosystem research
+├── specs/       — feature specs (pull, apply, snapshot, setups, compat, schemas)
+├── security/    — threat model, trust gates, red-team findings, hardening plan
+├── ui/          — JSON API, taxonomy, GUI framework, IPC, doctor output
+├── catalog/     — plugin catalog data + community curation plan
+└── infra/       — roadmap, KOReader emulator setup
+```
+
+**`security/`** is the densest cluster. Key files for fixing red-team findings:
+- `96d-hardening.md` — **load this when implementing fixes** (§8.1–§8.18 with code refs)
+- `96a-findings-core.md` — S1–S51: core session (trust boundary holes, credential leaks, code-exec)
+- `96b-findings-extended.md` — S52–S67 + re-assessments
+- `96c-findings-probes.md` — S68–S88: automated probe findings
+- `96-red-team-v0.11.1.md` — canonical archive (all of the above, 5800+ lines)
+
 ## Conventions
 
 - Exit codes: 0 = success, 1 = runtime error, 2 = arg validation error.

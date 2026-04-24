@@ -14,7 +14,10 @@ export function isSafeRelativePath(p: string): boolean {
     if (/^[a-zA-Z]:/.test(p)) return false;          // Windows drive letter
     if (p.includes("\\")) return false;              // Windows separator
     for (const seg of p.split("/")) {
-        if (seg === "..") return false;              // traversal
+        if (seg === "" || seg === "." || seg === "..") return false;
+        // empty: leading/trailing/double slash; `.`: current-dir segment
+        // that would collapse `./X` to the parent dir (S690 wipe primitive
+        // via installPluginFiles seg=`.` → rmSync(pluginsRoot)); `..`: escape.
     }
     return true;
 }

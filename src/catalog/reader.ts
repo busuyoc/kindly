@@ -13,7 +13,7 @@
 // `.passthrough()` on unknowns so we can evolve the file without
 // retro-breaking older code.
 
-import { existsSync, readFileSync } from "node:fs";
+import { exists, readText } from "../fs/safeRead.ts";
 import { resolve } from "node:path";
 import { z } from "zod";
 
@@ -109,7 +109,7 @@ const DEFAULT_PATH = resolve(
 export function loadPluginCatalog(path?: string): PluginCatalog {
     if (cached && !path) return cached;
     const p = path ?? DEFAULT_PATH;
-    if (!existsSync(p)) {
+    if (!exists(p, "derived-from-cwd")) {
         throw new KindlyError(
             ErrorCodes.CATALOG_NOT_FOUND,
             `plugin catalog not found at ${p}`,
@@ -120,7 +120,7 @@ export function loadPluginCatalog(path?: string): PluginCatalog {
             ],
         );
     }
-    const raw = JSON.parse(readFileSync(p, "utf8"));
+    const raw = JSON.parse(readText(p, "derived-from-cwd"));
     const parsed = PluginCatalogSchema.safeParse(raw);
     if (!parsed.success) {
         throw new KindlyError(

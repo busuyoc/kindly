@@ -16,11 +16,12 @@
 // Any failure → throw SetupUnpackError with a specific message. Don't
 // leak partial state to the caller.
 
-import { existsSync, lstatSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { parseYamlSafe } from "../fs/yamlSafe.ts";
 import { extractTarGz, listTarGz } from "../fs/archive.ts";
+import { exists, readBytes, statNoFollow } from "../fs/safeRead.ts";
 import { hashBytes } from "./canonical.ts";
 import { isSafeRelativePath, parseManifest, type SetupManifest } from "./schema.ts";
 
@@ -43,7 +44,7 @@ export class SetupUnpackError extends Error {
 }
 
 export function unpackSetup(archivePath: string): UnpackedSetup {
-    if (!existsSync(archivePath)) {
+    if (!exists(archivePath, "user-provided")) {
         throw new SetupUnpackError(`archive not found: ${archivePath}`);
     }
 
@@ -83,10 +84,18 @@ export function unpackSetup(archivePath: string): UnpackedSetup {
         extractTarGz({ archivePath, destRoot: stage });
 
         const manifestAbs = join(stage, "manifest.yaml");
-        if (lstatSync(manifestAbs).isSymbolicLink()) {
-            throw new SetupUnpackError("manifest.yaml is a symlink");
+        // statNoFollow + readBytes with "extracted-archive" provenance
+        // together enforce symlink rejection inside safeRead, replacing
+        // the previous inline lstatSync check at this site.
+        try {
+            statNoFollow(manifestAbs, "extracted-archive");
+        } catch (e) {
+            if (e instanceof Error && /symlink/.test(e.message)) {
+                throw new SetupUnpackError("manifest.yaml is a symlink");
+            }
+            throw e;
         }
-        const manifestBytes = readFileSync(manifestAbs);
+        const manifestBytes = readBytes(manifestAbs, "extracted-archive");
         let manifest: SetupManifest;
         try {
             const raw = parseYamlSafe(manifestBytes.toString("utf8"));
@@ -115,17 +124,23 @@ export function unpackSetup(archivePath: string): UnpackedSetup {
         }
 
         // Every declared file must exist on disk, with matching size + hash.
-        // lstatSync (not statSync) so symlinks aren't followed — a malicious
-        // archive could plant a symlink to read arbitrary host files.
+        // The "extracted-archive" provenance routed through safeRead rejects
+        // symlinks centrally — a malicious archive can't plant one to read
+        // arbitrary host files.
         const files = new Map<string, Buffer>();
         for (const [fullPath, d] of declared.entries()) {
             const abs = join(stage, fullPath.split("/").join(sep));
-            if (!existsSync(abs)) {
+            if (!exists(abs, "extracted-archive")) {
                 throw new SetupUnpackError(`manifest declares ${fullPath} but archive doesn't contain it`);
             }
-            const st = lstatSync(abs);
-            if (st.isSymbolicLink()) {
-                throw new SetupUnpackError(`archive contains symlink: ${fullPath}`);
+            let st;
+            try {
+                st = statNoFollow(abs, "extracted-archive");
+            } catch (e) {
+                if (e instanceof Error && /symlink/.test(e.message)) {
+                    throw new SetupUnpackError(`archive contains symlink: ${fullPath}`);
+                }
+                throw e;
             }
             if (!st.isFile()) {
                 throw new SetupUnpackError(`archive entry is not a regular file: ${fullPath}`);
@@ -135,7 +150,7 @@ export function unpackSetup(archivePath: string): UnpackedSetup {
                     `${fullPath}: declared bytes=${d.bytes}, actual=${st.size}`
                 );
             }
-            const buf = readFileSync(abs);
+            const buf = readBytes(abs, "extracted-archive");
             const actualHash = hashBytes(buf);
             if (actualHash !== d.hash) {
                 throw new SetupUnpackError(

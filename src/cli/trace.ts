@@ -21,9 +21,10 @@
 // `.kindly/trace-archive/<ts>.jsonl` and a fresh active file is started.
 // All I/O failures are swallowed — a trace write must never break a command.
 
-import { appendFileSync, existsSync, mkdirSync, renameSync, statSync } from "node:fs";
+import { appendFileSync, mkdirSync, renameSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
+import { exists, statFollow } from "../fs/safeRead.ts";
 import type { CliEnv } from "./env.ts";
 
 export const TRACE_ROTATE_BYTES = 10 * 1024 * 1024;
@@ -50,7 +51,7 @@ export function writeTraceEntry(env: CliEnv, entry: TraceEntry): void {
         const file = join(dir, "trace.jsonl");
         mkdirSync(dir, { recursive: true });
 
-        if (existsSync(file) && statSync(file).size >= TRACE_ROTATE_BYTES) {
+        if (exists(file, "derived-from-cwd") && statFollow(file, "derived-from-cwd").size >= TRACE_ROTATE_BYTES) {
             const archDir = join(dir, "trace-archive");
             mkdirSync(archDir, { recursive: true });
             const stamp = entry.ts.replace(/[:.]/g, "-");

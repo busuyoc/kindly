@@ -6,8 +6,8 @@
 // This is the core safety property — a half-populated YAML doesn't wipe
 // your zlibrary password.
 
-import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { exists, readText } from "../fs/safeRead.ts";
 import { parseSettingsFile } from "../lua/reader.ts";
 import { dumpSettingsFile } from "../lua/writer.ts";
 import type { LuaTable, LuaValue } from "../lua/writer.ts";
@@ -18,6 +18,9 @@ import { type CliEnv, resolveMount } from "../cli/env.ts";
 import type { ApplyResult } from "../types/results.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
+import { runPhase } from "../gates/orchestrator.ts";
+import { YAML_SHAPE_NORMAL } from "../gates/definitions/shape.ts";
+import { appendGateEvent } from "../history/gateLog.ts";
 
 export interface ApplyOptions {
     file?: string;
@@ -28,7 +31,7 @@ export interface ApplyOptions {
 
 export function executeApply(opts: ApplyOptions, env: CliEnv): ApplyResult {
     const yamlPath = resolve(env.cwd, opts.file ?? "kindly.yaml");
-    if (!existsSync(yamlPath)) {
+    if (!exists(yamlPath, "user-provided")) {
         throw new KindlyError(
             ErrorCodes.YAML_NOT_FOUND,
             `${yamlPath} not found. Run \`kindly pull\` first?`,
@@ -37,9 +40,45 @@ export function executeApply(opts: ApplyOptions, env: CliEnv): ApplyResult {
     }
 
     const mount = resolveMount(env);
-    const onDeviceSrc = readFileSync(mount.settingsPath, "utf8");
+    const onDeviceSrc = readText(mount.settingsPath, "derived-from-mount");
     const onDevice = parseSettingsFile(onDeviceSrc) as Record<string, LuaValue>;
-    const fromYaml = yamlToLua(readFileSync(yamlPath, "utf8")) as Record<string, LuaValue>;
+    const fromYaml = yamlToLua(readText(yamlPath, "user-provided")) as Record<string, LuaValue>;
+
+    // Apply-side gate run — Step 12 of the gates refactor. YAML_SHAPE_NORMAL
+    // is the S89 activation: a crafted YAML with `kosync: null`, `kosync:
+    // []`, `kosync.userkey: ~`, or a top-level SECRET key (e.g.
+    // `zlibrary_password: ~`) would otherwise get through the shallow-merge
+    // and wipe on-device SECRETs. Fires always (including --dry-run):
+    // shape rejection has zero false-positive risk and the preview output
+    // should reflect the same block the write would.
+    //
+    // Additional apply gates (SENSITIVE_REQUIRES_ACK behind
+    // --untrusted-yaml; DESTRUCTIVE_YAML_SHAPE for mass-removal) are
+    // queued for Step 12b — they have real FP risk on legitimate user
+    // edits and want their own activation/flag surface.
+    runPhase({
+        boundary: "apply",
+        registry: [YAML_SHAPE_NORMAL],
+        dryRun: opts.dryRun ?? false,
+        strictImports: false,
+        opts: { yamlSettings: fromYaml },
+        logger: (fired) => {
+            if (fired.result.kind === "bypass") {
+                appendGateEvent(env, {
+                    gate_id: fired.id,
+                    boundary: fired.boundary,
+                    kind: "bypass",
+                    bypass_flag: fired.result.byFlag,
+                });
+            } else if (fired.result.kind === "block") {
+                appendGateEvent(env, {
+                    gate_id: fired.id,
+                    boundary: fired.boundary,
+                    kind: "block",
+                });
+            }
+        },
+    });
 
     const changes = computeChanges(onDevice, fromYaml);
 

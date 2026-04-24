@@ -13,8 +13,8 @@
 //
 // Empty file (or no .kindly/) is a normal first-run state, not an error.
 
-import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { exists, readText, statFollow } from "../fs/safeRead.ts";
 
 import { ArgError, parseArgs, type FlagSpecs } from "../cli/args.ts";
 import type { CliEnv } from "../cli/env.ts";
@@ -171,7 +171,7 @@ function findNextWithPreState(
         if (e.index <= afterIndex) continue;
         if (!SETTINGS_PRE_STATE_CMDS.has(e.cmd)) continue;
         const p = settingsPreStatePath(e);
-        if (!p || !existsSync(p)) continue;
+        if (!p || !exists(p, "derived-from-cwd")) continue;
         if (best === null || e.index < best.index) best = e;
     }
     return best;
@@ -207,7 +207,7 @@ export function executeHistoryShow(index: number, env: CliEnv): HistoryShowResul
         result.diffUnavailable = `entry has no recorded pre-state path (was it run with --no-safety-snapshot?).`;
         return result;
     }
-    if (!existsSync(fromPath) || !statSync(fromPath).isFile()) {
+    if (!exists(fromPath, "derived-from-cwd") || !statFollow(fromPath, "derived-from-cwd").isFile()) {
         result.diffUnavailable = `pre-state file no longer on disk: ${fromPath}`;
         return result;
     }
@@ -219,8 +219,8 @@ export function executeHistoryShow(index: number, env: CliEnv): HistoryShowResul
     }
     const toPath = settingsPreStatePath(next)!;
 
-    const beforeRaw = parseSettingsFile(readFileSync(fromPath, "utf8"));
-    const afterRaw = parseSettingsFile(readFileSync(toPath, "utf8"));
+    const beforeRaw = parseSettingsFile(readText(fromPath, "derived-from-cwd"));
+    const afterRaw = parseSettingsFile(readText(toPath, "derived-from-cwd"));
     if (!isPlainRecord(beforeRaw) || !isPlainRecord(afterRaw)) {
         result.diffUnavailable = `pre-state file did not parse to a settings table: ${fromPath}`;
         return result;

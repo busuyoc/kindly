@@ -32,9 +32,21 @@
 import type { CliEnv } from "./env.ts";
 import { KindlyError } from "../types/errors.ts";
 import type { Remediation } from "../types/errors.ts";
+import { sanitizeForTerminal } from "./sanitize.ts";
 
 import pkg from "../../package.json" with { type: "json" };
 const KINDLY_VERSION: string = pkg.version;
+
+// A JSON.stringify replacer that sanitizes every string value it
+// encounters. `--json` output is still rendered to a terminal in
+// practice (`kindly pull --json | jq` inherits the parent TTY), so
+// attacker-controlled strings inside the envelope need the same
+// control-byte protection as human renderers. Belt to the Writer-layer
+// suspenders — sanitize is idempotent so double application is safe.
+function sanitizeReplacer(_key: string, value: unknown): unknown {
+    if (typeof value === "string") return sanitizeForTerminal(value);
+    return value;
+}
 
 export const JSON_SCHEMA_VERSION = 1;
 
@@ -79,7 +91,7 @@ export function emitJson<T>(
         data,
         warnings,
     };
-    env.stdout.write(JSON.stringify(envelope) + "\n");
+    env.stdout.writeRaw(JSON.stringify(envelope, sanitizeReplacer) + "\n");
 }
 
 // Emit an error envelope on stderr, followed by a single newline.
@@ -103,5 +115,5 @@ export function emitJsonError(
             ? { code: kindly.code, message: kindly.message, remediation: kindly.remediation }
             : { code: "UNKNOWN", message: (err as Error)?.message ?? String(err), remediation: [] },
     };
-    env.stderr.write(JSON.stringify(envelope) + "\n");
+    env.stderr.writeRaw(JSON.stringify(envelope, sanitizeReplacer) + "\n");
 }

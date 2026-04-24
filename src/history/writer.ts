@@ -53,16 +53,15 @@
 import {
     appendFileSync,
     closeSync,
-    existsSync,
     fsyncSync,
     mkdirSync,
     openSync,
-    readFileSync,
     readdirSync,
     writeFileSync,
     writeSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
+import { exists, readText } from "../fs/safeRead.ts";
 
 import pkg from "../../package.json" with { type: "json" };
 
@@ -180,8 +179,8 @@ export function appendHistoryEntry(
 // (partial last write after a crash) are silently dropped — they're the
 // reader's concern to count, not the writer's.
 function readActiveRaw(path: string): HistoryEntry[] {
-    if (!existsSync(path)) return [];
-    const raw = readFileSync(path, "utf8");
+    if (!exists(path, "derived-from-cwd")) return [];
+    const raw = readText(path, "derived-from-cwd");
     const entries: HistoryEntry[] = [];
     for (const line of raw.split("\n")) {
         if (line.length === 0) continue;
@@ -204,11 +203,11 @@ function highestIndexOf(entries: HistoryEntry[]): number {
 
 function highestArchivedIndex(cwd: string): number {
     const dir = historyArchiveDir(cwd);
-    if (!existsSync(dir)) return 0;
+    if (!exists(dir, "derived-from-cwd")) return 0;
     let max = 0;
     for (const f of readdirSync(dir)) {
         if (!f.endsWith(".jsonl")) continue;
-        const raw = readFileSync(join(dir, f), "utf8");
+        const raw = readText(join(dir, f), "derived-from-cwd");
         for (const line of raw.split("\n")) {
             if (line.length === 0) continue;
             try {

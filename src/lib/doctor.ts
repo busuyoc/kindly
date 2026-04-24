@@ -7,10 +7,10 @@
 // grandfathered per 90 §7 "never rename an id".
 
 import {
-    existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync,
-    statfsSync, statSync,
+    mkdirSync, readdirSync, rmdirSync, statfsSync,
 } from "node:fs";
 import { join } from "node:path";
+import { exists, readText, statFollow } from "../fs/safeRead.ts";
 import { parseSettingsFile, LuaParseError } from "../lua/reader.ts";
 import { classifyKey, isSecretPath } from "../schema/classify.ts";
 import type { LuaValue } from "../lua/writer.ts";
@@ -68,7 +68,7 @@ export function executeDoctor(env: CliEnv, opts: DoctorOptions = {}): DoctorResu
     }
 
     const settingsPath = mount.settingsPath;
-    if (!existsSync(settingsPath)) {
+    if (!exists(settingsPath, "derived-from-mount")) {
         checks.push({
             id: "settings_present", category: "settings",
             severity: "fatal", ok: false,
@@ -85,7 +85,7 @@ export function executeDoctor(env: CliEnv, opts: DoctorOptions = {}): DoctorResu
 
     let parsed: Record<string, LuaValue>;
     try {
-        parsed = parseSettingsFile(readFileSync(settingsPath, "utf8")) as Record<string, LuaValue>;
+        parsed = parseSettingsFile(readText(settingsPath, "derived-from-mount")) as Record<string, LuaValue>;
         const keyCount = Object.keys(parsed).length;
         checks.push({
             id: "settings_parseable", category: "settings",
@@ -106,9 +106,9 @@ export function executeDoctor(env: CliEnv, opts: DoctorOptions = {}): DoctorResu
     // .old sibling — KOReader's own recovery point. Kindly still works if
     // it's corrupt, so the failure is `warning` not `fatal` (90 §2).
     const oldPath = settingsPath + ".old";
-    if (existsSync(oldPath)) {
+    if (exists(oldPath, "derived-from-mount")) {
         try {
-            parseSettingsFile(readFileSync(oldPath, "utf8"));
+            parseSettingsFile(readText(oldPath, "derived-from-mount"));
             checks.push({
                 id: "old_parseable", category: "settings",
                 severity: "info", ok: true,
@@ -144,6 +144,10 @@ export function executeDoctor(env: CliEnv, opts: DoctorOptions = {}): DoctorResu
 
     // W34d: disk.* + secrets.* housekeeping (90 §5.6, §5.7).
     checks.push(...runDiskChecks(env, mount));
+
+    // Step 15: gates.* observability — report registered gates + recent
+    // bypass cadence read from .kindly/gate-events.jsonl.
+    checks.push(...runGatesChecks(env));
     const secretsPresent = findSecrets(parsed);
     checks.push({
         id: "secrets.present_count",
@@ -396,6 +400,97 @@ const BACKUPS_WARN_FILES = 100;
  *  free space, and accumulated backup size on the host. All failures
  *  here are loud but scoped — doctor never mutates state (so a missing
  *  `.kindly/` is reported, not created). */
+/** Threshold at which `gates.recent_bypasses` escalates to a warning.
+ *  Bypasses under the threshold are surfaced as info. Tunable via
+ *  observation — set low enough to catch routine misuse, high enough
+ *  to avoid noise for power users who regularly pass --accept-sensitive
+ *  during focused sessions. */
+const GATE_BYPASS_WARN_THRESHOLD = 3;
+const GATE_BYPASS_WINDOW_DAYS = 30;
+
+function runGatesChecks(env: CliEnv): DoctorCheck[] {
+    const out: DoctorCheck[] = [];
+
+    // gates.registered — static inventory. Pulled from the gate registry
+    // lazily to avoid loading the full gate graph eagerly at doctor time.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { GATES } = require("../gates/registry.ts") as {
+        GATES: ReadonlyArray<{ id: string; appliesAt: readonly ("import" | "apply")[] }>;
+    };
+    const importGates = GATES.filter((g) => g.appliesAt.includes("import")).map((g) => g.id);
+    const applyGates = GATES.filter((g) => g.appliesAt.includes("apply")).map((g) => g.id);
+    out.push({
+        id: "gates.registered",
+        category: "gates",
+        severity: "info",
+        ok: true,
+        label: `${GATES.length} policy gate(s) registered (${importGates.length} import, ${applyGates.length} apply)`,
+        data: {
+            total: GATES.length,
+            import: importGates,
+            apply: applyGates,
+        },
+    });
+
+    // gates.recent_bypasses — read the gate events log and count bypasses
+    // within the last GATE_BYPASS_WINDOW_DAYS. Warning if above threshold.
+    const gateLogFile = join(env.cwd, ".kindly", "gate-events.jsonl");
+    let bypassCount = 0;
+    let blockCount = 0;
+    let malformed = 0;
+    try {
+        if (exists(gateLogFile, "derived-from-cwd")) {
+            const raw = readText(gateLogFile, "derived-from-cwd");
+            const cutoffMs = env.now().getTime() - GATE_BYPASS_WINDOW_DAYS * 86400_000;
+            for (const line of raw.split("\n")) {
+                if (!line.trim()) continue;
+                try {
+                    const ev = JSON.parse(line) as { ts?: string; kind?: string };
+                    const evMs = ev.ts ? new Date(ev.ts).getTime() : NaN;
+                    if (Number.isNaN(evMs) || evMs < cutoffMs) continue;
+                    if (ev.kind === "bypass") bypassCount++;
+                    else if (ev.kind === "block") blockCount++;
+                } catch {
+                    malformed++;
+                }
+            }
+        }
+    } catch {
+        // Unreadable log — don't fail doctor.
+    }
+
+    const bypassSeverity: DoctorSeverity =
+        bypassCount > GATE_BYPASS_WARN_THRESHOLD ? "warning" : "info";
+    out.push({
+        id: "gates.recent_bypasses",
+        category: "gates",
+        severity: bypassSeverity,
+        ok: true,
+        label:
+            bypassCount === 0
+                ? `no policy bypasses in last ${GATE_BYPASS_WINDOW_DAYS}d`
+                : `${bypassCount} policy bypass(es) in last ${GATE_BYPASS_WINDOW_DAYS}d`
+                  + (bypassSeverity === "warning" ? " — review whether each was intentional" : ""),
+        data: {
+            bypass_count: bypassCount,
+            block_count: blockCount,
+            window_days: GATE_BYPASS_WINDOW_DAYS,
+            threshold: GATE_BYPASS_WARN_THRESHOLD,
+            malformed_lines: malformed,
+        },
+        ...(bypassSeverity === "warning"
+            ? {
+                remediation: [
+                    { text: "Review .kindly/gate-events.jsonl — each bypass entry records which flag waived which gate." },
+                    { text: "If the bypass cadence is expected (e.g. CI pipeline with --accept-sensitive), this warning is safe to ignore." },
+                ],
+            }
+            : {}),
+    });
+
+    return out;
+}
+
 function runDiskChecks(env: CliEnv, mount: KindleMount): DoctorCheck[] {
     const out: DoctorCheck[] = [];
     const kindlyDir = join(env.cwd, ".kindly");
@@ -406,7 +501,7 @@ function runDiskChecks(env: CliEnv, mount: KindleMount): DoctorCheck[] {
     // just: if missing, check the parent is writable; if present, stat it.
     let writable = false;
     let writableDetail: string | undefined;
-    if (existsSync(kindlyDir)) {
+    if (exists(kindlyDir, "derived-from-cwd")) {
         try {
             const probe = join(kindlyDir, `.doctor-probe-${process.pid}`);
             mkdirSync(probe);
@@ -489,16 +584,16 @@ function runDiskChecks(env: CliEnv, mount: KindleMount): DoctorCheck[] {
     const backupsDir = join(kindlyDir, "backups");
     let bytes = 0;
     let fileCount = 0;
-    if (existsSync(backupsDir)) {
+    if (exists(backupsDir, "derived-from-cwd")) {
         for (const f of walkFiles(backupsDir)) {
             try {
-                bytes += statSync(f).size;
+                bytes += statFollow(f, "derived-from-cwd").size;
                 fileCount++;
             } catch { /* skip unreadable */ }
         }
     }
     let oldestIso = "";
-    if (existsSync(backupsDir)) {
+    if (exists(backupsDir, "derived-from-cwd")) {
         try {
             const entries = readdirSync(backupsDir).sort();
             oldestIso = entries[0] ?? "";

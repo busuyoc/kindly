@@ -1,4 +1,5 @@
-import { existsSync, readdirSync, rmSync } from "node:fs";
+import { readdirSync, rmSync } from "node:fs";
+import { exists } from "./safeRead.ts";
 
 export const DEFAULT_KEEP_N = 20;
 
@@ -8,7 +9,7 @@ export type RotationResult = {
 };
 
 export function rotateBackups(dir: string, keepN: number = DEFAULT_KEEP_N): RotationResult {
-    if (!existsSync(dir)) return { kept: [], removed: [] };
+    if (!exists(dir, "derived-from-cwd")) return { kept: [], removed: [] };
 
     const entries = readdirSync(dir)
         .filter((name) => !name.startsWith("."))

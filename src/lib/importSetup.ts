@@ -4,7 +4,8 @@
 //
 // Shared with `setup inspect` via `loadManifestFile` + `LoadedSetup`.
 
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
+import { exists, readText } from "../fs/safeRead.ts";
 import { dirname, join, resolve } from "node:path";
 
 import { parseYamlSafe } from "../fs/yamlSafe.ts";
@@ -23,6 +24,24 @@ import { safeWrite } from "../fs/safeWrite.ts";
 import { createTarGz } from "../fs/archive.ts";
 import { type CliEnv, resolveMount } from "../cli/env.ts";
 import { hashBytes, shortId } from "../setup/canonical.ts";
+import { runPhase, type GateEventLogger } from "../gates/orchestrator.ts";
+import { appendGateEvent } from "../history/gateLog.ts";
+import { MANIFEST_HASH_ASSERT } from "../gates/definitions/identity.ts";
+import {
+    PLUGINS_REQUIRE_ACK,
+    PATCHES_REQUIRE_ACK,
+    SENSITIVE_REQUIRES_ACK,
+    STRICT_SENSITIVE_CHANGES,
+} from "../gates/definitions/consent.ts";
+import { STRICT_REPLACE_REMOVAL_CAP } from "../gates/definitions/destruction.ts";
+import { EXTRA_PLUGIN_PATHS_DUAL } from "../gates/definitions/dual.ts";
+import {
+    STRICT_PLUGIN_HASH_CHECK,
+    STRICT_SCANNER_FINDINGS,
+} from "../gates/definitions/integrity.ts";
+import { COMPAT_INCOMPATIBLE } from "../gates/definitions/compat.ts";
+import { SCHEMA_VIOLATION, YAML_SHAPE_NORMAL } from "../gates/definitions/shape.ts";
+import { formatSensitiveChange as formatSensitiveChangeShared } from "../gates/sensitiveFormat.ts";
 import { parseManifest, SetupSchemaError, type EmbeddedFile, type SetupManifest } from "../setup/schema.ts";
 import { unpackSetup } from "../setup/unpack.ts";
 import { checkCompat, formatCompatIssue } from "../setup/compat.ts";
@@ -58,10 +77,10 @@ export type LoadedSetup = {
 // bytes (for hashing / canonical checks) and the validated manifest.
 // Throws a user-readable error on missing file, bad YAML, or schema failure.
 export function loadManifestFile(path: string): { raw: string; manifest: SetupManifest } {
-    if (!existsSync(path)) {
+    if (!exists(path, "user-provided")) {
         throw new Error(`setup file not found: ${path}`);
     }
-    const raw = readFileSync(path, "utf8");
+    const raw = readText(path, "user-provided");
     let parsed: unknown;
     try {
         parsed = parseYamlSafe(raw);
@@ -80,7 +99,7 @@ export function loadManifestFile(path: string): { raw: string; manifest: SetupMa
 }
 
 export function loadSetup(path: string): LoadedSetup {
-    if (!existsSync(path)) {
+    if (!exists(path, "user-provided")) {
         throw new Error(`setup file not found: ${path}`);
     }
     // .kset (no further extension) → tar.gz fat archive.
@@ -135,7 +154,7 @@ export function snapshotFatTargets(
     patchAbsPaths: readonly string[],
 ): void {
     const all = [...pluginAbsPaths, ...patchAbsPaths];
-    const existing = all.filter((p) => existsSync(p));
+    const existing = all.filter((p) => exists(p, "derived-from-mount"));
     if (existing.length === 0) return;
 
     // Make paths relative to koreaderRoot for tar.
@@ -222,63 +241,11 @@ export type ImportResultWithExtras = SetupImportResult & {
     schemaFindings?: ValidationReport;
 };
 
-// Descend into a LuaValue by a dotted-path tail. Returns undefined if any
-// segment can't be traversed (scalar, array, map, or missing key).
-function descendLua(value: LuaValue | undefined, tail: readonly string[]): LuaValue | undefined {
-    let v: LuaValue | undefined = value;
-    for (const k of tail) {
-        if (v === null || typeof v !== "object" || Array.isArray(v) || v instanceof Map) {
-            return undefined;
-        }
-        v = (v as Record<string, LuaValue>)[k];
-    }
-    return v;
-}
-
-// Render a LuaValue for the SENSITIVE warning list. Scalars go verbatim
-// (JSON-encoded for strings); arrays/objects collapse to a shape hint per
-// 88 §3.3.
-function fmtSensitiveValue(v: LuaValue | undefined): string {
-    if (v === undefined) return "(absent)";
-    if (v === null) return "nil";
-    if (Array.isArray(v)) return `<array of ${v.length} item(s)>`;
-    if (v instanceof Map) return `<table with ${v.size} key(s)>`;
-    if (typeof v === "object") {
-        return `<object with ${Object.keys(v).length} key(s)>`;
-    }
-    if (typeof v === "string") return JSON.stringify(v);
-    return String(v);
-}
-
-// Locate the change that carries a SENSITIVE hit path and format the
-// prev/next for the warning line. Returns "(added) → X" / "Y → (removed)" /
-// "Y → X" depending on the carrier change's kind.
-function formatSensitiveChange(changes: readonly Change[], hitPath: string): string {
-    const segments = hitPath.split(".");
-    for (const c of changes) {
-        if (segments.length < c.path.length) continue;
-        let matches = true;
-        for (let i = 0; i < c.path.length; i++) {
-            if (c.path[i] !== segments[i]) { matches = false; break; }
-        }
-        if (!matches) continue;
-        const tail = segments.slice(c.path.length);
-        if (c.kind === "added") {
-            const next = descendLua(c.next, tail);
-            return `(added) → ${fmtSensitiveValue(next)}`;
-        }
-        if (c.kind === "removed") {
-            const prev = descendLua(c.prev, tail);
-            return `${fmtSensitiveValue(prev)} → (removed)`;
-        }
-        const prev = descendLua(c.prev, tail);
-        const next = descendLua(c.next, tail);
-        // A "changed" parent may leave the SENSITIVE descendant unchanged or
-        // newly present/absent; fmtSensitiveValue handles undefined.
-        return `${fmtSensitiveValue(prev)} → ${fmtSensitiveValue(next)}`;
-    }
-    return "(change)";
-}
+// Sensitive-change formatting helpers now live in src/gates/sensitiveFormat.ts
+// and are imported above as `formatSensitiveChangeShared`. A thin alias keeps
+// the in-file call sites (STRICT_SENSITIVE_CHANGES, EXTRA_PLUGIN_PATHS_DUAL,
+// still inline until Step 9) reading as they did pre-refactor.
+const formatSensitiveChange = formatSensitiveChangeShared;
 
 // W34d: if this is a replace-mode Setup and the top-level removal count
 // crosses the threshold, return a warning payload so renderers can surface
@@ -351,50 +318,63 @@ export function executeSetupImport(
     const { manifest, manifestBytes, files } = loaded;
     const id = shortId(hashBytes(manifestBytes));
 
-    // W34a: hash assertion — first gate after load. opts.expectHash is
-    // already `sha256:<64hex>` (CLI layer normalized & validated the format).
-    // Fail fast before prompting the user about plugins / sensitive keys —
-    // if the file isn't the one they expected, nothing downstream matters.
-    if (opts.expectHash) {
-        const actual = hashBytes(manifestBytes);
-        if (actual !== opts.expectHash) {
-            throw new KindlyError(
-                ErrorCodes.MANIFEST_HASH_MISMATCH,
-                `expected ${opts.expectHash} but Setup hashes to ${actual}`,
-                [
-                    { text: "Verify you received the file you expected." },
-                    { text: "Re-download from the original source." },
-                ],
-            );
-        }
-    }
-
     const shippedPlugins: readonly EmbeddedFile[] = manifest.plugins?.files ?? [];
     const shippedPatches: readonly EmbeddedFile[] = manifest.patches ?? [];
 
-    if (shippedPlugins.length > 0 && !opts.acceptPlugins && !opts.skipPlugins) {
-        throw new KindlyError(
-            ErrorCodes.FAT_REQUIRES_ACK,
-            `this Setup ships ${shippedPlugins.length} plugin file(s) — Lua code that will execute on your Kindle. ` +
-            `Pass --accept-plugins to install, or --skip-plugins to apply settings only.`,
-            [
-                { text: "Review the shipped files before accepting.", command: "kindly setup inspect <file>" },
-            ],
-        );
-    }
-    if (shippedPatches.length > 0 && !opts.acceptPatches && !opts.skipPatches) {
-        throw new KindlyError(
-            ErrorCodes.FAT_REQUIRES_ACK,
-            `this Setup ships ${shippedPatches.length} patch file(s) — Lua code that will execute on your Kindle. ` +
-            `Pass --accept-patches to install, or --skip-patches to apply settings only.`,
-            [],
-        );
-    }
+    // Gate observability logger — emits a .kindly/gate-events.jsonl line
+    // for each bypass/block. Shared across all four phases.
+    const gateLogger: GateEventLogger = (fired) => {
+        if (fired.result.kind === "bypass") {
+            appendGateEvent(env, {
+                gate_id: fired.id,
+                boundary: fired.boundary,
+                kind: "bypass",
+                bypass_flag: fired.result.byFlag,
+            });
+        } else if (fired.result.kind === "block") {
+            appendGateEvent(env, {
+                gate_id: fired.id,
+                boundary: fired.boundary,
+                kind: "block",
+            });
+        }
+    };
+
+    // Phase 1 — IDENTITY + SHAPE + CONSENT-FAT. Fail fast pre-mount.
+    //   MANIFEST_HASH_ASSERT     Step 5
+    //   YAML_SHAPE_NORMAL (S89)  Step 11 — rejects SECRET-class keys or
+    //                            wipe-shaped values in the manifest's
+    //                            settings section before any merge can
+    //                            silently destroy on-device secrets.
+    //   PLUGINS/PATCHES_REQUIRE_ACK  Step 6
+    runPhase({
+        logger: gateLogger,
+        boundary: "import",
+        registry: [
+            MANIFEST_HASH_ASSERT,
+            YAML_SHAPE_NORMAL,
+            PLUGINS_REQUIRE_ACK,
+            PATCHES_REQUIRE_ACK,
+        ],
+        dryRun: opts.dryRun ?? false,
+        strictImports: opts.strictImports ?? false,
+        opts: {
+            expectHash: opts.expectHash,
+            manifestBytes,
+            yamlSettings: manifest.settings ?? {},
+            shippedPluginsCount: shippedPlugins.length,
+            shippedPatchesCount: shippedPatches.length,
+            acceptPlugins: !!opts.acceptPlugins,
+            skipPlugins: !!opts.skipPlugins,
+            acceptPatches: !!opts.acceptPatches,
+            skipPatches: !!opts.skipPatches,
+        },
+    });
 
     const mountEnv = opts.mount ? { ...env, mountOverride: opts.mount } : env;
     const mount = resolveMount(mountEnv);
 
-    if (!existsSync(mount.settingsPath)) {
+    if (!exists(mount.settingsPath, "derived-from-mount")) {
         throw new KindlyError(
             ErrorCodes.SETTINGS_NOT_FOUND,
             `Kindle mount found at ${mount.root}, but ${mount.settingsPath} doesn't exist. ` +
@@ -420,26 +400,7 @@ export function executeSetupImport(
             : null
     );
 
-    // W34e strict gate: refuse if any plugin fails to MATCH the catalog.
-    // Runs even in --dry-run so CI can validate without touching device.
-    // UNVERIFIED also blocks — otherwise an attacker can impersonate any
-    // catalogued-but-unhashed plugin folder name and slip S2-style
-    // lexically-obfuscated payloads past --strict-imports entirely.
-    if (opts.strictImports && pluginHashReport) {
-        const bad = pluginHashReport.verdicts.filter((v) => v.status !== "MATCH");
-        if (bad.length > 0) {
-            const list = bad
-                .map((v) => v.status === "MALFORMED_STRUCTURE"
-                    ? `  [MALFORMED_STRUCTURE] ${v.paths.length} path(s) outside <name>.koplugin/`
-                    : `  [${v.status}] ${v.name}`)
-                .join("\n");
-            throw new KindlyError(
-                ErrorCodes.STRICT_IMPORT_BLOCKED,
-                `--strict-imports: ${bad.length} plugin integrity finding(s):\n${list}`,
-                [{ text: "Regenerate the catalog against the device's KOReader version, or drop --strict-imports if the findings are expected." }],
-            );
-        }
-    }
+    // STRICT_PLUGIN_HASH_CHECK moved to the phase-2 gate run below (Step 7).
 
     // W36/W37: Lua static scanner over shipped plugins + patches. Runs
     // after the hash report so we can suppress findings on catalogued
@@ -455,42 +416,47 @@ export function executeSetupImport(
         })
         : null;
 
-    // W36/W37 strict gate: any unsuppressed scanner finding blocks under
-    // --strict-imports. Reuses STRICT_IMPORT_BLOCKED — docs/93 §5.3.
-    if (opts.strictImports && scanReport && scanReport.findings.length > 0) {
-        const preview = scanReport.findings.slice(0, 5).map(
-            (f) => `  [${f.category}] ${f.plugin}/${f.file}:${f.line}`,
-        ).join("\n");
-        const more = scanReport.findings.length > 5
-            ? `\n  … and ${scanReport.findings.length - 5} more`
-            : "";
-        throw new KindlyError(
-            ErrorCodes.STRICT_IMPORT_BLOCKED,
-            `--strict-imports: ${scanReport.findings.length} Lua scanner finding(s) in shipped code:\n${preview}${more}`,
-            [
-                { text: "Review the findings.", command: "kindly setup inspect <file>" },
-                { text: "If the shipped plugin is bundled and curated, the hash should match the catalog; regenerate the catalog if it drifted." },
-                { text: "Drop --strict-imports if the findings are expected." },
-            ],
-        );
-    }
+    // Phase 2 — INTEGRITY (strict-mode plugin-hash + scanner gates).
+    runPhase({
+        logger: gateLogger,
+        boundary: "import",
+        registry: [STRICT_PLUGIN_HASH_CHECK, STRICT_SCANNER_FINDINGS],
+        dryRun: opts.dryRun ?? false,
+        strictImports: opts.strictImports ?? false,
+        opts: { pluginHashReport, scanReport },
+    });
 
+    // Compute compat + schema results inline — they populate both the gate
+    // inputs (Phase 3 below) AND the SetupImportResult render fields.
+    const detectedForCompat = { version: detectedVersion, family: detectedFamily };
+    const compatResultRaw = manifest.compat
+        ? checkCompat(manifest.compat, detectedForCompat)
+        : null;
+    const schemaReportRaw = manifest.settings
+        ? validateSettings(manifest.settings as Record<string, unknown>, loadSchema())
+        : null;
+
+    // Phase 3 — COMPAT + SHAPE (compat check + schema strictness).
+    runPhase({
+        logger: gateLogger,
+        boundary: "import",
+        registry: [COMPAT_INCOMPATIBLE, SCHEMA_VIOLATION],
+        dryRun: opts.dryRun ?? false,
+        strictImports: opts.strictImports ?? false,
+        opts: {
+            compatResult: compatResultRaw,
+            schemaFindings: schemaReportRaw,
+            force: !!opts.force,
+            strict: !!opts.strict,
+            allowUnknownKeys: !!opts.allowUnknownKeys,
+        },
+    });
+
+    // Compat summary for the result envelope.
     let compatSummary: SetupImportResult["compat"] = null;
-    if (manifest.compat) {
-        const detected = { version: detectedVersion, family: detectedFamily };
-        const cr = checkCompat(manifest.compat, detected);
-
-        const blocking = cr.blocking.map(formatCompatIssue);
-        const unverifiable = cr.unverifiable.map(formatCompatIssue);
-
-        if (cr.blocking.length > 0 && !opts.force) {
-            throw new KindlyError(
-                ErrorCodes.COMPAT_INCOMPATIBLE,
-                `Setup is not compatible with this device:\n  ${blocking.join("\n  ")}`,
-                [{ text: "Pass --force to import anyway.", command: "kindly setup import <file> --force" }],
-            );
-        }
-
+    if (manifest.compat && compatResultRaw) {
+        const blocking = compatResultRaw.blocking.map(formatCompatIssue);
+        const unverifiable = compatResultRaw.unverifiable.map(formatCompatIssue);
         compatSummary = {
             declared: {
                 ...(manifest.compat.koreader_version_min ? { koreaderVersionMin: manifest.compat.koreader_version_min } : {}),
@@ -498,38 +464,21 @@ export function executeSetupImport(
                 ...(manifest.compat.device?.length ? { device: [...manifest.compat.device] } : {}),
             },
             detected: {
-                koreaderVersion: detected.version?.raw ?? null,
-                deviceFamily: detected.family,
+                koreaderVersion: detectedForCompat.version?.raw ?? null,
+                deviceFamily: detectedForCompat.family,
             },
             unverifiable,
             blocking,
-            forced: cr.blocking.length > 0 && !!opts.force,
+            forced: compatResultRaw.blocking.length > 0 && !!opts.force,
         };
     }
 
+    // Schema findings for the result envelope (surfaced only when non-empty).
     let schemaFindings: ValidationReport | undefined;
-    if (manifest.settings) {
-        const report = validateSettings(manifest.settings as Record<string, unknown>, loadSchema());
-        const hasUnknowns = report.unknownKeys.length > 0;
-        const hasMismatches = report.typeMismatches.length > 0;
-        const showUnknowns = !opts.allowUnknownKeys;
-        const schemaBlocks = !!opts.strict
-            && ((showUnknowns && hasUnknowns) || hasMismatches);
-        if (schemaBlocks) {
-            // formatValidationReport is 1-arg; `showUnknowns` is a
-            // render-layer concern and doesn't affect the error text.
-            void showUnknowns;
-            const msg = formatValidationReport(report);
-            throw new KindlyError(
-                ErrorCodes.SCHEMA_VIOLATION,
-                `${msg}\n--strict: aborting due to schema findings.`,
-                [
-                    { text: "Review the listed keys — likely typos or plugin-scoped unknowns." },
-                    { text: "Re-run without --strict, or pass --allow-unknown-keys if you're sure." },
-                ],
-            );
-        }
-        if (hasUnknowns || hasMismatches) schemaFindings = report;
+    if (schemaReportRaw
+        && (schemaReportRaw.unknownKeys.length > 0
+            || schemaReportRaw.typeMismatches.length > 0)) {
+        schemaFindings = schemaReportRaw;
     }
 
     const toggledNames: string[] = [...(manifest.plugins?.disabled ?? [])];
@@ -546,7 +495,7 @@ export function executeSetupImport(
     // the manifest (already LuaValue-compatible) — narrow for downstream.
     const safeFlat = safeFlatRaw as Record<string, LuaValue>;
 
-    const onDeviceSrc = readFileSync(mount.settingsPath, "utf8");
+    const onDeviceSrc = readText(mount.settingsPath, "derived-from-mount");
     const onDevice = parseSettingsFile(onDeviceSrc) as Record<string, LuaValue>;
 
     const isReplace = manifest.apply_mode === "replace";
@@ -572,77 +521,31 @@ export function executeSetupImport(
     }
     const sensitiveHits = [...sensitiveHitSet].sort();
 
-    // W34d + W34e strict gate: a replace-mode Setup that wipes more than
-    // REPLACE_REMOVAL_WARN_THRESHOLD top-level USER keys is almost certainly
-    // not what a CI pipeline intended to import. Refuse before the SENSITIVE
-    // check so the error message points at the right thing.
+    // W34d computed once; feeds both the DESTRUCTION gate (Phase 4) and
+    // the SetupImportResult.replaceWarnings render field.
     const replaceWarningPayload = computeReplaceWarnings(manifest.apply_mode, changes);
-    if (opts.strictImports && replaceWarningPayload) {
-        const sample = replaceWarningPayload.sampleKeys.join(", ");
-        throw new KindlyError(
-            ErrorCodes.STRICT_IMPORT_BLOCKED,
-            `--strict-imports: replace-mode Setup would remove ${replaceWarningPayload.removedUserKeys} top-level USER key(s) ` +
-            `(threshold ${replaceWarningPayload.threshold}). First few: ${sample}`,
-            [{ text: "Verify the Setup's apply_mode and the device state are what you expect, or drop --strict-imports." }],
-        );
-    }
 
-    // W34e strict mode: any SENSITIVE hit blocks, acceptance overrides
-    // are ignored (and forbidden at the CLI layer). Runs in dry-run too —
-    // CI uses --dry-run + --strict-imports as a "is this safe to import?"
-    // preflight and must get a non-zero exit if the answer is no.
-    if (opts.strictImports && sensitiveHits.length > 0) {
-        const list = sensitiveHits
-            .map((p) => `  [${sensitiveDomain(p)}] ${p}: ${formatSensitiveChange(changes, p)}`)
-            .join("\n");
-        throw new KindlyError(
-            ErrorCodes.STRICT_IMPORT_BLOCKED,
-            `--strict-imports: Setup modifies ${sensitiveHits.length} security-sensitive setting(s):\n${list}`,
-            [{ text: "Use a hand-audited import (drop --strict-imports) to accept any of these." }],
-        );
-    }
-
-    if (!opts.dryRun && sensitiveHits.length > 0) {
-        const accepted = opts.acceptKey ?? new Set<string>();
-        const blocking = opts.acceptSensitive
-            ? []
-            : sensitiveHits.filter((p) => !accepted.has(p));
-        if (blocking.length > 0) {
-            const list = blocking
-                .map((p) => `  [${sensitiveDomain(p)}] ${p}: ${formatSensitiveChange(changes, p)}`)
-                .join("\n");
-            throw new KindlyError(
-                ErrorCodes.SENSITIVE_REQUIRES_ACK,
-                `this Setup modifies ${blocking.length} security-sensitive setting(s):\n${list}`,
-                [
-                    { text: "Review with: kindly setup inspect <file>" },
-                    { text: "Accept all changes.", command: "kindly setup import <file> --accept-sensitive" },
-                    { text: "Accept specific keys.", command: "kindly setup import <file> --accept-key=<key,key,...>" },
-                ],
-            );
-        }
-    }
-
-    // W31a: extra_plugin_paths dual gate (88 §4.3). Even after
-    // --accept-sensitive (or --accept-key=extra_plugin_paths) clears the
-    // SENSITIVE check, this key needs the SAME --accept-plugins consent the
-    // fat-files path requires — a settings-only redirect of KOReader's
-    // plugin loader still ends in "Lua code from a path you don't fully
-    // control runs on your device." Two flags, two distinct mental models.
-    if (!opts.dryRun && !opts.acceptPlugins
-        && sensitiveHits.includes("extra_plugin_paths")) {
-        const newPath = formatSensitiveChange(changes, "extra_plugin_paths");
-        throw new KindlyError(
-            ErrorCodes.FAT_REQUIRES_ACK,
-            `this Setup sets extra_plugin_paths — KOReader will load Lua plugins from the listed directories. ` +
-            `Any Lua code in those paths will execute on your Kindle with full device access.\n` +
-            `  extra_plugin_paths: ${newPath}`,
-            [
-                { text: "Inspect the path the Setup sets.", command: "kindly setup inspect <file>" },
-                { text: "Pass --accept-plugins to consent to plugin code execution." },
-            ],
-        );
-    }
+    // Phase 4 — DESTRUCTION + CONSENT + DUAL. Block-order matches
+    // pre-refactor: strict-replace → strict-sensitive → consumer-ack → dual.
+    runPhase({
+        logger: gateLogger,
+        boundary: "import",
+        registry: [
+            STRICT_REPLACE_REMOVAL_CAP,
+            STRICT_SENSITIVE_CHANGES,
+            SENSITIVE_REQUIRES_ACK,
+            EXTRA_PLUGIN_PATHS_DUAL,
+        ],
+        dryRun: opts.dryRun ?? false,
+        strictImports: opts.strictImports ?? false,
+        opts: {
+            changes,
+            replaceWarnings: replaceWarningPayload,
+            acceptSensitive: !!opts.acceptSensitive,
+            acceptKey: opts.acceptKey,
+            acceptPlugins: !!opts.acceptPlugins,
+        },
+    });
 
     const willInstallPlugins = !!opts.acceptPlugins && shippedPlugins.length > 0;
     const willInstallPatches = !!opts.acceptPatches && shippedPatches.length > 0;
@@ -724,7 +627,7 @@ export function executeSetupImport(
                 willInstallPatches ? affectedPatchTargets(mount.patchesDir, shippedPatches) : [],
             );
             fatSnapshotPath = join(snapshotDir, "plugins-patches.tar.gz");
-            if (!existsSync(fatSnapshotPath)) fatSnapshotPath = null;
+            if (!exists(fatSnapshotPath, "derived-from-cwd")) fatSnapshotPath = null;
         }
 
         if (willInstallPlugins) {

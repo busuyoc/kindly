@@ -2,8 +2,9 @@
 //
 // See docs/50-v0.3-setups.md for the data model and philosophy.
 
-import { existsSync, readdirSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { exists } from "../fs/safeRead.ts";
 
 import { ArgError, parseArgs, type FlagSpecs } from "../cli/args.ts";
 import { type CliEnv, resolveSetupsDir } from "../cli/env.ts";
@@ -403,7 +404,7 @@ async function runSetupList(argv: readonly string[], env: CliEnv): Promise<numbe
     }
 
     const dir = resolveSetupsDir(env);
-    if (!existsSync(dir)) {
+    if (!exists(dir, "derived-from-cwd")) {
         info(env, dim(env, `no setups found (${dir} does not exist yet)`));
         return 0;
     }

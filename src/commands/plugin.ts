@@ -9,8 +9,8 @@
 // enabled_on_device column. That keeps browsing the catalog a zero-cost
 // operation for users who aren't about to touch their device.
 
-import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { exists, readText } from "../fs/safeRead.ts";
 
 import { ArgError, parseArgs, type FlagSpecs } from "../cli/args.ts";
 import type { CliEnv } from "../cli/env.ts";
@@ -38,8 +38,8 @@ import {
 function readDeviceDisabledOrNull(env: CliEnv): Set<string> | null {
     try {
         const mount = resolveMount(env);
-        if (!existsSync(mount.settingsPath)) return null;
-        const parsed = parseSettingsFile(readFileSync(mount.settingsPath, "utf8")) as Record<string, LuaValue>;
+        if (!exists(mount.settingsPath, "derived-from-mount")) return null;
+        const parsed = parseSettingsFile(readText(mount.settingsPath, "derived-from-mount")) as Record<string, LuaValue>;
         return readDisabledSet(parsed);
     } catch {
         return null;
@@ -50,7 +50,7 @@ function loadCatalogPath(env: CliEnv): { catalog: PluginCatalog; path: string } 
     const path = resolve(env.cwd, "data/catalog/plugins.bundled.v1.json");
     // The resolve() here lets tests drop a fixture under their tmpdir/cwd;
     // when that file is absent, fall through to the default (repo artifact).
-    if (existsSync(path)) {
+    if (exists(path, "derived-from-cwd")) {
         return { catalog: loadPluginCatalog(path), path };
     }
     // Default (installed binary / normal run): resolve relative to the module.

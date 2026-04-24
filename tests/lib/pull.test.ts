@@ -55,6 +55,32 @@ describe("executePull (library)", () => {
         expect(r.droppedSecrets).toContain("zlibrary_password");
     });
 
+    test("step 13: written yaml carries a provenance header on line 1", () => {
+        executePull({}, env);
+        const content = readFileSync(join(workdir, "kindly.yaml"), "utf8");
+        const firstLine = content.split("\n")[0];
+        expect(firstLine).toMatch(
+            /^# kindly-provenance: sha256:[0-9a-f]{64} ts:2026-04-22T12:00:00\.000Z$/,
+        );
+    });
+
+    test("step 13: provenance hash changes when device content changes", () => {
+        executePull({}, env);
+        const first = readFileSync(join(workdir, "kindly.yaml"), "utf8").split("\n")[0];
+
+        // Mutate device
+        writeFileSync(
+            join(fakeKindle, "koreader", "settings.reader.lua"),
+            dumpSettingsFile({ avoid_flashing_ui: false }, "./settings.reader.lua"),
+        );
+        executePull({ force: true }, env);
+        const second = readFileSync(join(workdir, "kindly.yaml"), "utf8").split("\n")[0];
+
+        expect(first).not.toBe(second);
+        expect(first).toMatch(/^# kindly-provenance:/);
+        expect(second).toMatch(/^# kindly-provenance:/);
+    });
+
     test("no printing — stdout and stderr stay empty", () => {
         executePull({}, env);
         expect(stdout.value).toBe("");

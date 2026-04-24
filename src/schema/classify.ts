@@ -187,6 +187,22 @@ export function isSensitiveKeyName(name: string): boolean {
     return SENSITIVE_TOPLEVEL.has(name) || SENSITIVE_NESTED.has(name);
 }
 
+/** Return the direct nested children of `parent` that carry exfil=secret.
+ *  Used by YAML_SHAPE_NORMAL (Step 11) to detect when a non-object value
+ *  at a parent-of-secret path would wipe nested secrets on shallow-merge
+ *  (the S89 structural bug). Example: for parent="kosync", returns
+ *  ["userkey", "username"]. */
+export function secretNestedChildrenOf(parent: string): string[] {
+    const prefix = parent + ".";
+    const out: string[] = [];
+    for (const [k, e] of Object.entries(DATA.keys)) {
+        if (e.exfil === "secret" && k.startsWith(prefix) && !k.slice(prefix.length).includes(".")) {
+            out.push(k.slice(prefix.length));
+        }
+    }
+    return out.sort();
+}
+
 // ---- domain label (UI) ---------------------------------------------------
 
 const DOMAIN_LABEL: Record<ChangeClass, string> = {

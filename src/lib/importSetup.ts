@@ -39,7 +39,7 @@ import {
     STRICT_SCANNER_FINDINGS,
 } from "../gates/definitions/integrity.ts";
 import { COMPAT_INCOMPATIBLE } from "../gates/definitions/compat.ts";
-import { SCHEMA_VIOLATION } from "../gates/definitions/shape.ts";
+import { SCHEMA_VIOLATION, YAML_SHAPE_NORMAL } from "../gates/definitions/shape.ts";
 import { formatSensitiveChange as formatSensitiveChangeShared } from "../gates/sensitiveFormat.ts";
 import { parseManifest, SetupSchemaError, type EmbeddedFile, type SetupManifest } from "../setup/schema.ts";
 import { unpackSetup } from "../setup/unpack.ts";
@@ -320,15 +320,27 @@ export function executeSetupImport(
     const shippedPlugins: readonly EmbeddedFile[] = manifest.plugins?.files ?? [];
     const shippedPatches: readonly EmbeddedFile[] = manifest.patches ?? [];
 
-    // Phase 1 — IDENTITY + CONSENT-FAT. Fail fast pre-mount.
+    // Phase 1 — IDENTITY + SHAPE + CONSENT-FAT. Fail fast pre-mount.
+    //   MANIFEST_HASH_ASSERT     Step 5
+    //   YAML_SHAPE_NORMAL (S89)  Step 11 — rejects SECRET-class keys or
+    //                            wipe-shaped values in the manifest's
+    //                            settings section before any merge can
+    //                            silently destroy on-device secrets.
+    //   PLUGINS/PATCHES_REQUIRE_ACK  Step 6
     runPhase({
         boundary: "import",
-        registry: [MANIFEST_HASH_ASSERT, PLUGINS_REQUIRE_ACK, PATCHES_REQUIRE_ACK],
+        registry: [
+            MANIFEST_HASH_ASSERT,
+            YAML_SHAPE_NORMAL,
+            PLUGINS_REQUIRE_ACK,
+            PATCHES_REQUIRE_ACK,
+        ],
         dryRun: opts.dryRun ?? false,
         strictImports: opts.strictImports ?? false,
         opts: {
             expectHash: opts.expectHash,
             manifestBytes,
+            yamlSettings: manifest.settings ?? {},
             shippedPluginsCount: shippedPlugins.length,
             shippedPatchesCount: shippedPatches.length,
             acceptPlugins: !!opts.acceptPlugins,

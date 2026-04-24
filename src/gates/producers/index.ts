@@ -15,6 +15,7 @@ import { compatResult } from "./compatResult.ts";
 import { schemaFindings } from "./schemaFindings.ts";
 import { changes } from "./changes.ts";
 import { replaceWarnings } from "./replaceWarnings.ts";
+import { normalizedYaml } from "./normalizedYaml.ts";
 
 export const PRODUCERS: Readonly<Record<string, Producer<unknown>>> = {
     manifestIdentity,
@@ -25,5 +26,5 @@ export const PRODUCERS: Readonly<Record<string, Producer<unknown>>> = {
     schemaFindings,
     changes,
     replaceWarnings,
-    // (Step 11 adds normalizedYaml for YAML_SHAPE_NORMAL)
+    normalizedYaml,
 };

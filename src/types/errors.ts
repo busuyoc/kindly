@@ -78,6 +78,7 @@ export const ErrorCodes = {
     CATALOG_NOT_FOUND:    "CATALOG_NOT_FOUND",
     CATALOG_MALFORMED:    "CATALOG_MALFORMED",
     PLUGIN_NOT_FOUND:     "PLUGIN_NOT_FOUND",
+    YAML_SHAPE_BLOCKED:   "YAML_SHAPE_BLOCKED",
 } as const;
 
 export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];
@@ -91,4 +92,5 @@ export const POLICY_BLOCK_CODES = new Set<string>([
     ErrorCodes.COMPAT_INCOMPATIBLE,
     ErrorCodes.SCHEMA_VIOLATION,
     ErrorCodes.MANIFEST_HASH_MISMATCH,
+    ErrorCodes.YAML_SHAPE_BLOCKED,
 ]);

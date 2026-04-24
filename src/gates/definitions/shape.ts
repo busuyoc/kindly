@@ -1,12 +1,9 @@
 // SHAPE gates. Structural conformance checks on the data being imported
 // or applied.
-//
-// Step 8 ships SCHEMA_VIOLATION (manifest settings vs KOReader schema).
-// Step 11 adds YAML_SHAPE_NORMAL — the S89 fix — for the input-shape
-// normalizer at the YAML→Lua boundary.
 
 import type { GateDefinition } from "../types.ts";
 import type { ValidationReport } from "../../schema/report.ts";
+import type { NormalizedYaml } from "../producers/normalizedYaml.ts";
 import { formatValidationReport } from "../../schema/report.ts";
 
 /**
@@ -32,8 +29,8 @@ export const SCHEMA_VIOLATION: GateDefinition = {
     category: "SHAPE",
     appliesAt: ["import"],
     requires: ["schemaFindings"],
-    firesIn: "always",  // gate's own check() filters on strict
-    bypassFlags: [],    // --strict triggers, it doesn't bypass
+    firesIn: "always",
+    bypassFlags: [],
     errorCode: "SCHEMA_VIOLATION",
     remediation: [
         { text: "Review the listed keys — likely typos or plugin-scoped unknowns." },
@@ -56,6 +53,46 @@ export const SCHEMA_VIOLATION: GateDefinition = {
         return {
             kind: "block",
             message: `${msg}\n--strict: aborting due to schema findings.`,
+        };
+    },
+};
+
+/**
+ * YAML_SHAPE_NORMAL — S89 fix, Step 11.
+ *
+ * Structurally rejects YAML shapes that would wipe SECRETs on merge.
+ * The normalizedYaml producer does the detection; this gate translates
+ * any errors into a structured block.
+ *
+ * Fires on BOTH import and apply boundaries. Apply has no previous
+ * equivalent — S89 lives in that gap — and the gate registration here
+ * (via appliesAt: ["import", "apply"]) is the structural fix that
+ * Steps 12's apply-side gate run will activate.
+ *
+ * No bypass. If your YAML contains a SECRET or would wipe one, the fix
+ * is "remove that from your YAML," not a flag.
+ */
+export const YAML_SHAPE_NORMAL: GateDefinition = {
+    id: "YAML_SHAPE_NORMAL",
+    category: "SHAPE",
+    appliesAt: ["import", "apply"],
+    requires: ["normalizedYaml"],
+    firesIn: "always",
+    bypassFlags: [],
+    errorCode: "YAML_SHAPE_BLOCKED",
+    remediation: [
+        { text: "Remove SECRET-class keys from your YAML — secrets live only on device." },
+        { text: "For nested secrets, keep the parent table as an object and omit the secret child." },
+    ],
+    check: (ctx) => {
+        const normalized = ctx.producers.normalizedYaml as NormalizedYaml;
+        if (normalized.errors.length === 0) return { kind: "pass" };
+        const lines = normalized.errors.map((e) => `  [${e.kind}] ${e.path}\n    ${e.detail}`);
+        return {
+            kind: "block",
+            message:
+                `YAML input would damage on-device SECRETs (${normalized.errors.length} issue(s)):\n` +
+                lines.join("\n"),
         };
     },
 };

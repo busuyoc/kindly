@@ -18,4 +18,4 @@ export {
     STRICT_SCANNER_FINDINGS,
 } from "./integrity.ts";
 export { COMPAT_INCOMPATIBLE } from "./compat.ts";
-export { SCHEMA_VIOLATION } from "./shape.ts";
+export { SCHEMA_VIOLATION, YAML_SHAPE_NORMAL } from "./shape.ts";

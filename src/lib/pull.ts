@@ -6,6 +6,7 @@
 // reaches it transitively through the CLI dispatcher (W26 argv passthrough).
 
 import { writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { exists, readText } from "../fs/safeRead.ts";
 import { parseSettingsFile } from "../lua/reader.ts";
@@ -14,6 +15,16 @@ import type { LuaTable } from "../lua/writer.ts";
 import { type CliEnv, resolveMount } from "../cli/env.ts";
 import type { PullResult } from "../types/results.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
+
+/** Phase-1 provenance header format (Step 13). Single line prepended to
+ *  every pulled YAML. Phase 1 is record-only — the normalizedYaml
+ *  producer will observe the header but does not change gate behavior.
+ *  Phase 2 (future): auto-bypass apply gates when the header matches
+ *  the current device state. */
+function provenanceHeader(deviceSrc: string, nowIso: string): string {
+    const hash = createHash("sha256").update(deviceSrc, "utf8").digest("hex");
+    return `# kindly-provenance: sha256:${hash} ts:${nowIso}\n`;
+}
 
 export interface PullOptions {
     full?: boolean;
@@ -52,14 +63,25 @@ export function executePull(opts: PullOptions, env: CliEnv): PullResult {
         );
     }
 
-    writeFileSync(outPath, yaml);
+    // Step 13 phase 1: prepend a provenance header. Records the hash of
+    // the on-device source + timestamp, so a future apply can verify
+    // this YAML corresponds to a snapshot we produced (vs. a file handed
+    // over by a stranger). Phase 1 does NOT gate on the header — apply
+    // still fires YAML_SHAPE_NORMAL / SENSITIVE gates uniformly. The
+    // observation-only period lets us measure how often pulled-then-
+    // applied flows carry the header before turning it into a trust
+    // signal (phase 2 / future provenance auto-bypass).
+    const header = provenanceHeader(src, env.now().toISOString());
+    const output = header + yaml;
+
+    writeFileSync(outPath, output);
 
     return {
         mode,
         settingsPath,
         outputPath: outPath,
-        bytes: Buffer.byteLength(yaml),
-        lines: yaml.split("\n").length,
+        bytes: Buffer.byteLength(output),
+        lines: output.split("\n").length,
         droppedSecrets: [...filter.droppedSecrets].sort(),
         droppedEphemerals: [...filter.droppedEphemerals].sort(),
     };

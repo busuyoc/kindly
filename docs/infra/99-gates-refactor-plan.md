@@ -100,10 +100,10 @@ Update this table as steps complete. Date format: YYYY-MM-DD.
 | 11   | YAML_SHAPE_NORMAL gate (S89 fix)                | ✅ done     | d40cfa4  | 2026-04-24|
 | 12   | Apply gate parity                               | ✅ mvp      | (next)   | 2026-04-24|
 | 12b  | Apply SENSITIVE/DESTRUCTIVE gates + provenance  | deferred    | —        | —         |
-| 13   | Provenance marker phase 1                       | queued      | —        | —         |
-| 14   | history.jsonl gate events                       | queued      | —        | —         |
-| 15   | doctor integration                              | queued      | —        | —         |
-| 16   | Architecture drift test                         | ✅ done     | (next)   | 2026-04-24|
+| 13   | Provenance marker phase 1                       | ✅ done     | 76d83f4  | 2026-04-24|
+| 14   | history.jsonl gate events                       | ✅ done     | 3190bf8  | 2026-04-24|
+| 15   | doctor integration                              | ✅ done     | (next)   | 2026-04-24|
+| 16   | Architecture drift test                         | ✅ done     | a9b5a70  | 2026-04-24|
 
 **Baseline test count as of Step 2 merge: 1216 pass / 0 fail / 1 skip.**
 All subsequent steps hold green-commit invariant against this number.

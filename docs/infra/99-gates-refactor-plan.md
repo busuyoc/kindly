@@ -103,7 +103,7 @@ Update this table as steps complete. Date format: YYYY-MM-DD.
 | 13   | Provenance marker phase 1                       | queued      | —        | —         |
 | 14   | history.jsonl gate events                       | queued      | —        | —         |
 | 15   | doctor integration                              | queued      | —        | —         |
-| 16   | Architecture drift test                         | queued      | —        | —         |
+| 16   | Architecture drift test                         | ✅ done     | (next)   | 2026-04-24|
 
 **Baseline test count as of Step 2 merge: 1216 pass / 0 fail / 1 skip.**
 All subsequent steps hold green-commit invariant against this number.

@@ -33,13 +33,65 @@ describe("safeRead — user-provided symlinks are followed", () => {
     });
 });
 
-describe("safeRead — derived-from-mount symlinks are followed", () => {
-    test("readText follows symlink and returns target content", () => {
+describe("safeRead — derived-from-mount symlinks are REJECTED (mount content is untrusted)", () => {
+    // Mount is attacker-plantable (USB-writable, historically pwned via
+    // KOReader RCE). A symlink at settings.reader.lua → ~/.ssh/id_rsa
+    // would exfiltrate host secrets through LuaParseError or pull write.
+    // Closes S211/S241/S242/S243 (Batch K).
+
+    test("readText throws on mount-derived symlink", () => {
         const target = join(workdir, "target.txt");
         const link = join(workdir, "link.txt");
-        writeFileSync(target, "mount-content");
+        writeFileSync(target, "id_rsa-bytes");
         symlinkSync(target, link);
-        expect(readText(link, "derived-from-mount")).toBe("mount-content");
+        expect(() => readText(link, "derived-from-mount")).toThrow(SafeReadError);
+    });
+
+    test("readBytes throws on mount-derived symlink", () => {
+        const target = join(workdir, "target.txt");
+        const link = join(workdir, "link.txt");
+        writeFileSync(target, "id_rsa-bytes");
+        symlinkSync(target, link);
+        expect(() => readBytes(link, "derived-from-mount")).toThrow(SafeReadError);
+    });
+
+    test("statFollow throws on mount-derived symlink (blocks metadata oracle)", () => {
+        const target = join(workdir, "target.txt");
+        const link = join(workdir, "link.txt");
+        writeFileSync(target, "x");
+        symlinkSync(target, link);
+        expect(() => statFollow(link, "derived-from-mount")).toThrow(SafeReadError);
+    });
+
+    test("statNoFollow throws on mount-derived symlink", () => {
+        const target = join(workdir, "target.txt");
+        const link = join(workdir, "link.txt");
+        writeFileSync(target, "x");
+        symlinkSync(target, link);
+        expect(() => statNoFollow(link, "derived-from-mount")).toThrow(SafeReadError);
+    });
+
+    test("error carries provenance and code for consumer disambiguation", () => {
+        const target = join(workdir, "target.txt");
+        const link = join(workdir, "link.txt");
+        writeFileSync(target, "x");
+        symlinkSync(target, link);
+        try {
+            readText(link, "derived-from-mount");
+            throw new Error("should have thrown");
+        } catch (e) {
+            expect(e).toBeInstanceOf(SafeReadError);
+            const sre = e as SafeReadError;
+            expect(sre.code).toBe("UNTRUSTED_SYMLINK");
+            expect(sre.provenance).toBe("derived-from-mount");
+            expect(sre.message).toContain("mount-derived");
+        }
+    });
+
+    test("regular files (non-symlinks) read normally", () => {
+        const path = join(workdir, "settings.reader.lua");
+        writeFileSync(path, "return { ok = true }");
+        expect(readText(path, "derived-from-mount")).toBe("return { ok = true }");
     });
 });
 
@@ -172,12 +224,12 @@ describe("safeRead — statFollow mirrors statSync", () => {
         expect(st.size).toBe(3);
     });
 
-    test("follows symlink when provenance allows", () => {
+    test("follows symlink when provenance allows (user-provided / derived-from-cwd)", () => {
         const target = join(workdir, "target.txt");
         const link = join(workdir, "link.txt");
         writeFileSync(target, "abc");
         symlinkSync(target, link);
-        const st = statFollow(link, "derived-from-mount");
+        const st = statFollow(link, "derived-from-cwd");
         expect(st.isFile()).toBe(true);
         expect(st.size).toBe(3);
     });

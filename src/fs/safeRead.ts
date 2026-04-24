@@ -1,26 +1,39 @@
 // Provenance-labeled filesystem reads.
 //
 // Every filesystem read in kindly has a provenance — where did the path
-// come from, and therefore how much do we trust it? Most sites run
-// `readFileSync(p, "utf8")` with no label attached; that makes it hard
-// to reason about which symlink-follow is "the user's choice" vs. "a
-// malicious archive planting a symlink at an extraction root".
+// come from, and therefore how much do we trust what it points at?
 //
-// This module wraps the raw node:fs calls so every read carries a
-// PathProvenance tag. The runtime behavior change is small and
-// deliberate: for paths labeled "extracted-archive" we refuse to
-// follow symlinks (lstat-first, throw on link). For every other label
-// we preserve the existing behavior (follow symlinks, existsSync
-// semantics, etc.) because those paths were produced by the user or
-// by code the user controls (the mount they pointed us at, their own
-// .kindly/ tree).
+// Trust model per provenance:
 //
-// In short: this is a labeling refactor, not a new enforcement layer.
-// The one enforcement that IS consolidated here is the symlink rejection
-// inside tarball extraction staging — previously inlined in
-// src/setup/unpack.ts, now expressed via the "extracted-archive"
-// provenance so every read from a stranger's archive goes through a
-// single choke point.
+//   "user-provided"      — user typed the path (argv, --mount, --file,
+//                          positional). Follow symlinks; the user
+//                          consented to their own filesystem shape.
+//
+//   "derived-from-cwd"   — path under the user's own .kindly/ tree or
+//                          working directory. Host is the TCB. Follow.
+//
+//   "derived-from-mount" — path kindly constructed under a Kindle mount
+//                          (join(mount.root, ...)). The mount is
+//                          UNTRUSTED DATA: USB-writable, historically
+//                          pwned via KOReader RCE, or shared hardware.
+//                          A planted symlink at settings.reader.lua
+//                          pointing to ~/.ssh/id_rsa would exfiltrate
+//                          host secrets through LuaParseError leak
+//                          (S281 class) or by pull writing the target
+//                          bytes into kindly.yaml (S242). REJECT.
+//                          Closes S211/S241/S242/S243 (Batch K).
+//
+//   "extracted-archive"  — path under a tmpdir we just tar-extracted
+//                          from a stranger's .kset. REJECT symlinks
+//                          before any read or follow-stat can resolve
+//                          them (consolidates the checks previously
+//                          inlined in src/setup/unpack.ts).
+//
+// Rejection uses `lstatSync` at the boundary; SafeReadError with code
+// "UNTRUSTED_SYMLINK" is thrown before the read proceeds. `exists()`
+// is deliberately permissive — reporting "does this path resolve to
+// something" is useful for flow-control and doesn't leak bytes; the
+// symlink rejection fires on the subsequent read or follow-stat.
 
 import {
     copyFileSync,
@@ -32,95 +45,100 @@ import {
 } from "node:fs";
 
 export type PathProvenance =
-    | "user-provided"       // argv, --mount, --file, positional
-    | "derived-from-mount"  // join(mount.root, ...)
-    | "derived-from-cwd"    // .kindly/ local tree
-    | "extracted-archive";  // tmpdir post tar-extract
+    | "user-provided"       // argv, --mount, --file, positional — user consented
+    | "derived-from-mount"  // join(mount.root, ...)            — UNTRUSTED
+    | "derived-from-cwd"    // .kindly/ local tree              — host is TCB
+    | "extracted-archive";  // tmpdir post tar-extract          — UNTRUSTED
+
+function isUntrusted(prov: PathProvenance): boolean {
+    return prov === "extracted-archive" || prov === "derived-from-mount";
+}
 
 export class SafeReadError extends Error {
     readonly code: string;
     readonly path: string;
-    constructor(message: string, code: string, path: string) {
+    readonly provenance: PathProvenance;
+    constructor(message: string, code: string, path: string, provenance: PathProvenance) {
         super(message);
         this.name = "SafeReadError";
         this.code = code;
         this.path = path;
+        this.provenance = provenance;
     }
 }
 
+function symlinkOriginLabel(prov: PathProvenance): string {
+    return prov === "extracted-archive"
+        ? "inside extracted archive"
+        : "at mount-derived path";
+}
+
 /**
- * Throw if `path` is a symlink. Only called for "extracted-archive"
- * reads — every other provenance is allowed to follow symlinks, because
- * the user (or code under the user's control) produced that path.
- *
- * Uses `lstatSync`, not `statSync`, so a symlink doesn't get resolved
- * and read under us. If the path doesn't exist, this is a no-op
- * (the caller's read will throw ENOENT with its native message).
+ * Throw if `path` is a symlink. Called for the two UNTRUSTED provenances
+ * — "extracted-archive" and "derived-from-mount". Uses `lstatSync`, not
+ * `statSync`, so a symlink is identified without resolving. Non-existent
+ * paths are a no-op — the caller's read will surface the native ENOENT.
  */
-function rejectSymlinkFromArchive(path: string): void {
+function rejectSymlinkFromUntrusted(path: string, prov: PathProvenance): void {
     let st: Stats;
     try {
         st = lstatSync(path);
     } catch {
-        // Non-existent path — let the subsequent read surface the
-        // native ENOENT. This matches the pre-refactor shape where
-        // unpack.ts assumed extracted files exist by the time it
-        // lstat's them.
         return;
     }
     if (st.isSymbolicLink()) {
         throw new SafeReadError(
-            `refusing to follow symlink inside extracted archive: ${path}`,
-            "ARCHIVE_SYMLINK",
+            `refusing to follow symlink ${symlinkOriginLabel(prov)}: ${path}`,
+            "UNTRUSTED_SYMLINK",
             path,
+            prov,
         );
     }
 }
 
 export function readText(path: string, prov: PathProvenance): string {
-    if (prov === "extracted-archive") rejectSymlinkFromArchive(path);
+    if (isUntrusted(prov)) rejectSymlinkFromUntrusted(path, prov);
     return readFileSync(path, "utf8");
 }
 
 export function readBytes(path: string, prov: PathProvenance): Buffer {
-    if (prov === "extracted-archive") rejectSymlinkFromArchive(path);
+    if (isUntrusted(prov)) rejectSymlinkFromUntrusted(path, prov);
     return readFileSync(path);
 }
 
+/**
+ * Does the path resolve to something? Deliberately permissive for all
+ * provenances — reports truthfully whether the target exists. Symlink
+ * rejection fires on the next read/follow-stat that would resolve the
+ * target. This matches the pre-refactor `existsSync` semantics at every
+ * callsite and avoids the "false negative when a symlink targets an
+ * existing file" confusion.
+ */
 export function exists(path: string, prov: PathProvenance): boolean {
-    // existsSync follows symlinks and returns false for broken links —
-    // that's the current behavior at every callsite, keep it.
-    // For extracted-archive we still answer "does it exist" truthfully;
-    // the symlink rejection fires on the subsequent read/stat.
     void prov;
     return existsSync(path);
 }
 
-/**
- * Follow-symlinks stat. Mirrors `statSync(path)` — the default behavior
- * for every non-archive read.
- */
+/** Follow-symlinks stat. For UNTRUSTED provenances, rejects symlinks
+ *  before the follow would leak target metadata (size, mtime). */
 export function statFollow(path: string, prov: PathProvenance): Stats {
-    if (prov === "extracted-archive") rejectSymlinkFromArchive(path);
+    if (isUntrusted(prov)) rejectSymlinkFromUntrusted(path, prov);
     return statSync(path);
 }
 
-/**
- * No-follow stat. Mirrors `lstatSync(path)`. For "extracted-archive"
- * this is also the safety check: if the entry IS a symlink, we throw
- * before returning (matching the intent of unpack.ts's explicit
- * `lstatSync(...).isSymbolicLink()` checks).
- */
+/** No-follow stat. For UNTRUSTED provenances, reject if the entry IS a
+ *  symlink (even though we're not following) — same policy as the other
+ *  read helpers so callers reason uniformly. Returns the lstat result
+ *  for non-symlink entries so callers don't double-lstat. */
 export function statNoFollow(path: string, prov: PathProvenance): Stats {
-    if (prov === "extracted-archive") {
-        // Evaluate once, throw on symlink, return the same stat result
-        // so callers don't double-lstat.
+    if (isUntrusted(prov)) {
         const st = lstatSync(path);
         if (st.isSymbolicLink()) {
             throw new SafeReadError(
-                `refusing to follow symlink inside extracted archive: ${path}`,
-                "ARCHIVE_SYMLINK",
+                `refusing to follow symlink ${symlinkOriginLabel(prov)}: ${path}`,
+                "UNTRUSTED_SYMLINK",
                 path,
+                prov,
             );
         }
         return st;
@@ -128,21 +146,16 @@ export function statNoFollow(path: string, prov: PathProvenance): Stats {
     return lstatSync(path);
 }
 
-/**
- * Copy src → dst. The read side is subject to provenance rules (archive
- * sources are symlink-rejected); the destination is treated as a
- * node:fs.copyFileSync target — it inherits whatever the filesystem
- * does with the destination path.
- */
+/** Copy src → dst. The read side is subject to provenance rules (UNTRUSTED
+ *  sources are symlink-rejected). The destination is a node:fs.copyFileSync
+ *  target. `dstProv` is accepted for symmetry / future write-side policy. */
 export function copyFile(
     src: string,
     srcProv: PathProvenance,
     dst: string,
     dstProv: PathProvenance,
 ): void {
-    if (srcProv === "extracted-archive") rejectSymlinkFromArchive(src);
-    // dstProv is accepted for symmetry and future write-side policies;
-    // the present behavior doesn't differentiate.
+    if (isUntrusted(srcProv)) rejectSymlinkFromUntrusted(src, srcProv);
     void dstProv;
     copyFileSync(src, dst);
 }

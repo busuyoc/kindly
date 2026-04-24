@@ -59,7 +59,7 @@
       "category": "system",
       "ship_default_on": "hardware_gated",
       "ship_default_rationale": "Only meaningful on Kindles that have a frontlight (all modern models do; base Kindle 4/Touch do not).",
-      "curation_opinion": "niche",
+      "curation_opinion": "recommended",
       "description": "Gradually lowers the frontlight brightness when you stop interacting with the device for a while.",
       "community_sentiment": "Lightly discussed — a small quality-of-life feature most users either love or never notice. No significant complaints or bug threads surfaced.",
       "kindle_notes": "Requires a frontlight; irrelevant on old non-lit Kindles. Does not need warm-light hardware.",

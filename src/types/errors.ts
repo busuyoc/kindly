@@ -79,6 +79,7 @@ export const ErrorCodes = {
     CATALOG_MALFORMED:    "CATALOG_MALFORMED",
     PLUGIN_NOT_FOUND:     "PLUGIN_NOT_FOUND",
     YAML_SHAPE_BLOCKED:   "YAML_SHAPE_BLOCKED",
+    YAML_CYCLIC:          "YAML_CYCLIC",
 } as const;
 
 export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];

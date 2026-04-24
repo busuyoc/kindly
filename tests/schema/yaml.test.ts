@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { luaToYaml, yamlToLua, mergeYamlIntoLua } from "../../src/schema/yaml.ts";
 import { parseSettingsFile } from "../../src/lua/reader.ts";
 import type { LuaTable, LuaValue } from "../../src/lua/writer.ts";
+import { KindlyError, ErrorCodes } from "../../src/types/errors.ts";
 
 describe("luaToYaml", () => {
     test("flat keys, alphabetical order", () => {
@@ -111,5 +112,67 @@ describe("full pipeline: real file → YAML → back → merge", () => {
         const a = luaToYaml(onDevice, "minimal").yaml;
         const b = luaToYaml(onDevice, "minimal").yaml;
         expect(a).toBe(b);
+    });
+});
+
+// S840/S1240/S1241/S1242 — hostile YAML anchors/aliases producing cyclic DOMs.
+// Without the visited-Set guard in plainToLua, these blow the stack and
+// surface as RangeError → UNKNOWN error code. We want a stable YAML_CYCLIC
+// KindlyError instead.
+describe("yamlToLua — cyclic anchor guard (P-cluster)", () => {
+    function expectCyclic(yaml: string) {
+        try {
+            yamlToLua(yaml);
+            throw new Error("expected YAML_CYCLIC, got success");
+        } catch (e) {
+            expect(e).toBeInstanceOf(KindlyError);
+            expect((e as KindlyError).code).toBe(ErrorCodes.YAML_CYCLIC);
+        }
+    }
+
+    test("S1240 baseline: 14-byte self-referencing sequence", () => {
+        expectCyclic("root: &a [*a]\n");
+    });
+
+    test("S1240 variant: flow-map self-cycle", () => {
+        expectCyclic("root: &a {child: *a}\n");
+    });
+
+    test("S1240 variant: block-map self-cycle", () => {
+        expectCyclic("root: &a\n  child: *a\n");
+    });
+
+    test("S1240 variant: custom-tagged anchor self-cycle", () => {
+        expectCyclic("root: !mytag &a [*a]\n");
+    });
+
+    test("S1240 variant: nested sequence wrap", () => {
+        expectCyclic("root: &a [[*a]]\n");
+    });
+
+    test("S1242: merge-key self-anchor", () => {
+        // `<<: *a` with self-anchor — exercises the map branch under merge.
+        expectCyclic("root: &a\n  <<: *a\n");
+    });
+
+    test("S1241: 50x sibling amplifier — each key is its own self-cycle", () => {
+        const lines: string[] = [];
+        for (let i = 0; i < 50; i++) lines.push(`k${i}: &a${i} [*a${i}]`);
+        expectCyclic(lines.join("\n") + "\n");
+    });
+
+    test("legitimate structure-sharing (sibling DAG, not cyclic) still parses", () => {
+        // Same anchor referenced at two sibling positions — NOT a cycle.
+        // The guard must add-on-entry / remove-on-exit to allow this.
+        const yaml = "shared: &s {a: 1, b: 2}\nleft: *s\nright: *s\n";
+        const t = yamlToLua(yaml) as Record<string, LuaValue>;
+        expect(t.left).toEqual({ a: 1, b: 2 } as any);
+        expect(t.right).toEqual({ a: 1, b: 2 } as any);
+    });
+
+    test("deep but acyclic nesting parses without tripping the guard", () => {
+        const yaml = "root:\n  a:\n    b:\n      c:\n        d: 1\n";
+        const t = yamlToLua(yaml) as Record<string, LuaValue>;
+        expect(t.root).toEqual({ a: { b: { c: { d: 1 } } } } as any);
     });
 });

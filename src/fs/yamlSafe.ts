@@ -39,5 +39,14 @@ export function parseYamlSafe(src: string, opts: ParseYamlSafeOptions = {}): unk
     if (bytes > limit) {
         throw new YamlTooLargeError(bytes, limit);
     }
-    return yamlParseRaw(src, { maxAliasCount: MAX_ALIAS_COUNT });
+    // logLevel:"error" keeps YAMLWarning off stderr — it breaks --json
+    // framing for consumers parsing line-delimited envelopes, and the
+    // multi-line stack traces can leak node_modules absolute paths.
+    // We deliberately pick "error" not "silent": the latter also swallows
+    // the throw on malformed YAML (yaml@2 silently returns a partial
+    // object), which would turn parse errors into invisible data issues.
+    return yamlParseRaw(src, {
+        maxAliasCount: MAX_ALIAS_COUNT,
+        logLevel: "error",
+    });
 }

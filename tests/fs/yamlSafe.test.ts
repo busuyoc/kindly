@@ -37,4 +37,24 @@ h: [*g,*g,*g,*g,*g,*g,*g,*g,*g]
         const doc = lines.join("\n") + "\n";
         expect(() => parseYamlSafe(doc)).not.toThrow();
     });
+
+    test("S843/S1243: unresolved custom tags do not emit YAMLWarning on stderr", () => {
+        // yaml@2 emits "Unresolved tag" warnings via console.warn by default.
+        // They break --json framing and can leak node_modules paths in stack
+        // traces. `logLevel:"silent"` in parseYamlSafe must suppress them.
+        const origWarn = console.warn;
+        const origError = console.error;
+        const captured: string[] = [];
+        console.warn = (...args: unknown[]) => { captured.push(args.map(String).join(" ")); };
+        console.error = (...args: unknown[]) => { captured.push(args.map(String).join(" ")); };
+        try {
+            // Parsing succeeds; unresolved tag just produces a raw value.
+            parseYamlSafe("root: !unknown_tag hello\n");
+            parseYamlSafe("root: !another value\nchild: !yet_more 42\n");
+        } finally {
+            console.warn = origWarn;
+            console.error = origError;
+        }
+        expect(captured.join("\n")).not.toMatch(/YAMLWarning|Unresolved tag/i);
+    });
 });

@@ -14,6 +14,7 @@
 import { stringify as yamlStringify } from "yaml";
 import { parseYamlSafe } from "../fs/yamlSafe.ts";
 import type { LuaTable, LuaValue } from "../lua/writer.ts";
+import { ErrorCodes, KindlyError } from "../types/errors.ts";
 import {
     classifyKey, filterForYaml, isSecretPath,
     type FilterMode, type FilterResult,
@@ -39,18 +40,37 @@ function luaToPlain(v: LuaValue): unknown {
 
 // Inverse of luaToPlain. Plain JS values round-trip cleanly except for
 // integer-keyed dicts (which we've already collapsed to arrays on read).
-function plainToLua(v: unknown): LuaValue {
+//
+// `visited` tracks the current DFS recursion path. yaml@2 produces
+// structurally-valid cyclic DOMs for inputs like `root: &a [*a]`; without
+// this guard the recursion stack-overflows as RangeError (UNKNOWN-coded).
+// Sibling structure-sharing (same object referenced at two non-overlapping
+// paths) is preserved: we add on entry and remove on exit, so only
+// self-referential cycles trip the guard.
+function plainToLua(v: unknown, visited: WeakSet<object> = new WeakSet()): LuaValue {
     if (v === null || v === undefined) return null;
     if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") return v;
-    if (Array.isArray(v)) return v.map(plainToLua);
-    if (typeof v === "object") {
+    if (typeof v !== "object") {
+        throw new Error(`cannot convert to Lua value: ${typeof v}`);
+    }
+    if (visited.has(v)) {
+        throw new KindlyError(
+            ErrorCodes.YAML_CYCLIC,
+            "YAML document contains a cyclic anchor/alias reference",
+            [{ text: "Remove the self-referential anchor or re-author the document without recursion." }],
+        );
+    }
+    visited.add(v);
+    try {
+        if (Array.isArray(v)) return v.map(x => plainToLua(x, visited));
         const out: { [k: string]: LuaValue } = {};
         for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
-            out[k] = plainToLua(val);
+            out[k] = plainToLua(val, visited);
         }
         return out;
+    } finally {
+        visited.delete(v);
     }
-    throw new Error(`cannot convert to Lua value: ${typeof v}`);
 }
 
 export type ToYamlResult = {

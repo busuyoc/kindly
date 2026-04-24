@@ -11,8 +11,9 @@
 // stable handle `rollback --to N` (W16) resolves against, and remains the
 // same even after an entry moves into `.kindly/history-archive/`.
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { join } from "node:path";
+import { exists, readText } from "../fs/safeRead.ts";
 
 import {
     historyArchiveDir,
@@ -52,11 +53,11 @@ export function readHistoryFile(opts: ReadHistoryOptions): HistoryReadResult {
     const path = historyPath(opts.cwd);
     const hasArchives = hasAnyArchives(opts.cwd);
 
-    if (!existsSync(path)) {
+    if (!exists(path, "derived-from-cwd")) {
         return { entries: [], matched: 0, total: 0, malformed: 0, path, hasArchives };
     }
 
-    const raw = readFileSync(path, "utf8");
+    const raw = readText(path, "derived-from-cwd");
     const lines = raw.split("\n");
 
     // A clean append leaves a trailing "\n" → split's last element is "".
@@ -130,7 +131,7 @@ export function* iterateAllEntries(
     yield* parseEntriesFromFile(historyPath(cwd));
 
     const dir = historyArchiveDir(cwd);
-    if (!existsSync(dir)) return;
+    if (!exists(dir, "derived-from-cwd")) return;
     const archives = readdirSync(dir)
         .filter((f) => f.endsWith(".jsonl"))
         .sort()
@@ -142,15 +143,15 @@ export function* iterateAllEntries(
 
 function hasAnyArchives(cwd: string): boolean {
     const dir = historyArchiveDir(cwd);
-    if (!existsSync(dir)) return false;
+    if (!exists(dir, "derived-from-cwd")) return false;
     return readdirSync(dir).some((f) => f.endsWith(".jsonl"));
 }
 
 function* parseEntriesFromFile(
     path: string,
 ): Generator<HistoryEntryWithIndex> {
-    if (!existsSync(path)) return;
-    const raw = readFileSync(path, "utf8");
+    if (!exists(path, "derived-from-cwd")) return;
+    const raw = readText(path, "derived-from-cwd");
     let positional = 0;
     for (const line of raw.split("\n")) {
         if (line.length === 0) continue;

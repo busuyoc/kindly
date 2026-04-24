@@ -38,8 +38,9 @@
 // emit), or a second crash appended another partial (we keep dropping
 // until something parseable lands).
 
-import { existsSync, readFileSync, watch as fsWatch } from "node:fs";
+import { watch as fsWatch } from "node:fs";
 import { dirname } from "node:path";
+import { exists, readText } from "../fs/safeRead.ts";
 
 import { ArgError, parseArgs, type FlagSpecs } from "../cli/args.ts";
 import type { CliEnv } from "../cli/env.ts";
@@ -101,8 +102,8 @@ function emit(env: CliEnv, ev: WatchEvent): void {
 }
 
 function readActive(path: string): HistoryEntry[] {
-    if (!existsSync(path)) return [];
-    const raw = readFileSync(path, "utf8");
+    if (!exists(path, "derived-from-cwd")) return [];
+    const raw = readText(path, "derived-from-cwd");
     const out: HistoryEntry[] = [];
     for (const line of raw.split("\n")) {
         if (line.length === 0) continue;
@@ -215,7 +216,7 @@ async function* fsWatchTriggers(cwd: string): AsyncGenerator<void> {
     let pending = false;
     let closed = false;
 
-    const watcher = existsSync(dir) ? fsWatch(dir, (_ev, name) => {
+    const watcher = exists(dir, "derived-from-cwd") ? fsWatch(dir, (_ev, name) => {
         if (name !== null && name !== file) return;
         if (resolveNext) { const r = resolveNext; resolveNext = null; r(); }
         else pending = true;

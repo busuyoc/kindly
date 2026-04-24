@@ -8,8 +8,8 @@
 // guess based on volume names alone — a Kobo or a random USB drive at
 // /Volumes/Kindle would fool that check.
 
-import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { statFollow } from "../fs/safeRead.ts";
 
 export type KindleMount = {
     root: string;              // e.g. /Volumes/Kindle
@@ -31,7 +31,7 @@ export function candidateMounts(platform: NodeJS.Platform = process.platform): s
 export function isKindleMount(root: string): boolean {
     try {
         const koreader = join(root, "koreader");
-        return statSync(koreader).isDirectory();
+        return statFollow(koreader, "derived-from-mount").isDirectory();
     } catch {
         return false;
     }

@@ -4,7 +4,8 @@
 //
 // Shared with `setup inspect` via `loadManifestFile` + `LoadedSetup`.
 
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
+import { exists, readText } from "../fs/safeRead.ts";
 import { dirname, join, resolve } from "node:path";
 
 import { parseYamlSafe } from "../fs/yamlSafe.ts";
@@ -58,10 +59,10 @@ export type LoadedSetup = {
 // bytes (for hashing / canonical checks) and the validated manifest.
 // Throws a user-readable error on missing file, bad YAML, or schema failure.
 export function loadManifestFile(path: string): { raw: string; manifest: SetupManifest } {
-    if (!existsSync(path)) {
+    if (!exists(path, "user-provided")) {
         throw new Error(`setup file not found: ${path}`);
     }
-    const raw = readFileSync(path, "utf8");
+    const raw = readText(path, "user-provided");
     let parsed: unknown;
     try {
         parsed = parseYamlSafe(raw);
@@ -80,7 +81,7 @@ export function loadManifestFile(path: string): { raw: string; manifest: SetupMa
 }
 
 export function loadSetup(path: string): LoadedSetup {
-    if (!existsSync(path)) {
+    if (!exists(path, "user-provided")) {
         throw new Error(`setup file not found: ${path}`);
     }
     // .kset (no further extension) → tar.gz fat archive.
@@ -135,7 +136,7 @@ export function snapshotFatTargets(
     patchAbsPaths: readonly string[],
 ): void {
     const all = [...pluginAbsPaths, ...patchAbsPaths];
-    const existing = all.filter((p) => existsSync(p));
+    const existing = all.filter((p) => exists(p, "derived-from-mount"));
     if (existing.length === 0) return;
 
     // Make paths relative to koreaderRoot for tar.
@@ -394,7 +395,7 @@ export function executeSetupImport(
     const mountEnv = opts.mount ? { ...env, mountOverride: opts.mount } : env;
     const mount = resolveMount(mountEnv);
 
-    if (!existsSync(mount.settingsPath)) {
+    if (!exists(mount.settingsPath, "derived-from-mount")) {
         throw new KindlyError(
             ErrorCodes.SETTINGS_NOT_FOUND,
             `Kindle mount found at ${mount.root}, but ${mount.settingsPath} doesn't exist. ` +
@@ -546,7 +547,7 @@ export function executeSetupImport(
     // the manifest (already LuaValue-compatible) — narrow for downstream.
     const safeFlat = safeFlatRaw as Record<string, LuaValue>;
 
-    const onDeviceSrc = readFileSync(mount.settingsPath, "utf8");
+    const onDeviceSrc = readText(mount.settingsPath, "derived-from-mount");
     const onDevice = parseSettingsFile(onDeviceSrc) as Record<string, LuaValue>;
 
     const isReplace = manifest.apply_mode === "replace";
@@ -724,7 +725,7 @@ export function executeSetupImport(
                 willInstallPatches ? affectedPatchTargets(mount.patchesDir, shippedPatches) : [],
             );
             fatSnapshotPath = join(snapshotDir, "plugins-patches.tar.gz");
-            if (!existsSync(fatSnapshotPath)) fatSnapshotPath = null;
+            if (!exists(fatSnapshotPath, "derived-from-cwd")) fatSnapshotPath = null;
         }
 
         if (willInstallPlugins) {

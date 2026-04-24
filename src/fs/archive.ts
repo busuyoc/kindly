@@ -12,8 +12,9 @@
 // testing against a simulated Kindle without touching /Volumes/Kindle).
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, statSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { exists, statFollow } from "./safeRead.ts";
 import { isSafeRelativePath } from "./paths.ts";
 
 export type CreateOptions = {
@@ -39,16 +40,16 @@ export type CreateResult = {
 export function createTarGz(opts: CreateOptions): CreateResult {
     const { cwd, paths, outputPath } = opts;
 
-    if (!existsSync(cwd)) {
+    if (!exists(cwd, "user-provided")) {
         throw new Error(`archive source does not exist: ${cwd}`);
     }
     const outDir = dirname(outputPath);
-    if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
+    if (!exists(outDir, "user-provided")) mkdirSync(outDir, { recursive: true });
 
     const included: string[] = [];
     const skipped: string[] = [];
     for (const p of paths) {
-        if (existsSync(`${cwd}/${p}`)) included.push(p);
+        if (exists(`${cwd}/${p}`, "user-provided")) included.push(p);
         else skipped.push(p);
     }
 
@@ -68,7 +69,7 @@ export function createTarGz(opts: CreateOptions): CreateResult {
 
     return {
         archivePath: outputPath,
-        bytesWritten: statSync(outputPath).size,
+        bytesWritten: statFollow(outputPath, "user-provided").size,
         includedPaths: included,
         skippedPaths: skipped,
     };
@@ -155,7 +156,7 @@ function enforceSizeCaps(archivePath: string, opts: ExtractOptions): void {
     const maxUncompressed = opts.maxUncompressedBytes ?? DEFAULT_MAX_UNCOMPRESSED_BYTES;
     const maxRatio = opts.maxCompressionRatio ?? DEFAULT_MAX_COMPRESSION_RATIO;
 
-    const archiveBytes = statSync(archivePath).size;
+    const archiveBytes = statFollow(archivePath, "user-provided").size;
     if (archiveBytes > maxArchive) {
         throw new ArchiveTooLargeError(
             `archive is ${archiveBytes} bytes, exceeds ${maxArchive} limit`,
@@ -187,7 +188,7 @@ function enforceSizeCaps(archivePath: string, opts: ExtractOptions): void {
  *  like restore taking a pre-restore safety snapshot — should call this
  *  up front so a malicious archive can't trigger any side effects. */
 export function assertSafeArchive(archivePath: string, opts: Omit<ExtractOptions, "archivePath" | "destRoot"> = {}): void {
-    if (!existsSync(archivePath)) {
+    if (!exists(archivePath, "user-provided")) {
         throw new Error(`archive not found: ${archivePath}`);
     }
     enforceSizeCaps(archivePath, { ...opts, archivePath, destRoot: "" });
@@ -201,10 +202,10 @@ export function assertSafeArchive(archivePath: string, opts: Omit<ExtractOptions
 
 export function extractTarGz(opts: ExtractOptions): ExtractResult {
     const { archivePath, destRoot } = opts;
-    if (!existsSync(archivePath)) {
+    if (!exists(archivePath, "user-provided")) {
         throw new Error(`archive not found: ${archivePath}`);
     }
-    if (!existsSync(destRoot)) mkdirSync(destRoot, { recursive: true });
+    if (!exists(destRoot, "user-provided")) mkdirSync(destRoot, { recursive: true });
 
     // Bomb guards + path-safety BEFORE extraction. Belt-and-suspenders
     // with caller-side assertSafeArchive — the choke point is here.
@@ -227,7 +228,7 @@ export function extractTarGz(opts: ExtractOptions): ExtractResult {
 // Return the list of paths stored in the archive. Used by restore --dry-run
 // and by extractTarGz for file counting.
 export function listTarGz(archivePath: string): string[] {
-    if (!existsSync(archivePath)) {
+    if (!exists(archivePath, "user-provided")) {
         throw new Error(`archive not found: ${archivePath}`);
     }
     const r = spawnSync("tar", ["-tzf", archivePath], { encoding: "utf8" });

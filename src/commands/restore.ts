@@ -19,7 +19,7 @@ import {
     listTarGz, UnsafeArchivePathError,
 } from "../fs/archive.ts";
 import { resolve } from "node:path";
-import { existsSync } from "node:fs";
+import { exists } from "../fs/safeRead.ts";
 import type { RestoreResult } from "../types/results.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { emitJson } from "../cli/json.ts";
@@ -64,7 +64,7 @@ export interface RestoreOptions {
 
 export function executeRestore(opts: RestoreOptions, env: CliEnv): RestoreResult {
     const archivePath = resolve(env.cwd, opts.archive);
-    if (!existsSync(archivePath)) {
+    if (!exists(archivePath, "user-provided")) {
         throw new KindlyError(
             ErrorCodes.ARCHIVE_NOT_FOUND,
             `archive not found: ${archivePath}`,

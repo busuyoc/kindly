@@ -3,8 +3,8 @@
 // optional preview diff against the device or against an empty baseline.
 // Pure: read-only, returns a typed result; never prints.
 
-import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
+import { readText, statFollow } from "../fs/safeRead.ts";
 import { type CliEnv, resolveMount } from "../cli/env.ts";
 import { parseSettingsFile } from "../lua/reader.ts";
 import type { LuaValue } from "../lua/writer.ts";
@@ -45,7 +45,7 @@ export function executeSetupInspect(
         hash: rawHash,
         name: manifest.meta.name,
         isFat,
-        fileSize: statSync(path).size,
+        fileSize: statFollow(path, "user-provided").size,
         manifestBytes: manifestBytes.length,
         applyMode: manifest.apply_mode,
         createdAt: manifest.meta.created_at,
@@ -165,7 +165,7 @@ function computePreview(
     let settingsPath: string | undefined;
     if (mode === "vs-device") {
         const mount = resolveMount(env);
-        baseline = parseSettingsFile(readFileSync(mount.settingsPath, "utf8")) as Record<string, LuaValue>;
+        baseline = parseSettingsFile(readText(mount.settingsPath, "derived-from-mount")) as Record<string, LuaValue>;
         settingsPath = mount.settingsPath;
     } else {
         baseline = {};

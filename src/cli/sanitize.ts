@@ -30,6 +30,15 @@
 //     `\x1b\`, bare `\x1b`, etc.).
 //   - Strip lone `\r` (but preserve `\r\n` as a pair).
 //   - Strip other C0 control bytes: 0x00-0x08, 0x0B-0x0C, 0x0E-0x1F, 0x7F.
+//   - Strip bidi controls (U+202A-U+202E override/embedding, U+2066-U+2069
+//     isolates) — arbitrary visual reordering is an S383-class info-leak
+//     channel and can mask the real key being displayed.
+//   - Strip invisible format controls (U+200B-U+200D ZWSP/ZWNJ/ZWJ,
+//     U+2060-U+2064 WJ/invisibles, U+FEFF BOM/ZWNBSP) — zero-width chars
+//     let attackers forge lookalike keys that pass visual review.
+//   - Strip U+2028 LINE SEPARATOR / U+2029 PARA SEPARATOR — unterminated
+//     under JSON.stringify in ECMAScript ≤ 2018; break --json framing
+//     for downstream JS consumers (S269).
 //
 // Pure function, no side effects — safe to call on any string.
 
@@ -62,10 +71,31 @@ function isWhitelistedSgr(params: string, final: string): boolean {
     return true;
 }
 
+// BMP codepoints we strip outright: bidi controls, invisible format
+// controls, and JS-breaking line separators. All single UTF-16 code units,
+// so `charCodeAt` is sufficient.
+function isStrippableUnicode(ch: number): boolean {
+    return (
+        (ch >= 0x200B && ch <= 0x200D) ||  // ZWSP, ZWNJ, ZWJ
+        ch === 0x2028 || ch === 0x2029 ||  // LS, PS
+        (ch >= 0x202A && ch <= 0x202E) ||  // LRE, RLE, PDF, LRO, RLO
+        (ch >= 0x2060 && ch <= 0x2064) ||  // WJ, FUNCTION APP, INVISIBLE *
+        (ch >= 0x2066 && ch <= 0x2069) ||  // LRI, RLI, FSI, PDI
+        ch === 0xFEFF                      // BOM / ZWNBSP
+    );
+}
+
+// Hot-path detection regex. Matches if anything in the string needs
+// inspection — C0 controls, ESC/CR, bidi, invisibles, LS/PS, BOM.
+// Built via RegExp() so the \uXXXX escapes stay ASCII-readable in source.
+const HOT_PATH_RE = new RegExp(
+    "[\\x00-\\x08\\x0B-\\x0C\\x0E-\\x1F\\x7F\\r\\x1B" +
+    "\\u200B-\\u200D\\u2028\\u2029\\u202A-\\u202E" +
+    "\\u2060-\\u2064\\u2066-\\u2069\\uFEFF]"
+);
+
 export function sanitizeForTerminal(s: string): string {
-    // Hot path: nothing dangerous in the string.
-    // Check for ESC, CR, and C0-control bytes (incl. DEL 0x7f).
-    if (!/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F\r\x1B]/.test(s)) return s;
+    if (!HOT_PATH_RE.test(s)) return s;
 
     let out = "";
     const len = s.length;
@@ -187,6 +217,12 @@ export function sanitizeForTerminal(s: string): string {
 
         // Other C0 controls + DEL.
         if (ch <= 0x1f || ch === 0x7f) {
+            i += 1;
+            continue;
+        }
+
+        // Bidi + invisible format + LS/PS + BOM — all BMP single code units.
+        if (isStrippableUnicode(ch)) {
             i += 1;
             continue;
         }

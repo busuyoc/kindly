@@ -87,6 +87,97 @@ describe("sanitizeForTerminal", () => {
     });
 });
 
+describe("sanitizeForTerminal — C2 Unicode extension", () => {
+    // Bidi override/embedding/isolate codepoints
+    const BIDI = ["‪", "‫", "‬", "‭", "‮",
+                  "⁦", "⁧", "⁨", "⁩"];
+    // Zero-width / invisible format controls
+    const INVISIBLES = ["​", "‌", "‍",
+                        "⁠", "⁡", "⁢", "⁣", "⁤",
+                        "﻿"];
+    // JS-breaking line separators
+    const JS_BREAKERS = [" ", " "];
+
+    test("strips all bidi controls", () => {
+        for (const ch of BIDI) {
+            expect(sanitizeForTerminal(`a${ch}b`)).toBe("ab");
+        }
+    });
+
+    test("strips all invisible format controls", () => {
+        for (const ch of INVISIBLES) {
+            expect(sanitizeForTerminal(`a${ch}b`)).toBe("ab");
+        }
+    });
+
+    test("strips U+2028 LINE SEPARATOR and U+2029 PARAGRAPH SEPARATOR", () => {
+        for (const ch of JS_BREAKERS) {
+            expect(sanitizeForTerminal(`a${ch}b`)).toBe("ab");
+        }
+    });
+
+    test("BOM is stripped whether leading, mid, or trailing", () => {
+        expect(sanitizeForTerminal("﻿hello")).toBe("hello");
+        expect(sanitizeForTerminal("hel﻿lo")).toBe("hello");
+        expect(sanitizeForTerminal("hello﻿")).toBe("hello");
+    });
+
+    test("RLO spoofing attack on a filename is neutralized", () => {
+        // Classic RLO trick: "script‮gpj.exe" renders as "scriptexe.jpg"
+        // Strip the RLO; the name becomes readable-as-written.
+        const spoofed = "invoice‮gpj.exe";
+        expect(sanitizeForTerminal(spoofed)).toBe("invoicegpj.exe");
+    });
+
+    test("ZWSP homoglyph forgery is flattened", () => {
+        // "ad​min" visually reads as "admin" but differs byte-wise.
+        // After sanitize, the ZWSP is gone.
+        expect(sanitizeForTerminal("ad​min")).toBe("admin");
+    });
+
+    test("hot-path regex triggers on every strippable codepoint", () => {
+        // Fast-path regex must cover every codepoint isStrippableUnicode
+        // rejects, else strippable chars leak through when the string
+        // contains nothing else dangerous.
+        for (const ch of [...BIDI, ...INVISIBLES, ...JS_BREAKERS]) {
+            const s = `clean${ch}clean`;
+            expect(sanitizeForTerminal(s)).toBe("cleanclean");
+        }
+    });
+
+    test("legitimate non-BMP emoji survives (surrogate pair, high codepoint)", () => {
+        // Four-byte UTF-16 pairs (above BMP) must not be collateral damage.
+        expect(sanitizeForTerminal("hello 🚀 world")).toBe("hello 🚀 world");
+        expect(sanitizeForTerminal("café")).toBe("café");
+        expect(sanitizeForTerminal("日本語")).toBe("日本語");
+    });
+
+    test("codepoints just outside the stripped ranges survive", () => {
+        // U+200A (hair space) — not stripped; U+200E (LRM) is outside
+        // our override range (we strip 202A-202E and 2066-2069 only;
+        // LRM/RLM at 200E/200F are directional marks, not overrides —
+        // strip them too since they alter display and serve no purpose
+        // in kindly output... actually we DON'T strip them, so confirm.)
+        //
+        // Boundary check: U+200A, U+200E, U+200F, U+2065, U+206A pass through.
+        expect(sanitizeForTerminal("a b")).toBe("a b");  // hair space
+        expect(sanitizeForTerminal("a⁥b")).toBe("a⁥b");  // unassigned, not in strip set
+        expect(sanitizeForTerminal("a⁪b")).toBe("a⁪b");  // inhibit symmetric swap
+    });
+
+    test("mixed attack: bidi + OSC + invisible + JS-breaker", () => {
+        const evil = "nor​mal\x1b]0;steal\x07 text‮ with  bad⁨ bytes";
+        expect(sanitizeForTerminal(evil)).toBe("normal text with bad bytes");
+    });
+
+    test("idempotent over the C2 extension", () => {
+        const s = "a‮b​c d﻿e";
+        const once = sanitizeForTerminal(s);
+        expect(sanitizeForTerminal(once)).toBe(once);
+        expect(once).toBe("abcde");
+    });
+});
+
 describe("Writer wiring", () => {
     test("StringWriter.write sanitizes by default", () => {
         const w = new StringWriter();

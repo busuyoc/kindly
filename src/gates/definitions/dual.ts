@@ -13,6 +13,7 @@
 import type { GateDefinition } from "../types.ts";
 import type { Change } from "../../schema/diff.ts";
 import { formatSensitiveChange } from "../sensitiveFormat.ts";
+import { sensitiveDomain } from "../../schema/classify.ts";
 
 /**
  * EXTRA_PLUGIN_PATHS_DUAL — W31a.
@@ -51,6 +52,54 @@ export const EXTRA_PLUGIN_PATHS_DUAL: GateDefinition = {
                 "Lua plugins from the listed directories. Any Lua code in " +
                 "those paths will execute on your Kindle with full device " +
                 `access.\n  extra_plugin_paths: ${newPath}`,
+        };
+    },
+};
+
+/**
+ * CODE_EXEC_ADJACENT_REQUIRES_ACK — C1a.
+ *
+ * Some settings keys are interpolated by KOReader into `os.execute`,
+ * `os.remove`, or `string.format`-to-shell call sites on the device
+ * side. Examples: `SSH_port` (dropbear -p <val>), `httpinspector_port`,
+ * `cover_image_path` (os.remove). Changing these gives an attacker a
+ * chosen-arg primitive against KOReader — distinct threat class from
+ * the generic SENSITIVE data-flow consent.
+ *
+ * Fires at both import and apply — at import, a fat Setup declaring
+ * these keys triggers the gate; at apply, a plain `kindly apply` with
+ * these keys in the YAML does the same (closes Lead 7's apply-side
+ * gap for this specific key family). Bypass is a dedicated
+ * `--accept-code-exec` flag; --accept-sensitive does NOT bypass.
+ *
+ * The denylist is data-driven: `data/classify/settings.v1.json`
+ * `code_exec_adjacent` array + `isCodeExecAdjacent()` helper.
+ */
+export const CODE_EXEC_ADJACENT_REQUIRES_ACK: GateDefinition = {
+    id: "CODE_EXEC_ADJACENT_REQUIRES_ACK",
+    category: "DUAL",
+    appliesAt: ["import", "apply"],
+    requires: ["codeExecAdjacentHits"],
+    firesIn: "non-dry-run",
+    bypassFlags: ["--accept-code-exec"],
+    errorCode: "CODE_EXEC_REQUIRES_ACK",
+    remediation: [
+        { text: "Review the key(s) set by this change.", command: "kindly diff" },
+        { text: "Pass --accept-code-exec to consent to KOReader interpolating these values into shell / os.remove / os.execute calls." },
+    ],
+    check: (ctx) => {
+        const hits = ctx.producers.codeExecAdjacentHits as string[];
+        if (hits.length === 0) return { kind: "pass" };
+        const changes = (ctx.opts.changes as Change[] | undefined) ?? [];
+        const list = hits
+            .map((p) => `  [${sensitiveDomain(p)}] ${p}: ${formatSensitiveChange(changes, p)}`)
+            .join("\n");
+        return {
+            kind: "block",
+            message:
+                `this change sets ${hits.length} key(s) whose values KOReader ` +
+                "interpolates into os.execute / os.remove / shell calls:\n" +
+                list,
         };
     },
 };

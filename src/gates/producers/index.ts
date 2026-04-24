@@ -9,6 +9,7 @@
 import type { Producer } from "../types.ts";
 import { manifestIdentity } from "./manifestIdentity.ts";
 import { sensitiveHits } from "./sensitiveHits.ts";
+import { codeExecAdjacentHits } from "./codeExecAdjacentHits.ts";
 import { pluginHashReport } from "./pluginHashReport.ts";
 import { scanReport } from "./scanReport.ts";
 import { compatResult } from "./compatResult.ts";
@@ -20,6 +21,7 @@ import { normalizedYaml } from "./normalizedYaml.ts";
 export const PRODUCERS: Readonly<Record<string, Producer<unknown>>> = {
     manifestIdentity,
     sensitiveHits,
+    codeExecAdjacentHits,
     pluginHashReport,
     scanReport,
     compatResult,

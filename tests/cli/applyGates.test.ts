@@ -121,3 +121,58 @@ describe("apply — YAML_SHAPE_NORMAL blocks crafted wipe-YAML", () => {
         expect(after).toContain("hunter2");
     });
 });
+
+describe("apply — CODE_EXEC_ADJACENT_REQUIRES_ACK (C1a)", () => {
+    test("SSH_port change blocks without --accept-code-exec", async () => {
+        writeYaml("SSH_port: 2222\n");
+        const code = await main(["apply"], env);
+        expect(code).toBe(3);
+        expect(err.value).toContain("SSH_port");
+        expect(err.value).toMatch(/os\.execute|os\.remove|shell/);
+        expect(err.value).toContain("--accept-code-exec");
+        const after = readFileSync(kindle.settingsPath, "utf8");
+        expect(after).not.toContain("2222");
+    });
+
+    test("httpinspector_port change blocks without --accept-code-exec", async () => {
+        writeYaml("httpinspector_port: \"9999\"\n");
+        const code = await main(["apply"], env);
+        expect(code).toBe(3);
+        expect(err.value).toContain("httpinspector_port");
+    });
+
+    test("cover_image_path change blocks without --accept-code-exec", async () => {
+        writeYaml("cover_image_path: \"/mnt/us/attacker\"\n");
+        const code = await main(["apply"], env);
+        expect(code).toBe(3);
+        expect(err.value).toContain("cover_image_path");
+    });
+
+    test("--accept-code-exec allows the change through", async () => {
+        writeYaml("SSH_port: 2222\n");
+        const code = await main(["apply", "--accept-code-exec"], env);
+        expect(code).toBe(0);
+        const after = readFileSync(kindle.settingsPath, "utf8");
+        expect(after).toContain("2222");
+    });
+
+    test("--dry-run bypasses CODE_EXEC gate (firesIn: non-dry-run)", async () => {
+        writeYaml("SSH_port: 2222\n");
+        const code = await main(["apply", "--dry-run"], env);
+        expect(code).toBe(0);
+        const after = readFileSync(kindle.settingsPath, "utf8");
+        expect(after).not.toContain("2222");
+    });
+
+    test("plain USER-only key is unaffected", async () => {
+        writeYaml("refresh_rate: 10\n");
+        const code = await main(["apply"], env);
+        expect(code).toBe(0);
+    });
+
+    test("no-op (value unchanged) does not fire the gate", async () => {
+        writeYaml("refresh_rate: 2\n");
+        const code = await main(["apply"], env);
+        expect(code).toBe(0);
+    });
+});

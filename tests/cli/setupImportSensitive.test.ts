@@ -175,7 +175,8 @@ describe("setup import — acceptance flags", () => {
             settings: { SSH_port: 2222, debug: true },
         }));
         const code = await main(
-            ["setup", "import", manifestPath, "--accept-sensitive"],
+            ["setup", "import", manifestPath,
+                "--accept-sensitive", "--accept-code-exec"],
             env,
         );
         expect(code).toBe(4);
@@ -187,8 +188,12 @@ describe("setup import — acceptance flags", () => {
         writeManifestFile(manifestPath, makeManifest({
             settings: { SSH_port: 2222 },
         }));
+        // SSH_port is both SENSITIVE and code-exec-adjacent (C1a) — the
+        // dual gate requires --accept-code-exec in addition to consent
+        // for the SENSITIVE data-flow axis.
         const code = await main(
-            ["setup", "import", manifestPath, "--accept-key=SSH_port"],
+            ["setup", "import", manifestPath,
+                "--accept-key=SSH_port", "--accept-code-exec"],
             env,
         );
         expect(code).toBe(4);
@@ -212,8 +217,10 @@ describe("setup import — acceptance flags", () => {
         writeManifestFile(manifestPath, makeManifest({
             settings: { SSH_port: 2222, debug: true },
         }));
+        // SSH_port also needs --accept-code-exec (C1a DUAL gate).
         const code = await main(
-            ["setup", "import", manifestPath, "--accept-key=SSH_port,debug"],
+            ["setup", "import", manifestPath,
+                "--accept-key=SSH_port,debug", "--accept-code-exec"],
             env,
         );
         expect(code).toBe(4);

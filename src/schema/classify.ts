@@ -60,14 +60,16 @@ interface ClassifyData {
     curated_at: string;
     keys: Record<string, KeyEntry>;
     rules: Rule[];
+    code_exec_adjacent?: string[];
 }
 
 const DATA_PATH = resolve(import.meta.dir, "../../data/classify/settings.v1.json");
 
 const VALID_EXFIL: ReadonlySet<string> = new Set(["secret", "normal"]);
 const VALID_CHANGE: ReadonlySet<string> = new Set([
-    "none", "sensitive-network", "sensitive-ssh", "sensitive-code-exec",
-    "sensitive-fs", "sensitive-debug", "sensitive-service", "destructive",
+    "none", "sensitive-network", "sensitive-ssh",
+    "sensitive-code-exec", "sensitive-fs", "sensitive-debug",
+    "sensitive-service", "destructive",
 ]);
 const VALID_HYGIENE: ReadonlySet<string> = new Set(["persistent", "ephemeral"]);
 
@@ -185,6 +187,23 @@ export function isSensitivePath(parent: string, child: string): boolean {
  *  Used by the CLI layer to validate --accept-key= entries. */
 export function isSensitiveKeyName(name: string): boolean {
     return SENSITIVE_TOPLEVEL.has(name) || SENSITIVE_NESTED.has(name);
+}
+
+/** Keys whose values KOReader interpolates into os.execute / os.remove /
+ *  shell calls. Orthogonal to the `change` axis — a key can be both
+ *  sensitive-ssh (SSH_port) or sensitive-service (httpinspector_port) AND
+ *  code-exec-adjacent. Triggers the CODE_EXEC_ADJACENT_REQUIRES_ACK gate
+ *  (bypass: --accept-code-exec), which fires independently of the
+ *  SENSITIVE_REQUIRES_ACK gate because the mental model is different
+ *  (code-exec consent vs data-flow consent). */
+const CODE_EXEC_ADJACENT: ReadonlySet<string> = new Set(
+    DATA.code_exec_adjacent ?? [],
+);
+
+/** Is the value at this key interpolated into a KOReader shell / os.remove /
+ *  os.execute call? */
+export function isCodeExecAdjacent(keyOrPath: string): boolean {
+    return CODE_EXEC_ADJACENT.has(keyOrPath);
 }
 
 /** Return the direct nested children of `parent` that carry exfil=secret.

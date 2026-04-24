@@ -43,6 +43,13 @@ const FLAGS = {
         type: "string",
         description: "advisory name for this change — shown in `kindly history`",
     },
+    "accept-code-exec": {
+        type: "boolean",
+        default: false,
+        description:
+            "consent to KOReader interpolating YAML values into os.execute / " +
+            "os.remove / shell calls (SSH_port, httpinspector_port, cover_image_path)",
+    },
 } as const satisfies FlagSpecs;
 
 export function renderApply(result: ApplyResult, env: CliEnv): void {
@@ -81,6 +88,7 @@ export async function runApply(argv: readonly string[], env: CliEnv): Promise<nu
         dryRun: flags["dry-run"],
         backupDir: flags["backup-dir"],
         label: flags.label,
+        acceptCodeExec: flags["accept-code-exec"],
     }, env);
 
     if (env.jsonMode) emitJson(env, "apply", result);
@@ -110,12 +118,16 @@ export const applyHelp = `
 kindly apply — merge kindly.yaml into the device's settings.reader.lua.
 
 usage: kindly apply [--file <path>] [--dry-run] [--mount <path>] [--backup-dir <path>]
+                    [--accept-code-exec]
 
   --file <path>        YAML to apply (default: kindly.yaml)
   --dry-run            show changes without writing
   --mount <path>       path to a mounted Kindle (auto-detect by default)
   --backup-dir <path>  where to archive pre-write snapshots
                        (default: <cwd>/.kindly/backups)
+  --accept-code-exec   consent to KOReader interpolating YAML values into
+                       os.execute / os.remove / shell calls (SSH_port,
+                       httpinspector_port, cover_image_path)
 
 Apply is non-destructive: on-device keys not present in YAML are preserved
 (this is how secrets and ephemerals survive round-tripping through YAML).

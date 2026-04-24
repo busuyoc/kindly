@@ -34,7 +34,7 @@ import {
     STRICT_SENSITIVE_CHANGES,
 } from "../gates/definitions/consent.ts";
 import { STRICT_REPLACE_REMOVAL_CAP } from "../gates/definitions/destruction.ts";
-import { EXTRA_PLUGIN_PATHS_DUAL } from "../gates/definitions/dual.ts";
+import { EXTRA_PLUGIN_PATHS_DUAL, CODE_EXEC_ADJACENT_REQUIRES_ACK } from "../gates/definitions/dual.ts";
 import {
     STRICT_PLUGIN_HASH_CHECK,
     STRICT_SCANNER_FINDINGS,
@@ -185,6 +185,14 @@ export interface SetupImportOptions {
     skipPlugins?: boolean;
     acceptPatches?: boolean;
     skipPatches?: boolean;
+    /**
+     * C1a: bypass CODE_EXEC_ADJACENT_REQUIRES_ACK. Consents to KOReader
+     * interpolating attacker-supplied values into os.execute / os.remove
+     * / shell calls via the keys listed in
+     * `data/classify/settings.v1.json` `code_exec_adjacent` (SSH_port,
+     * httpinspector_port, cover_image_path).
+     */
+    acceptCodeExec?: boolean;
     label?: string;
     /**
      * Assert the manifest's content hash matches before applying. Must be
@@ -535,6 +543,7 @@ export function executeSetupImport(
             STRICT_SENSITIVE_CHANGES,
             SENSITIVE_REQUIRES_ACK,
             EXTRA_PLUGIN_PATHS_DUAL,
+            CODE_EXEC_ADJACENT_REQUIRES_ACK,
         ],
         dryRun: opts.dryRun ?? false,
         strictImports: opts.strictImports ?? false,
@@ -544,6 +553,7 @@ export function executeSetupImport(
             acceptSensitive: !!opts.acceptSensitive,
             acceptKey: opts.acceptKey,
             acceptPlugins: !!opts.acceptPlugins,
+            acceptCodeExec: !!opts.acceptCodeExec,
         },
     });
 

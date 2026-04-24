@@ -18,7 +18,7 @@ import {
     STRICT_SENSITIVE_CHANGES,
 } from "./definitions/consent.ts";
 import { STRICT_REPLACE_REMOVAL_CAP } from "./definitions/destruction.ts";
-import { EXTRA_PLUGIN_PATHS_DUAL } from "./definitions/dual.ts";
+import { EXTRA_PLUGIN_PATHS_DUAL, CODE_EXEC_ADJACENT_REQUIRES_ACK } from "./definitions/dual.ts";
 import {
     STRICT_PLUGIN_HASH_CHECK,
     STRICT_SCANNER_FINDINGS,
@@ -44,6 +44,7 @@ export const GATES: ReadonlyArray<GateDefinition> = [
     STRICT_SENSITIVE_CHANGES,
     SENSITIVE_REQUIRES_ACK,
     EXTRA_PLUGIN_PATHS_DUAL,
+    CODE_EXEC_ADJACENT_REQUIRES_ACK,
     // (Step 12 adds the apply boundary to the gates that already declare
     //  appliesAt: [\"apply\"] — YAML_SHAPE_NORMAL, SENSITIVE_REQUIRES_ACK,
     //  and the new DESTRUCTIVE_YAML_SHAPE — plus registers apply's new

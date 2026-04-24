@@ -159,8 +159,10 @@ describe("exit 4 — success with warnings", () => {
         writeManifestFile(manifestPath, makeManifest({
             settings: { SSH_port: 2222 },
         }));
+        // SSH_port is also code-exec-adjacent (C1a) — needs --accept-code-exec.
         const code = await main(
-            ["setup", "import", manifestPath, "--accept-sensitive"],
+            ["setup", "import", manifestPath,
+                "--accept-sensitive", "--accept-code-exec"],
             env,
         );
         expect(code).toBe(4);

@@ -603,6 +603,13 @@ const IMPORT_FLAGS = {
         default: false,
         description: "accept all SENSITIVE-class setting changes (network endpoints, SSH, debug, directory redirection)",
     },
+    "accept-code-exec": {
+        type: "boolean",
+        default: false,
+        description:
+            "consent to KOReader interpolating values into os.execute / os.remove / shell calls " +
+            "(SSH_port, httpinspector_port, cover_image_path)",
+    },
     "accept-key": {
         type: "string",
         description: "accept SENSITIVE changes only for these comma-separated key names (e.g. SSH_port,debug)",
@@ -1014,6 +1021,9 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
         if (flags["accept-key"] !== undefined) {
             throw new ArgError("--strict-imports and --accept-key are mutually exclusive");
         }
+        if (flags["accept-code-exec"]) {
+            throw new ArgError("--strict-imports and --accept-code-exec are mutually exclusive");
+        }
     }
 
     const expectHash = flags["expect-hash"] !== undefined
@@ -1053,6 +1063,7 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
         label: flags.label,
         ...(expectHash ? { expectHash } : {}),
         acceptSensitive: flags["accept-sensitive"],
+        acceptCodeExec: flags["accept-code-exec"],
         ...(acceptKey ? { acceptKey } : {}),
         strictImports: flags["strict-imports"],
     }, env);

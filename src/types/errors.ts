@@ -73,6 +73,7 @@ export const ErrorCodes = {
     COMPAT_INCOMPATIBLE:  "COMPAT_INCOMPATIBLE",
     FAT_REQUIRES_ACK:     "FAT_REQUIRES_ACK",
     SENSITIVE_REQUIRES_ACK: "SENSITIVE_REQUIRES_ACK",
+    CODE_EXEC_REQUIRES_ACK: "CODE_EXEC_REQUIRES_ACK",
     SETUP_INVALID:        "SETUP_INVALID",
     MANIFEST_HASH_MISMATCH: "MANIFEST_HASH_MISMATCH",
     CATALOG_NOT_FOUND:    "CATALOG_NOT_FOUND",
@@ -90,6 +91,7 @@ export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];
 // override." CLI maps these to exit 3 instead of exit 1.
 export const POLICY_BLOCK_CODES = new Set<string>([
     ErrorCodes.SENSITIVE_REQUIRES_ACK,
+    ErrorCodes.CODE_EXEC_REQUIRES_ACK,
     ErrorCodes.FAT_REQUIRES_ACK,
     ErrorCodes.STRICT_IMPORT_BLOCKED,
     ErrorCodes.COMPAT_INCOMPATIBLE,

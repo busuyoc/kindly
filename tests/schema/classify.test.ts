@@ -3,6 +3,7 @@ import {
     classifyKey, filterForYaml,
     exfilClass, changeClass, hygieneClass,
     isSecretPath, isSensitivePath, isSensitiveKeyName, sensitiveDomain,
+    isCodeExecAdjacent,
 } from "../../src/schema/classify.ts";
 
 describe("classifyKey", () => {
@@ -225,6 +226,44 @@ describe("nested path helpers over axes", () => {
         expect(isSensitiveKeyName("SSH_port")).toBe(true);
         expect(isSensitiveKeyName("kosync.custom_server")).toBe(true);
         expect(isSensitiveKeyName("plugins_disabled")).toBe(false);
+    });
+});
+
+describe("isCodeExecAdjacent — C1a denylist (orthogonal to change axis)", () => {
+    test("SSH_port is code-exec-adjacent (dropbear -p interpolation)", () => {
+        expect(isCodeExecAdjacent("SSH_port")).toBe(true);
+    });
+
+    test("httpinspector_port is code-exec-adjacent", () => {
+        expect(isCodeExecAdjacent("httpinspector_port")).toBe(true);
+    });
+
+    test("cover_image_path is code-exec-adjacent (os.remove on KOReader side)", () => {
+        expect(isCodeExecAdjacent("cover_image_path")).toBe(true);
+    });
+
+    test("extra_plugin_paths is NOT code-exec-adjacent (it is code-exec, guarded by its own DUAL gate)", () => {
+        expect(isCodeExecAdjacent("extra_plugin_paths")).toBe(false);
+    });
+
+    test("normal SENSITIVE keys are NOT code-exec-adjacent (e.g. ota_server, home_dir)", () => {
+        expect(isCodeExecAdjacent("ota_server")).toBe(false);
+        expect(isCodeExecAdjacent("home_dir")).toBe(false);
+        expect(isCodeExecAdjacent("debug")).toBe(false);
+    });
+
+    test("unknown keys are NOT code-exec-adjacent", () => {
+        expect(isCodeExecAdjacent("footer")).toBe(false);
+        expect(isCodeExecAdjacent("plugins_disabled")).toBe(false);
+    });
+
+    test("cover_image_path is also SENSITIVE (fs class) — not bypassable via changeClass=none", () => {
+        // Data-file invariant: the three code-exec-adjacent keys all have a
+        // non-none change-class, so they surface in sensitiveHits too and
+        // independently require --accept-sensitive (or --accept-key=<name>).
+        expect(changeClass("SSH_port")).not.toBe("none");
+        expect(changeClass("httpinspector_port")).not.toBe("none");
+        expect(changeClass("cover_image_path")).not.toBe("none");
     });
 });
 

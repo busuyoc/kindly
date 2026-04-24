@@ -1,7 +1,7 @@
 {
   "$schema_version": 1,
   "curated_at": "2026-04-24",
-  "note": "Three-axis classification for settings.reader.lua keys. Sibling asset to data/schemas/ and data/taxonomy/. Top-level keys and dotted nested paths both live under 'keys'. Missing axes default to exfil=normal, change=none, hygiene=persistent. Add a key: edit one row. Referenced by src/schema/classify.ts.",
+  "note": "Three-axis classification for settings.reader.lua keys. Sibling asset to data/schemas/ and data/taxonomy/. Top-level keys and dotted nested paths both live under 'keys'. Missing axes default to exfil=normal, change=none, hygiene=persistent. Add a key: edit one row. Referenced by src/schema/classify.ts. `code_exec_adjacent` is an orthogonal denylist of keys whose values KOReader interpolates into os.execute / os.remove / shell calls — distinct from the `change` axis because the user-facing consent flag is different (--accept-code-exec vs --accept-sensitive).",
   "axes": {
     "exfil": {
       "secret": "Plaintext credentials / PII. Never emit the value to YAML, JSON, logs, or the terminal. Denylist is hard — if in doubt, mark as secret.",
@@ -37,6 +37,7 @@
     "calibre_wireless_password":    {"exfil": "secret"},
     "calibre_wireless_url":         {"change": "sensitive-network"},
     "closed_rotation_mode":         {"hygiene": "ephemeral"},
+    "cover_image_path":             {"change": "sensitive-fs"},
     "current_tries_number":         {"hygiene": "ephemeral"},
     "currently_blocked":            {"hygiene": "ephemeral"},
     "debug":                        {"change": "sensitive-debug"},
@@ -77,5 +78,10 @@
     {"suffix": "_initial_default_setup_done2", "set": {"hygiene": "ephemeral"}},
     {"regex": "^simpleui_defaults_v\\d+$",     "set": {"hygiene": "ephemeral"}},
     {"regex": "_migrated_v\\d+$",              "set": {"hygiene": "ephemeral"}}
+  ],
+  "code_exec_adjacent": [
+    "cover_image_path",
+    "httpinspector_port",
+    "SSH_port"
   ]
 }

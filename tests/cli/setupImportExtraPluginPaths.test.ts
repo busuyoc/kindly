@@ -159,8 +159,12 @@ describe("setup import — W31a extra_plugin_paths dual gate", () => {
         writeManifestFile(manifestPath, makeManifest({
             settings: { SSH_port: 2222 },  // SENSITIVE but not extra_plugin_paths
         }));
+        // SSH_port is also code-exec-adjacent (C1a) — needs --accept-code-exec
+        // in addition to --accept-sensitive. The test's point is that W31a
+        // (extra_plugin_paths) specifically does NOT fire.
         const code = await main(
-            ["setup", "import", manifestPath, "--accept-sensitive"],
+            ["setup", "import", manifestPath,
+                "--accept-sensitive", "--accept-code-exec"],
             env,
         );
         expect(code).toBe(4);

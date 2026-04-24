@@ -20,6 +20,7 @@ import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
 import { runPhase } from "../gates/orchestrator.ts";
 import { YAML_SHAPE_NORMAL } from "../gates/definitions/shape.ts";
+import { CODE_EXEC_ADJACENT_REQUIRES_ACK } from "../gates/definitions/dual.ts";
 import { appendGateEvent } from "../history/gateLog.ts";
 
 export interface ApplyOptions {
@@ -27,6 +28,12 @@ export interface ApplyOptions {
     dryRun?: boolean;
     backupDir?: string;
     label?: string;
+    /**
+     * C1a: bypass CODE_EXEC_ADJACENT_REQUIRES_ACK at the apply boundary.
+     * Consents to KOReader interpolating YAML-supplied values into
+     * os.execute / os.remove / shell calls.
+     */
+    acceptCodeExec?: boolean;
 }
 
 export function executeApply(opts: ApplyOptions, env: CliEnv): ApplyResult {
@@ -44,6 +51,11 @@ export function executeApply(opts: ApplyOptions, env: CliEnv): ApplyResult {
     const onDevice = parseSettingsFile(onDeviceSrc) as Record<string, LuaValue>;
     const fromYaml = yamlToLua(readText(yamlPath, "user-provided")) as Record<string, LuaValue>;
 
+    // Compute the diff first — CODE_EXEC_ADJACENT_REQUIRES_ACK needs
+    // `changes` in its context to identify which code-exec-adjacent keys
+    // the YAML is touching.
+    const changes = computeChanges(onDevice, fromYaml);
+
     // Apply-side gate run — Step 12 of the gates refactor. YAML_SHAPE_NORMAL
     // is the S89 activation: a crafted YAML with `kosync: null`, `kosync:
     // []`, `kosync.userkey: ~`, or a top-level SECRET key (e.g.
@@ -52,16 +64,26 @@ export function executeApply(opts: ApplyOptions, env: CliEnv): ApplyResult {
     // shape rejection has zero false-positive risk and the preview output
     // should reflect the same block the write would.
     //
+    // CODE_EXEC_ADJACENT_REQUIRES_ACK (C1a) closes the apply-side gap for
+    // the SSH_port / httpinspector_port / cover_image_path family — keys
+    // KOReader interpolates into os.execute/os.remove. Bypass:
+    // --accept-code-exec. firesIn: non-dry-run, so --dry-run previews
+    // show the change without blocking.
+    //
     // Additional apply gates (SENSITIVE_REQUIRES_ACK behind
     // --untrusted-yaml; DESTRUCTIVE_YAML_SHAPE for mass-removal) are
     // queued for Step 12b — they have real FP risk on legitimate user
     // edits and want their own activation/flag surface.
     runPhase({
         boundary: "apply",
-        registry: [YAML_SHAPE_NORMAL],
+        registry: [YAML_SHAPE_NORMAL, CODE_EXEC_ADJACENT_REQUIRES_ACK],
         dryRun: opts.dryRun ?? false,
         strictImports: false,
-        opts: { yamlSettings: fromYaml },
+        opts: {
+            yamlSettings: fromYaml,
+            changes,
+            acceptCodeExec: !!opts.acceptCodeExec,
+        },
         logger: (fired) => {
             if (fired.result.kind === "bypass") {
                 appendGateEvent(env, {
@@ -79,8 +101,6 @@ export function executeApply(opts: ApplyOptions, env: CliEnv): ApplyResult {
             }
         },
     });
-
-    const changes = computeChanges(onDevice, fromYaml);
 
     if (changes.length === 0) {
         return {

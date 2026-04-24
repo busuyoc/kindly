@@ -10,6 +10,8 @@
 // they're introduced at throw sites; callers reference ErrorCodes.X rather
 // than raw strings so typos get caught at compile time.
 
+import { sanitizeForTerminal } from "../cli/sanitize.ts";
+
 export interface Remediation {
     /** Short human-readable suggestion. */
     text: string;
@@ -18,13 +20,28 @@ export interface Remediation {
 }
 
 export class KindlyError extends Error {
+    public remediation: Remediation[];
+
     constructor(
         public code: string,
         message: string,
-        public remediation: Remediation[] = [],
+        remediation: Remediation[] = [],
     ) {
-        super(message);
+        // Sanitize user-facing strings at construction time. Error
+        // messages are typically assembled by interpolating attacker-
+        // controlled fields (key names, manifest `meta.name`, plugin
+        // IDs) into templates that then flow through several renderers
+        // (JSON envelope, text, history log, trace). Doing the scrub
+        // once here means every consumer sees safe bytes. Belt to the
+        // Writer-layer suspenders; `sanitizeForTerminal` is idempotent.
+        super(sanitizeForTerminal(message));
         this.name = "KindlyError";
+        this.remediation = remediation.map(r => ({
+            text: sanitizeForTerminal(r.text),
+            ...(r.command !== undefined
+                ? { command: sanitizeForTerminal(r.command) }
+                : {}),
+        }));
     }
 
     // JSON.stringify skips Error.message by default (non-enumerable). Define

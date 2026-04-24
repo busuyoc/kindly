@@ -54,7 +54,16 @@ function luaNumberString(n: number): string {
     if (Number.isInteger(n)) return n.toString();
     // "%.14g" — JS's toPrecision gives us a reasonable approximation for
     // settings.reader.lua, which rarely stores high-precision floats.
-    return n.toPrecision(14).replace(/\.?0+$/, "").replace(/(\.\d*?)0+e/, "$1e");
+    const s = n.toPrecision(14);
+    const eIdx = s.indexOf("e");
+    if (eIdx === -1) {
+        return s.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+    }
+    const mantissa = s
+        .slice(0, eIdx)
+        .replace(/(\.\d*?)0+$/, "$1")
+        .replace(/\.$/, "");
+    return mantissa + s.slice(eIdx);
 }
 
 // Serialize a key. Keys are serialized recursively and wrapped in [ ].

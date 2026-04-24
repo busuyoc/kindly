@@ -14,6 +14,7 @@
 // Callers that need to parse larger documents pass an explicit cap.
 
 import { parse as yamlParseRaw } from "yaml";
+import { ErrorCodes, KindlyError } from "../types/errors.ts";
 
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024;   // 10 MiB
 const MAX_ALIAS_COUNT = 100;
@@ -30,22 +31,27 @@ export class YamlTooLargeError extends Error {
     }
 }
 
+// yaml@2's `version: "1.2"` option only sets a default; a `%YAML 1.1`
+// directive in the source still flips parsing to 1.1 semantics, which
+// reinterprets `no/yes/on/off` as booleans (S488). Reject any directive
+// at the source layer — kindly never emits one and publishers have no
+// legitimate reason to include one.
+const YAML_DIRECTIVE_RE = /^%YAML\b/m;
 export function parseYamlSafe(src: string, opts: ParseYamlSafeOptions = {}): unknown {
     const limit = opts.maxBytes ?? DEFAULT_MAX_BYTES;
-    // String.length is UTF-16 units; byteLength via Buffer is the actual
-    // on-the-wire byte count. We cap on bytes so the check is stable
-    // across encodings.
     const bytes = Buffer.byteLength(src, "utf8");
     if (bytes > limit) {
         throw new YamlTooLargeError(bytes, limit);
     }
-    // logLevel:"error" keeps YAMLWarning off stderr — it breaks --json
-    // framing for consumers parsing line-delimited envelopes, and the
-    // multi-line stack traces can leak node_modules absolute paths.
-    // We deliberately pick "error" not "silent": the latter also swallows
-    // the throw on malformed YAML (yaml@2 silently returns a partial
-    // object), which would turn parse errors into invisible data issues.
+    if (YAML_DIRECTIVE_RE.test(src)) {
+        throw new KindlyError(
+            ErrorCodes.YAML_DIRECTIVE,
+            "%YAML version directive is not allowed",
+            [{ text: "Remove the %YAML directive from the document header. kindly pins YAML 1.2 semantics." }],
+        );
+    }
     return yamlParseRaw(src, {
+        version: "1.2",
         maxAliasCount: MAX_ALIAS_COUNT,
         logLevel: "error",
     });

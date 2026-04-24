@@ -47,6 +47,13 @@ function luaToPlain(v: LuaValue): unknown {
 // Sibling structure-sharing (same object referenced at two non-overlapping
 // paths) is preserved: we add on entry and remove on exit, so only
 // self-referential cycles trip the guard.
+// Reserved keys that, if written into any JS object we later index with a
+// dynamic string, could re-open prototype pollution (S800). yaml@2 returns
+// regular `{}`-prototype objects, so `for..in` or `obj[name]` reads across
+// downstream code paths would surface these. Reject at the parse seam so
+// nothing downstream has to remember.
+const RESERVED_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
 function plainToLua(v: unknown, visited: WeakSet<object> = new WeakSet()): LuaValue {
     if (v === null || v === undefined) return null;
     if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") return v;
@@ -65,6 +72,13 @@ function plainToLua(v: unknown, visited: WeakSet<object> = new WeakSet()): LuaVa
         if (Array.isArray(v)) return v.map(x => plainToLua(x, visited));
         const out: { [k: string]: LuaValue } = {};
         for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+            if (RESERVED_KEYS.has(k)) {
+                throw new KindlyError(
+                    ErrorCodes.YAML_RESERVED_KEY,
+                    `YAML key "${k}" is reserved and not allowed`,
+                    [{ text: `Rename the "${k}" key. kindly rejects __proto__, constructor, and prototype keys.` }],
+                );
+            }
             out[k] = plainToLua(val, visited);
         }
         return out;

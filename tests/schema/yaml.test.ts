@@ -176,3 +176,44 @@ describe("yamlToLua — cyclic anchor guard (P-cluster)", () => {
         expect(t.root).toEqual({ a: { b: { c: { d: 1 } } } } as any);
     });
 });
+
+describe("yamlToLua — reserved-key rejection (C6 / S800)", () => {
+    test("rejects top-level __proto__ key", () => {
+        expect(() => yamlToLua("__proto__: evil\nx: 1\n"))
+            .toThrow(/reserved and not allowed/);
+    });
+
+    test("rejects nested __proto__ key", () => {
+        expect(() => yamlToLua("wrap:\n  __proto__: { polluted: true }\n"))
+            .toThrow(/reserved and not allowed/);
+    });
+
+    test("rejects constructor key", () => {
+        expect(() => yamlToLua("constructor: payload\n"))
+            .toThrow(/reserved and not allowed/);
+    });
+
+    test("rejects prototype key", () => {
+        expect(() => yamlToLua("prototype: payload\n"))
+            .toThrow(/reserved and not allowed/);
+    });
+
+    test("error code is YAML_RESERVED_KEY", () => {
+        try {
+            yamlToLua("__proto__: x\n");
+            expect.unreachable();
+        } catch (e) {
+            expect(e).toBeInstanceOf(KindlyError);
+            expect((e as KindlyError).code).toBe(ErrorCodes.YAML_RESERVED_KEY);
+        }
+    });
+
+    test("substrings of reserved keys are allowed", () => {
+        // Only exact matches reject; keys that merely contain the reserved
+        // substring (e.g. "my_prototype") are legitimate user data.
+        const t = yamlToLua("my_prototype: 1\nproto_wrapper: 2\nuse_constructor: 3\n") as Record<string, LuaValue>;
+        expect(t.my_prototype).toBe(1);
+        expect(t.proto_wrapper).toBe(2);
+        expect(t.use_constructor).toBe(3);
+    });
+});

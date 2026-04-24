@@ -80,6 +80,8 @@ export const ErrorCodes = {
     PLUGIN_NOT_FOUND:     "PLUGIN_NOT_FOUND",
     YAML_SHAPE_BLOCKED:   "YAML_SHAPE_BLOCKED",
     YAML_CYCLIC:          "YAML_CYCLIC",
+    YAML_DIRECTIVE:       "YAML_DIRECTIVE",
+    YAML_RESERVED_KEY:    "YAML_RESERVED_KEY",
 } as const;
 
 export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];

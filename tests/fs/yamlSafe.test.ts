@@ -1,5 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import { parseYamlSafe, YamlTooLargeError } from "../../src/fs/yamlSafe.ts";
+import { ErrorCodes } from "../../src/types/errors.ts";
 
 describe("parseYamlSafe — A12 YAML-bomb guard", () => {
     test("parses normal YAML unchanged", () => {
@@ -56,5 +57,41 @@ h: [*g,*g,*g,*g,*g,*g,*g,*g,*g]
             console.error = origError;
         }
         expect(captured.join("\n")).not.toMatch(/YAMLWarning|Unresolved tag/i);
+    });
+
+    describe("C6 — YAML 1.1 directive rejection (S488)", () => {
+        test("rejects %YAML 1.1 directive", () => {
+            expect(() => parseYamlSafe("%YAML 1.1\n---\nx: 1\n"))
+                .toThrow(/YAML version directive is not allowed/);
+        });
+
+        test("rejects %YAML 1.2 directive (all directives banned, not just 1.1)", () => {
+            expect(() => parseYamlSafe("%YAML 1.2\n---\nx: 1\n"))
+                .toThrow(/YAML version directive is not allowed/);
+        });
+
+        test("error code is YAML_DIRECTIVE", () => {
+            try {
+                parseYamlSafe("%YAML 1.1\n---\nx: 1\n");
+                expect.unreachable();
+            } catch (e: any) {
+                expect(e.code).toBe(ErrorCodes.YAML_DIRECTIVE);
+            }
+        });
+
+        test("without directive, no/yes/on parse as strings (YAML 1.2 core schema)", () => {
+            // Without a directive, yaml@2 defaults to 1.2 and parses these as
+            // strings. This is the positive path C6 preserves.
+            expect(parseYamlSafe("x: no\ny: yes\nz: on\n")).toEqual({ x: "no", y: "yes", z: "on" });
+        });
+
+        test("true/false still parse as booleans", () => {
+            expect(parseYamlSafe("a: true\nb: false\n")).toEqual({ a: true, b: false });
+        });
+
+        test("the string '%YAML' inside a value is allowed", () => {
+            // Only directives (column-0, standalone line) are rejected.
+            expect(parseYamlSafe('note: "see %YAML docs"\n')).toEqual({ note: "see %YAML docs" });
+        });
     });
 });

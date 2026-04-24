@@ -11,9 +11,9 @@
 // key — only keys absent from the schema entirely are flagged as potential
 // typos.
 
-import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readText } from "../fs/safeRead.ts";
 
 export type SchemaKeyType = "boolean" | "number" | "string" | "table" | "unknown";
 
@@ -41,7 +41,7 @@ let defaultSchema: Schema | null = null;
 export function loadSchema(path?: string): Schema {
     if (!path && defaultSchema) return defaultSchema;
     const p = path ?? defaultSchemaPath();
-    const raw = readFileSync(p, "utf8");
+    const raw = readText(p, "derived-from-cwd");
     const parsed = JSON.parse(raw) as Schema;
     if (!path) defaultSchema = parsed;
     return parsed;

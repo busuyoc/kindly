@@ -7,10 +7,10 @@
 // grandfathered per 90 §7 "never rename an id".
 
 import {
-    existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync,
-    statfsSync, statSync,
+    mkdirSync, readdirSync, rmdirSync, statfsSync,
 } from "node:fs";
 import { join } from "node:path";
+import { exists, readText, statFollow } from "../fs/safeRead.ts";
 import { parseSettingsFile, LuaParseError } from "../lua/reader.ts";
 import { classifyKey, isSecretPath } from "../schema/classify.ts";
 import type { LuaValue } from "../lua/writer.ts";
@@ -68,7 +68,7 @@ export function executeDoctor(env: CliEnv, opts: DoctorOptions = {}): DoctorResu
     }
 
     const settingsPath = mount.settingsPath;
-    if (!existsSync(settingsPath)) {
+    if (!exists(settingsPath, "derived-from-mount")) {
         checks.push({
             id: "settings_present", category: "settings",
             severity: "fatal", ok: false,
@@ -85,7 +85,7 @@ export function executeDoctor(env: CliEnv, opts: DoctorOptions = {}): DoctorResu
 
     let parsed: Record<string, LuaValue>;
     try {
-        parsed = parseSettingsFile(readFileSync(settingsPath, "utf8")) as Record<string, LuaValue>;
+        parsed = parseSettingsFile(readText(settingsPath, "derived-from-mount")) as Record<string, LuaValue>;
         const keyCount = Object.keys(parsed).length;
         checks.push({
             id: "settings_parseable", category: "settings",
@@ -106,9 +106,9 @@ export function executeDoctor(env: CliEnv, opts: DoctorOptions = {}): DoctorResu
     // .old sibling — KOReader's own recovery point. Kindly still works if
     // it's corrupt, so the failure is `warning` not `fatal` (90 §2).
     const oldPath = settingsPath + ".old";
-    if (existsSync(oldPath)) {
+    if (exists(oldPath, "derived-from-mount")) {
         try {
-            parseSettingsFile(readFileSync(oldPath, "utf8"));
+            parseSettingsFile(readText(oldPath, "derived-from-mount"));
             checks.push({
                 id: "old_parseable", category: "settings",
                 severity: "info", ok: true,
@@ -406,7 +406,7 @@ function runDiskChecks(env: CliEnv, mount: KindleMount): DoctorCheck[] {
     // just: if missing, check the parent is writable; if present, stat it.
     let writable = false;
     let writableDetail: string | undefined;
-    if (existsSync(kindlyDir)) {
+    if (exists(kindlyDir, "derived-from-cwd")) {
         try {
             const probe = join(kindlyDir, `.doctor-probe-${process.pid}`);
             mkdirSync(probe);
@@ -489,16 +489,16 @@ function runDiskChecks(env: CliEnv, mount: KindleMount): DoctorCheck[] {
     const backupsDir = join(kindlyDir, "backups");
     let bytes = 0;
     let fileCount = 0;
-    if (existsSync(backupsDir)) {
+    if (exists(backupsDir, "derived-from-cwd")) {
         for (const f of walkFiles(backupsDir)) {
             try {
-                bytes += statSync(f).size;
+                bytes += statFollow(f, "derived-from-cwd").size;
                 fileCount++;
             } catch { /* skip unreadable */ }
         }
     }
     let oldestIso = "";
-    if (existsSync(backupsDir)) {
+    if (exists(backupsDir, "derived-from-cwd")) {
         try {
             const entries = readdirSync(backupsDir).sort();
             oldestIso = entries[0] ?? "";

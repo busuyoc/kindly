@@ -3,8 +3,9 @@
 // v0.1 has one preset: "minimal". Presets live in src/presets/ so adding
 // a new one is one file + one dispatch case.
 
-import { existsSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { exists } from "../fs/safeRead.ts";
 import { parseArgs, type FlagSpecs } from "../cli/args.ts";
 import { type CliEnv } from "../cli/env.ts";
 import { info, ok } from "../cli/log.ts";
@@ -41,7 +42,7 @@ export async function runInit(argv: readonly string[], env: CliEnv): Promise<num
     }
 
     const outPath = resolve(env.cwd, flags.output!);
-    if (existsSync(outPath) && !flags.force) {
+    if (exists(outPath, "user-provided") && !flags.force) {
         throw new Error(`${outPath} already exists. Pass --force to overwrite.`);
     }
 

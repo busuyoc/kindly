@@ -5,8 +5,9 @@
 // dry-run (that's the whole point of "export"); throws KindlyError on user-
 // visible failures.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { exists, readText } from "../fs/safeRead.ts";
 import { ArgError } from "../cli/args.ts";
 import { type CliEnv, resolveMount, resolveSetupsDir } from "../cli/env.ts";
 import { parseSettingsFile } from "../lua/reader.ts";
@@ -73,7 +74,7 @@ export function executeSetupExport(
     const mountEnv = opts.mount ? { ...env, mountOverride: opts.mount } : env;
     const mount = needsMount ? resolveMount(mountEnv) : null;
 
-    if (mount && !existsSync(mount.settingsPath) && !template) {
+    if (mount && !exists(mount.settingsPath, "derived-from-mount") && !template) {
         throw new KindlyError(
             ErrorCodes.SETTINGS_NOT_FOUND,
             `Kindle mount found at ${mount.root}, but ${mount.settingsPath} doesn't exist. ` +
@@ -98,7 +99,7 @@ export function executeSetupExport(
         droppedEphemerals = filtered.droppedEphemerals;
     } else {
         sourcePath = mount!.settingsPath;
-        const raw = readFileSync(mount!.settingsPath, "utf8");
+        const raw = readText(mount!.settingsPath, "derived-from-mount");
         const parsed = parseSettingsFile(raw) as Record<string, LuaValue>;
         const filtered = filterForYaml(parsed, "minimal");
         sourceSettings = filtered.kept as Record<string, LuaValue>;
@@ -187,7 +188,7 @@ export function executeSetupExport(
 
     let bytesWritten = 0;
     if (!opts.dryRun) {
-        if (existsSync(outPath) && !opts.force) {
+        if (exists(outPath, "user-provided") && !opts.force) {
             throw new KindlyError(
                 ErrorCodes.OUTPUT_EXISTS,
                 `${outPath} already exists. Pass --force to overwrite, or --output <path> to write elsewhere.`,
@@ -195,7 +196,7 @@ export function executeSetupExport(
             );
         }
         const outDir = dirname(outPath);
-        if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
+        if (!exists(outDir, "user-provided")) mkdirSync(outDir, { recursive: true });
         if (isFat) {
             const allFiles = new Map<string, Buffer>();
             for (const [k, v] of collectedPlugins.files) allFiles.set(k, v);

@@ -20,8 +20,8 @@
 // plugin runs at all; mis-pushing them can brick a plugin the user relies on.
 // Once W19-W24 plugin catalog adds per-plugin severity, we'll refine this.
 
-import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { readText } from "../fs/safeRead.ts";
 
 export type ControlHint = "toggle" | "number" | "text" | "enum" | "color" | "structured";
 
@@ -65,7 +65,7 @@ let cached: Taxonomy | undefined;
 export function loadTaxonomy(path?: string): Taxonomy {
     if (cached && !path) return cached;
     const p = path ?? resolve(import.meta.dir, "..", "..", "data/taxonomy/settings.v1.json");
-    const parsed = JSON.parse(readFileSync(p, "utf8")) as Taxonomy;
+    const parsed = JSON.parse(readText(p, "derived-from-cwd")) as Taxonomy;
     if (!path) cached = parsed;
     return parsed;
 }

@@ -5,8 +5,9 @@
 // Commands use this via src/commands/pull.ts (text/JSON rendering). serve
 // reaches it transitively through the CLI dispatcher (W26 argv passthrough).
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { exists, readText } from "../fs/safeRead.ts";
 import { parseSettingsFile } from "../lua/reader.ts";
 import { luaToYaml } from "../schema/yaml.ts";
 import type { LuaTable } from "../lua/writer.ts";
@@ -24,7 +25,7 @@ export function executePull(opts: PullOptions, env: CliEnv): PullResult {
     const mount = resolveMount(env);
     const settingsPath = mount.settingsPath;
 
-    if (!existsSync(settingsPath)) {
+    if (!exists(settingsPath, "derived-from-mount")) {
         throw new KindlyError(
             ErrorCodes.SETTINGS_NOT_FOUND,
             `Kindle mount found at ${mount.root}, but ${settingsPath} doesn't exist. ` +
@@ -33,14 +34,14 @@ export function executePull(opts: PullOptions, env: CliEnv): PullResult {
         );
     }
 
-    const src = readFileSync(settingsPath, "utf8");
+    const src = readText(settingsPath, "derived-from-mount");
     const parsed = parseSettingsFile(src) as LuaTable;
 
     const mode: "minimal" | "full" = opts.full ? "full" : "minimal";
     const { yaml, filter } = luaToYaml(parsed, mode);
 
     const outPath = resolve(env.cwd, opts.output ?? "kindly.yaml");
-    if (existsSync(outPath) && !opts.force) {
+    if (exists(outPath, "user-provided") && !opts.force) {
         throw new KindlyError(
             ErrorCodes.OUTPUT_EXISTS,
             `${outPath} already exists. Pass --force to overwrite, or --output <path> to write elsewhere.`,

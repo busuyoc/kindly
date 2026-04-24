@@ -15,8 +15,9 @@
 // (unless --no-safety-snapshot) at `<cwd>/.kindly/pre-rollback/<stamp>/`.
 // If the rollback itself goes wrong, you can roll it forward again.
 
-import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
+import { copyFile, exists, readBytes, statFollow } from "../fs/safeRead.ts";
 
 import { ArgError, parseArgs, type FlagSpecs } from "../cli/args.ts";
 import { type CliEnv, resolveMount } from "../cli/env.ts";
@@ -71,7 +72,7 @@ export interface RollbackOptions {
 
 export function executeRollback(opts: RollbackOptions, env: CliEnv): RollbackResult {
     const snapshotDir = resolve(env.cwd, opts.snapshotDir);
-    if (!existsSync(snapshotDir) || !statSync(snapshotDir).isDirectory()) {
+    if (!exists(snapshotDir, "user-provided") || !statFollow(snapshotDir, "user-provided").isDirectory()) {
         throw new KindlyError(
             ErrorCodes.SNAPSHOT_INVALID,
             `snapshot not found or not a directory: ${snapshotDir}`,
@@ -81,8 +82,8 @@ export function executeRollback(opts: RollbackOptions, env: CliEnv): RollbackRes
 
     const settingsSnap = join(snapshotDir, SETTINGS_FILENAME);
     const fatSnap = join(snapshotDir, FAT_FILENAME);
-    const hasSettings = existsSync(settingsSnap);
-    const hasFat = existsSync(fatSnap);
+    const hasSettings = exists(settingsSnap, "user-provided");
+    const hasFat = exists(fatSnap, "user-provided");
 
     if (!hasSettings && !hasFat) {
         throw new KindlyError(
@@ -135,11 +136,11 @@ export function executeRollback(opts: RollbackOptions, env: CliEnv): RollbackRes
         // Mirror the pre-import layout: stamp dir holds the file directly,
         // no extra nesting. Do the backup ourselves and tell safeWrite to
         // skip its own timestamped archive.
-        if (preRollbackDir && existsSync(mount.settingsPath)) {
+        if (preRollbackDir && exists(mount.settingsPath, "derived-from-mount")) {
             const settingsBackupPath = join(preRollbackDir, basename(mount.settingsPath));
-            copyFileSync(mount.settingsPath, settingsBackupPath);
+            copyFile(mount.settingsPath, "derived-from-mount", settingsBackupPath, "derived-from-cwd");
         }
-        const buf = readFileSync(settingsSnap);
+        const buf = readBytes(settingsSnap, "user-provided");
         safeWrite(mount.settingsPath, buf.toString("utf8"), {
             verifyLua: true,
             skipBackup: true,
@@ -153,7 +154,7 @@ export function executeRollback(opts: RollbackOptions, env: CliEnv): RollbackRes
         if (preRollbackDir) {
             // createTarGz refuses empty input; filter to the paths still on device.
             const existing = fatEntries.filter(
-                (p) => existsSync(join(mount.koreaderRoot, p)),
+                (p) => exists(join(mount.koreaderRoot, p), "derived-from-mount"),
             );
             if (existing.length > 0) {
                 const preFat = join(preRollbackDir, FAT_FILENAME);
@@ -225,7 +226,7 @@ export function renderRollback(result: RollbackResult, env: CliEnv): void {
 // snapshots (executeRollback throws otherwise). We detect settings presence
 // by the FS state; but result.snapshotDir is trusted in renderer context.
 function settingsPresent(result: RollbackResult): boolean {
-    return existsSync(join(result.snapshotDir, SETTINGS_FILENAME));
+    return exists(join(result.snapshotDir, SETTINGS_FILENAME), "user-provided");
 }
 
 // Resolve a 1-based history index (oldest = 1) to the matching mutation's

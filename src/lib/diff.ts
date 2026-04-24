@@ -2,8 +2,8 @@
 // Pure: read-only, returns a typed result; never prints. Throws KindlyError
 // on missing YAML / mount and ArgError on unknown --category.
 
-import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { exists, readText } from "../fs/safeRead.ts";
 import { ArgError } from "../cli/args.ts";
 import { parseSettingsFile } from "../lua/reader.ts";
 import { yamlToLua } from "../schema/yaml.ts";
@@ -23,7 +23,7 @@ export interface DiffOptions {
 
 export function executeDiff(opts: DiffOptions, env: CliEnv): DiffResult {
     const yamlPath = resolve(env.cwd, opts.file ?? "kindly.yaml");
-    if (!existsSync(yamlPath)) {
+    if (!exists(yamlPath, "user-provided")) {
         throw new KindlyError(
             ErrorCodes.YAML_NOT_FOUND,
             `${yamlPath} not found. Run \`kindly pull\` first?`,
@@ -32,8 +32,8 @@ export function executeDiff(opts: DiffOptions, env: CliEnv): DiffResult {
     }
 
     const mount = resolveMount(env);
-    const onDevice = parseSettingsFile(readFileSync(mount.settingsPath, "utf8")) as Record<string, LuaValue>;
-    const fromYaml = yamlToLua(readFileSync(yamlPath, "utf8")) as Record<string, LuaValue>;
+    const onDevice = parseSettingsFile(readText(mount.settingsPath, "derived-from-mount")) as Record<string, LuaValue>;
+    const fromYaml = yamlToLua(readText(yamlPath, "user-provided")) as Record<string, LuaValue>;
 
     const allChanges = computeChanges(onDevice, fromYaml);
 

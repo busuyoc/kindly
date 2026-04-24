@@ -14,10 +14,10 @@
 // isSafeRelativePath() on the manifest side.
 
 import {
-    existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync,
-    writeFileSync,
+    mkdirSync, readdirSync, rmSync, writeFileSync,
 } from "node:fs";
 import { dirname, join, posix } from "node:path";
+import { exists, readBytes } from "../fs/safeRead.ts";
 import { hashBytes } from "./canonical.ts";
 import { isSafeRelativePath, type EmbeddedFile } from "./schema.ts";
 
@@ -30,7 +30,7 @@ export type CollectedFiles = {
 // under each *.koplugin/ subdirectory. Path keys are relative to the
 // plugins root, e.g. "SSH.koplugin/main.lua".
 export function collectPluginDirs(pluginsRoot: string): CollectedFiles {
-    if (!existsSync(pluginsRoot)) return { declared: [], files: new Map() };
+    if (!exists(pluginsRoot, "derived-from-mount")) return { declared: [], files: new Map() };
 
     const declared: EmbeddedFile[] = [];
     const files = new Map<string, Buffer>();
@@ -56,7 +56,7 @@ export function collectPluginDirs(pluginsRoot: string): CollectedFiles {
 // at import time: a `plugins.disabled` entry that names a plugin not in
 // this list is inert — KOReader has nothing to toggle.
 export function listInstalledPluginFolders(pluginsRoot: string): string[] {
-    if (!existsSync(pluginsRoot)) return [];
+    if (!exists(pluginsRoot, "derived-from-mount")) return [];
     return readdirSync(pluginsRoot, { withFileTypes: true })
         .filter((e) => e.isDirectory() && e.name.endsWith(".koplugin"))
         .filter((e) => !e.name.startsWith("."))
@@ -76,7 +76,7 @@ export function findInertToggles(
 }
 
 export function collectPatches(patchesRoot: string): CollectedFiles {
-    if (!existsSync(patchesRoot)) return { declared: [], files: new Map() };
+    if (!exists(patchesRoot, "derived-from-mount")) return { declared: [], files: new Map() };
 
     const declared: EmbeddedFile[] = [];
     const files = new Map<string, Buffer>();
@@ -90,7 +90,7 @@ export function collectPatches(patchesRoot: string): CollectedFiles {
 
     for (const name of entries) {
         const abs = join(patchesRoot, name);
-        const buf = readFileSync(abs);
+        const buf = readBytes(abs, "derived-from-mount");
         const rel = name;                 // flat: no nested dirs
         if (!isSafeRelativePath(rel)) continue;
         declared.push({
@@ -120,7 +120,7 @@ function walkCollect(
             walkCollect(abs, rel, declared, files);
         } else if (e.isFile()) {
             if (!isSafeRelativePath(rel)) continue;
-            const buf = readFileSync(abs);
+            const buf = readBytes(abs, "derived-from-mount");
             declared.push({
                 path: rel,
                 hash: hashBytes(buf),
@@ -151,12 +151,12 @@ export function installPluginFiles(
         topLevelDirs.add(seg);
     }
 
-    if (!existsSync(pluginsRoot)) mkdirSync(pluginsRoot, { recursive: true });
+    if (!exists(pluginsRoot, "derived-from-mount")) mkdirSync(pluginsRoot, { recursive: true });
 
     // Wipe existing.
     for (const name of topLevelDirs) {
         const target = join(pluginsRoot, name);
-        if (existsSync(target)) rmSync(target, { recursive: true, force: true });
+        if (exists(target, "derived-from-mount")) rmSync(target, { recursive: true, force: true });
     }
 
     // Lay down new.
@@ -182,7 +182,7 @@ export function installPatches(
     files: ReadonlyMap<string, Buffer>,
 ): void {
     if (declared.length === 0) return;
-    if (!existsSync(patchesRoot)) mkdirSync(patchesRoot, { recursive: true });
+    if (!exists(patchesRoot, "derived-from-mount")) mkdirSync(patchesRoot, { recursive: true });
 
     for (const d of declared) {
         if (!isSafeRelativePath(d.path)) {

@@ -6,8 +6,8 @@
 // This is the core safety property — a half-populated YAML doesn't wipe
 // your zlibrary password.
 
-import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { exists, readText } from "../fs/safeRead.ts";
 import { parseSettingsFile } from "../lua/reader.ts";
 import { dumpSettingsFile } from "../lua/writer.ts";
 import type { LuaTable, LuaValue } from "../lua/writer.ts";
@@ -28,7 +28,7 @@ export interface ApplyOptions {
 
 export function executeApply(opts: ApplyOptions, env: CliEnv): ApplyResult {
     const yamlPath = resolve(env.cwd, opts.file ?? "kindly.yaml");
-    if (!existsSync(yamlPath)) {
+    if (!exists(yamlPath, "user-provided")) {
         throw new KindlyError(
             ErrorCodes.YAML_NOT_FOUND,
             `${yamlPath} not found. Run \`kindly pull\` first?`,
@@ -37,9 +37,9 @@ export function executeApply(opts: ApplyOptions, env: CliEnv): ApplyResult {
     }
 
     const mount = resolveMount(env);
-    const onDeviceSrc = readFileSync(mount.settingsPath, "utf8");
+    const onDeviceSrc = readText(mount.settingsPath, "derived-from-mount");
     const onDevice = parseSettingsFile(onDeviceSrc) as Record<string, LuaValue>;
-    const fromYaml = yamlToLua(readFileSync(yamlPath, "utf8")) as Record<string, LuaValue>;
+    const fromYaml = yamlToLua(readText(yamlPath, "user-provided")) as Record<string, LuaValue>;
 
     const changes = computeChanges(onDevice, fromYaml);
 

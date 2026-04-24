@@ -4,8 +4,8 @@
 // (src/setup/compat.ts) and displayed by `kindly doctor`. All failures are
 // non-fatal — "unknown" is always a valid answer.
 
-import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { exists, readText } from "../fs/safeRead.ts";
 
 import type { KindleMount } from "./kindle.ts";
 
@@ -59,10 +59,10 @@ export function compareKoreaderVersion(a: KoreaderVersion, b: KoreaderVersion): 
 // unparseable; callers treat that as "unknown, proceed with warning".
 export function readKoreaderVersion(mount: KindleMount): KoreaderVersion | null {
     const p = join(mount.koreaderRoot, "git-rev");
-    if (!existsSync(p)) return null;
+    if (!exists(p, "derived-from-mount")) return null;
     let raw: string;
     try {
-        raw = readFileSync(p, "utf8");
+        raw = readText(p, "derived-from-mount");
     } catch {
         return null;
     }
@@ -76,10 +76,10 @@ export type DeviceFamily = "kindle" | "unknown";
 // /system dir), so this is sufficient for v0.4's family-level matching.
 export function detectDeviceFamily(mount: KindleMount): DeviceFamily {
     const p = join(mount.root, "system", "version.txt");
-    if (!existsSync(p)) return "unknown";
+    if (!exists(p, "derived-from-mount")) return "unknown";
     let raw: string;
     try {
-        raw = readFileSync(p, "utf8");
+        raw = readText(p, "derived-from-mount");
     } catch {
         return "unknown";
     }

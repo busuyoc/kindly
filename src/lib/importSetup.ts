@@ -63,6 +63,7 @@ import { scanShippedLuaFiles } from "../catalog/scanPipeline.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
 import { writeInProgressMarker, clearInProgressMarker } from "../history/inProgress.ts";
+import { withLock } from "../fs/lockfile.ts";
 import { createHash } from "node:crypto";
 
 // Detect fat (.kset tar.gz) vs lean (.kset.yaml or .yaml) by extension.
@@ -320,6 +321,13 @@ export function computePluginHashReport(
 }
 
 export function executeSetupImport(
+    opts: SetupImportOptions,
+    env: CliEnv,
+): ImportResultWithExtras {
+    return withLock(env, "setup:import", () => executeSetupImportLocked(opts, env));
+}
+
+function executeSetupImportLocked(
     opts: SetupImportOptions,
     env: CliEnv,
 ): ImportResultWithExtras {

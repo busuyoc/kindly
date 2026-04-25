@@ -30,6 +30,7 @@ import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { emitJson } from "../cli/json.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
 import { writeInProgressMarker, clearInProgressMarker } from "../history/inProgress.ts";
+import { withLock } from "../fs/lockfile.ts";
 import { createHash } from "node:crypto";
 import {
     countAllHistory,
@@ -87,6 +88,10 @@ export interface RollbackOptions {
 }
 
 export function executeRollback(opts: RollbackOptions, env: CliEnv): RollbackResult {
+    return withLock(env, "rollback", () => executeRollbackLocked(opts, env));
+}
+
+function executeRollbackLocked(opts: RollbackOptions, env: CliEnv): RollbackResult {
     const snapshotDir = resolve(env.cwd, opts.snapshotDir);
     if (!exists(snapshotDir, "user-provided") || !statFollow(snapshotDir, "user-provided").isDirectory()) {
         throw new KindlyError(

@@ -58,14 +58,22 @@ describe("safeWrite — rewrite over existing file", () => {
         expect(readFileSync(path, "utf8")).toBe(v2);
     });
 
-    test("cleans up a stale .tmp from a previous crashed run", () => {
+    test("uses a per-PID + random tmp path so it cannot collide with stale tmps or peers", () => {
         const path = join(workdir, "settings.reader.lua");
-        writeFileSync(path + ".tmp", "stale-junk-that-should-be-removed");
+        // Plant a stale legacy bare `.tmp` (older kindly versions used this
+        // shared name). New writes must not touch it.
+        writeFileSync(path + ".tmp", "stale-junk-from-legacy-version");
         const content = dumpSettingsFile({ fresh: true });
         safeWrite(path, content, { backupDir });
         expect(readFileSync(path, "utf8")).toBe(content);
-        // .tmp should have been consumed by the atomic rename → path
-        expect(existsSync(path + ".tmp")).toBe(false);
+        // Stale legacy .tmp is left alone — no collision with our unique tmp.
+        expect(existsSync(path + ".tmp")).toBe(true);
+        // Per-PID + random tmp consumed by the atomic rename → no leftover
+        // .tmp.<pid>.<rand> sibling.
+        const leftovers = readdirSync(workdir).filter((f) =>
+            f.startsWith("settings.reader.lua.tmp.")
+        );
+        expect(leftovers).toEqual([]);
     });
 
     test("two sequential writes produce two backup snapshots", async () => {

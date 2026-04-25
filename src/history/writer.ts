@@ -17,9 +17,13 @@
 //   - summary         command-specific fields — flat bag, JSON-stringify drops
 //                    undefined so each cmd only populates what applies
 //
-// Durability: open(a), write, fsync, close. A crash mid-write either leaves
-// the entry committed (fsync returned) or the last line partial. W15's reader
-// tolerates the partial-last-line case.
+// Durability (C3/S1421): write the full updated active file to a per-PID
+// tmp + fsync + atomic rename. The earlier `openSync(a) + writeSync +
+// fsync` was POSIX-atomic only for sub-PIPE_BUF writes (4096 Linux, 512
+// darwin); Angle CC measured 99.97% torn reads at 200 KB on darwin. The
+// rename-based pipeline is sub-millisecond at our file sizes (≤ 500 lines
+// × ~1 KB) and gives readers either the pre-write or post-write state, no
+// torn-line state.
 //
 // Rotation (W17): once the active file holds HISTORY_ROTATION_THRESHOLD
 // entries, the NEXT append moves the existing entries into
@@ -57,9 +61,11 @@ import {
     mkdirSync,
     openSync,
     readdirSync,
+    renameSync,
     writeFileSync,
     writeSync,
 } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { exists, readText } from "../fs/safeRead.ts";
 
@@ -165,13 +171,23 @@ export function appendHistoryEntry(
         summary,
     };
     const line = JSON.stringify(entry) + "\n";
-    const fd = openSync(p, "a");
+
+    // C3/S1421: rather than openSync("a") + writeSync (atomic only for
+    // sub-PIPE_BUF), serialize the full active body and rename a tmp into
+    // place. After rotation `active` holds the previously-read entries
+    // (skipped if rotation just emptied it); append the new line and write
+    // atomically. Rename gives readers either the pre- or post-write state.
+    const remainingActive = active.length >= HISTORY_ROTATION_THRESHOLD ? [] : active;
+    const body = remainingActive.map((e) => JSON.stringify(e) + "\n").join("") + line;
+    const tmp = p + ".tmp." + process.pid + "." + randomBytes(4).toString("hex");
+    const fd = openSync(tmp, "wx");
     try {
-        writeSync(fd, line);
+        writeSync(fd, body);
         fsyncSync(fd);
     } finally {
         closeSync(fd);
     }
+    renameSync(tmp, p);
     return entry;
 }
 

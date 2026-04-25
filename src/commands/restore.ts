@@ -24,6 +24,7 @@ import type { RestoreResult } from "../types/results.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { emitJson } from "../cli/json.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
+import { withLock } from "../fs/lockfile.ts";
 import { parseSettingsFile } from "../lua/reader.ts";
 import type { LuaValue } from "../lua/writer.ts";
 import { computeChanges } from "../schema/diff.ts";
@@ -80,6 +81,10 @@ export interface RestoreOptions {
 }
 
 export function executeRestore(opts: RestoreOptions, env: CliEnv): RestoreResult {
+    return withLock(env, "restore", () => executeRestoreLocked(opts, env));
+}
+
+function executeRestoreLocked(opts: RestoreOptions, env: CliEnv): RestoreResult {
     const archivePath = resolve(env.cwd, opts.archive);
     if (!exists(archivePath, "user-provided")) {
         throw new KindlyError(

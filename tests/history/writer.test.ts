@@ -4,7 +4,7 @@
 // with command-level wiring — that's covered by tests/cli/historyEmit.test.ts.
 
 import { describe, test, expect, beforeEach } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -132,5 +132,33 @@ describe("appendHistoryEntry — append semantics", () => {
         expect(entries.map((e) => e.cmd)).toEqual([
             "apply", "snapshot", "restore", "rollback", "setup:import", "setup:export",
         ]);
+    });
+});
+
+describe("appendHistoryEntry — atomic-rename durability (C3/S1421)", () => {
+    test("never leaves a sibling .tmp file after a successful append", () => {
+        const env = makeEnv(workdir, "2026-04-25T12:00:00Z");
+        for (let i = 0; i < 10; i++) {
+            appendHistoryEntry(env, "apply", { settings_delta_n: i });
+        }
+        const dir = join(workdir, ".kindly");
+        const leftovers = readdirSync(dir).filter((n) => n.startsWith("history.jsonl.tmp."));
+        expect(leftovers).toEqual([]);
+    });
+
+    test("each append leaves the file in a fully-parseable state (no torn lines)", () => {
+        const env = makeEnv(workdir, "2026-04-25T12:00:00Z");
+        // Write a 200-entry file so the body crosses PIPE_BUF (4096 darwin/linux).
+        for (let i = 0; i < 200; i++) {
+            appendHistoryEntry(env, "apply", { settings_delta_n: i });
+        }
+        const raw = readFileSync(historyPath(workdir), "utf8");
+        const lines = raw.split("\n").filter((l) => l.length > 0);
+        expect(lines.length).toBe(200);
+        // Every line must parse cleanly — torn writes would surface as a
+        // JSON.parse throw partway through.
+        for (const line of lines) {
+            expect(() => JSON.parse(line)).not.toThrow();
+        }
     });
 });

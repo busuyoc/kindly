@@ -19,6 +19,7 @@ import type { ApplyResult } from "../types/results.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
 import { writeInProgressMarker, clearInProgressMarker } from "../history/inProgress.ts";
+import { withLock } from "../fs/lockfile.ts";
 import { createHash } from "node:crypto";
 import { runPhase } from "../gates/orchestrator.ts";
 import { YAML_SHAPE_NORMAL } from "../gates/definitions/shape.ts";
@@ -54,6 +55,10 @@ export interface ApplyOptions {
 }
 
 export function executeApply(opts: ApplyOptions, env: CliEnv): ApplyResult {
+    return withLock(env, "apply", () => executeApplyLocked(opts, env));
+}
+
+function executeApplyLocked(opts: ApplyOptions, env: CliEnv): ApplyResult {
     const yamlPath = resolve(env.cwd, opts.file ?? "kindly.yaml");
     if (!exists(yamlPath, "user-provided")) {
         throw new KindlyError(

@@ -23,6 +23,7 @@ import {
     closeSync, copyFileSync, existsSync, fsyncSync, mkdirSync,
     openSync, readFileSync, renameSync, statSync, unlinkSync, writeSync,
 } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { dirname, basename, join } from "node:path";
 import { parseSettingsFile } from "../lua/reader.ts";
 import { rotateBackups } from "./backupRotation.ts";
@@ -63,7 +64,14 @@ export function safeWrite(
         throw new Error(`parent directory does not exist: ${dir}`);
     }
 
-    const tmpPath = path + ".tmp";
+    // C3/S981: per-PID + random suffix on the tmp file. A shared `path.tmp`
+    // is a collision point for concurrent safeWrites against the same path
+    // (two `kindly apply` processes, or apply racing with rollback). The
+    // process-level lockfile makes that already-rare on the kindly-CLI side,
+    // but anything else writing to the device's koreader/ dir (other tools,
+    // a botched manual restore) shares the namespace too. Unique tmp keeps
+    // the steps independent.
+    const tmpPath = path + ".tmp." + process.pid + "." + randomBytes(4).toString("hex");
     const oldPath = path + ".old";
     let backupPath: string | null = null;
 
@@ -80,8 +88,8 @@ export function safeWrite(
 
     // 2. Write content to .tmp and fsync it (the file + its directory).
     const buf = Buffer.from(content, "utf8");
-    // Clean up stale .tmp from a previous crashed run before opening.
-    if (existsSync(tmpPath)) unlinkSync(tmpPath);
+    // tmpPath is per-PID + random — exclusive create cannot collide with a
+    // prior crashed run, so no stale-cleanup needed here.
     const fd = openSync(tmpPath, "wx");
     try {
         let offset = 0;

@@ -21,6 +21,7 @@ import { resolve } from "node:path";
 import type { SnapshotResult } from "../types/results.ts";
 import { emitJson } from "../cli/json.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
+import { withLock } from "../fs/lockfile.ts";
 
 const FLAGS = {
     output: {
@@ -53,6 +54,10 @@ export interface SnapshotOptions {
 }
 
 export function executeSnapshot(opts: SnapshotOptions, env: CliEnv): SnapshotResult {
+    return withLock(env, "snapshot", () => executeSnapshotLocked(opts, env));
+}
+
+function executeSnapshotLocked(opts: SnapshotOptions, env: CliEnv): SnapshotResult {
     const mount = resolveMount(env);
     const outputPath = opts.output
         ? resolve(env.cwd, opts.output)

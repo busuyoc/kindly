@@ -86,6 +86,7 @@ export const ErrorCodes = {
     YAML_RESERVED_KEY:    "YAML_RESERVED_KEY",
     YAML_NON_NFC_KEY:     "YAML_NON_NFC_KEY",
     DESTRUCTIVE_YAML_SHAPE: "DESTRUCTIVE_YAML_SHAPE",
+    LOCK_HELD:            "LOCK_HELD",
 } as const;
 
 export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];

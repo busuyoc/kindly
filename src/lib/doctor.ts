@@ -24,6 +24,7 @@ import { collectPluginDirs } from "../setup/files.ts";
 import { loadSchema, type Schema } from "../schema/settings.ts";
 import { readKoreaderVersion } from "../device/version.ts";
 import type { KindleMount } from "../device/kindle.ts";
+import { inProgressDir } from "../history/inProgress.ts";
 
 /** 90 §5.1, §5.3 — a check flips to warning once its source is this
  *  many days old. Scalar, not a spec number, but the spec names
@@ -130,6 +131,12 @@ export function executeDoctor(env: CliEnv, opts: DoctorOptions = {}): DoctorResu
             detail: "absent (fine — KOReader creates it on first flush)",
         });
     }
+
+    // C10: progress.* — surviving in-progress markers from a SIGKILL'd
+    // apply / setup-import / rollback. Each marker means the device may
+    // be consistent on disk but kindly's history.jsonl never recorded
+    // the change.
+    checks.push(...runProgressChecks(env));
 
     // W34c: schema.* freshness + uncurated keys (90 §5.1, §5.2).
     checks.push(...runSchemaChecks(env, parsed, opts.schemaPath));
@@ -387,6 +394,51 @@ function runPluginHashChecks(
         });
     }
     return findings;
+}
+
+/** C10: scan `.kindly/in-progress/` for markers left by a SIGKILL'd apply
+ *  / setup-import / rollback. Each surviving marker means the device may
+ *  be consistent on disk but history.jsonl is missing the entry — no
+ *  audit trail and rollback can't see the change. One warning per marker
+ *  so the user can correlate by pid/timestamp/cmd. */
+function runProgressChecks(env: CliEnv): DoctorCheck[] {
+    const dir = inProgressDir(env.cwd);
+    if (!exists(dir, "derived-from-cwd")) return [];
+
+    let entries: string[];
+    try { entries = readdirSync(dir).filter((n) => n.endsWith(".json")); }
+    catch { return []; }
+    if (entries.length === 0) return [];
+
+    const out: DoctorCheck[] = [];
+    for (const name of entries.sort()) {
+        const path = join(dir, name);
+        let payload: Record<string, unknown> = {};
+        try {
+            payload = JSON.parse(readText(path, "derived-from-cwd")) as Record<string, unknown>;
+        } catch {
+            // Malformed marker — surface anyway so the user knows to clean it up.
+        }
+        const cmd = typeof payload.cmd === "string" ? payload.cmd : "unknown";
+        const pid = typeof payload.pid === "number" ? payload.pid : null;
+        const startedAt = typeof payload.started_at === "string" ? payload.started_at : null;
+        const ageDays = startedAt ? daysSince(startedAt, env.now?.() ?? new Date()) : null;
+        out.push({
+            id: "progress.crashed_apply",
+            category: "progress",
+            severity: "warning",
+            ok: true,
+            label: `crashed ${cmd} marker from pid ${pid ?? "?"}`
+                + (ageDays !== null ? ` (${ageDays}d ago)` : ""),
+            detail: `Surviving marker at ${path} — the operation died before history.jsonl recorded it. The device's settings.reader.lua may be the post-write content, but kindly has no audit entry for this change.`,
+            data: { marker_path: path, ...payload },
+            remediation: [
+                { text: "Inspect the marker and the device's current settings.reader.lua to decide whether to keep, rollback, or re-apply." },
+                { text: "Once resolved, delete the marker file to clear this warning.", command: `rm ${path}` },
+            ],
+        });
+    }
+    return out;
 }
 
 /** 90 §5.6 thresholds. 1 MiB = atomic write would fail; 50 MiB = a fat

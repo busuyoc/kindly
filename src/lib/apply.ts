@@ -18,6 +18,8 @@ import { type CliEnv, resolveMount } from "../cli/env.ts";
 import type { ApplyResult } from "../types/results.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
+import { writeInProgressMarker, clearInProgressMarker } from "../history/inProgress.ts";
+import { createHash } from "node:crypto";
 import { runPhase } from "../gates/orchestrator.ts";
 import { YAML_SHAPE_NORMAL } from "../gates/definitions/shape.ts";
 import { CODE_EXEC_ADJACENT_REQUIRES_ACK } from "../gates/definitions/dual.ts";
@@ -161,12 +163,25 @@ export function executeApply(opts: ApplyOptions, env: CliEnv): ApplyResult {
         ? resolve(env.cwd, opts.backupDir)
         : join(env.cwd, ".kindly", "backups");
 
+    // C10: crash-recovery marker. Surviving markers indicate either an
+    // in-flight apply in another process, or an apply that died before
+    // step-6 / before history was appended. doctor surfaces them.
+    const markerPath = writeInProgressMarker(env, {
+        cmd: "apply",
+        started_at: env.now().toISOString(),
+        pid: process.pid,
+        settings_path: mount.settingsPath,
+        intended_sha256: createHash("sha256").update(newContent).digest("hex"),
+    });
+
     const res = safeWrite(mount.settingsPath, newContent, { backupDir, verifyLua: true });
 
     appendHistoryEntry(env, "apply", {
         settings_delta_n: changes.length,
         ...(res.backupPath ? { backup_path: res.backupPath } : {}),
     }, opts.label ? { label: opts.label } : undefined);
+
+    clearInProgressMarker(markerPath);
 
     return {
         mode: "applied",

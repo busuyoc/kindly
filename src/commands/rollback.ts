@@ -29,6 +29,8 @@ import type { RollbackResult } from "../types/results.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { emitJson } from "../cli/json.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
+import { writeInProgressMarker, clearInProgressMarker } from "../history/inProgress.ts";
+import { createHash } from "node:crypto";
 import {
     countAllHistory,
     findHistoryEntryByIndex,
@@ -156,6 +158,7 @@ export function executeRollback(opts: RollbackOptions, env: CliEnv): RollbackRes
     }
 
     let settingsRestored = false;
+    let settingsMarkerPath: string | null = null;
     if (hasSettings) {
         // Mirror the pre-import layout: stamp dir holds the file directly,
         // no extra nesting. Do the backup ourselves and tell safeWrite to
@@ -165,7 +168,18 @@ export function executeRollback(opts: RollbackOptions, env: CliEnv): RollbackRes
             copyFile(mount.settingsPath, "derived-from-mount", settingsBackupPath, "derived-from-cwd");
         }
         const buf = readBytes(settingsSnap, "user-provided");
-        safeWrite(mount.settingsPath, buf.toString("utf8"), {
+        const content = buf.toString("utf8");
+        // C10: crash-recovery marker covers the safeWrite + history-append
+        // window so a SIGKILL mid-rollback shows up in `kindly doctor`.
+        settingsMarkerPath = writeInProgressMarker(env, {
+            cmd: "rollback",
+            started_at: env.now().toISOString(),
+            pid: process.pid,
+            settings_path: mount.settingsPath,
+            intended_sha256: createHash("sha256").update(content).digest("hex"),
+            snapshot_dir: snapshotDir,
+        });
+        safeWrite(mount.settingsPath, content, {
             verifyLua: true,
             skipBackup: true,
         });
@@ -198,6 +212,8 @@ export function executeRollback(opts: RollbackOptions, env: CliEnv): RollbackRes
         snapshot_dir: snapshotDir,
         ...(preRollbackDir ? { pre_rollback_path: preRollbackDir } : {}),
     }, opts.label ? { label: opts.label } : undefined);
+
+    if (settingsMarkerPath) clearInProgressMarker(settingsMarkerPath);
 
     return {
         mode: "rolled-back",

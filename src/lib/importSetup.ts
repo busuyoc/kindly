@@ -62,6 +62,8 @@ import type { ScanReport, SetupImportResult } from "../types/results.ts";
 import { scanShippedLuaFiles } from "../catalog/scanPipeline.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
+import { writeInProgressMarker, clearInProgressMarker } from "../history/inProgress.ts";
+import { createHash } from "node:crypto";
 
 // Detect fat (.kset tar.gz) vs lean (.kset.yaml or .yaml) by extension.
 // Loading a lean file through the fat path (tar extraction) would fail
@@ -605,6 +607,7 @@ export function executeSetupImport(
 
     let snapshotDir: string | null = null;
     let backupPath: string | null = null;
+    let importMarkerPath: string | null = null;
     if (writeSettings) {
         const merged = isReplace
             ? replaceYamlIntoLua(onDevice, safeFlat) as LuaTable
@@ -612,6 +615,15 @@ export function executeSetupImport(
         const newContent = dumpSettingsFile(merged, "./settings.reader.lua");
 
         const backupDir = join(env.cwd, ".kindly", "pre-import");
+        // C10: crash marker for the safeWrite + history-append window.
+        importMarkerPath = writeInProgressMarker(env, {
+            cmd: "setup:import",
+            started_at: env.now().toISOString(),
+            pid: process.pid,
+            settings_path: mount.settingsPath,
+            intended_sha256: createHash("sha256").update(newContent).digest("hex"),
+            setup_id: baseResult.id,
+        });
         const res = safeWrite(mount.settingsPath, newContent, {
             backupDir,
             verifyLua: true,
@@ -663,6 +675,8 @@ export function executeSetupImport(
         ...(snapshotDir ? { pre_import_path: snapshotDir } : {}),
         setup_id: baseResult.id,
     }, opts.label ? { label: opts.label } : undefined);
+
+    if (importMarkerPath) clearInProgressMarker(importMarkerPath);
 
     return {
         ...baseResult,

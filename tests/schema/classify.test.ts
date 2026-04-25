@@ -14,8 +14,16 @@ describe("classifyKey", () => {
     });
 
     test("ephemerals — exact", () => {
-        expect(classifyKey("lastfile")).toBe("EPHEMERAL");
+        // LocalSend_last_update_check is hygiene=ephemeral with no change-class,
+        // so the projection returns EPHEMERAL. lastfile carries BOTH
+        // hygiene=ephemeral and change=sensitive-fs (Angle-I S1041 closure +
+        // Batch-O S323 lastfile→InfoMessage byte-injection); the projection
+        // priority is SECRET > SENSITIVE > EPHEMERAL > USER, so it's
+        // SENSITIVE in the projection — preservation in replace-mode keys
+        // off the raw hygiene axis instead, see importSetup.ts:524.
         expect(classifyKey("LocalSend_last_update_check")).toBe("EPHEMERAL");
+        expect(hygieneClass("lastfile")).toBe("ephemeral");
+        expect(classifyKey("lastfile")).toBe("SENSITIVE");
     });
 
     test("ephemerals — pattern (setup-done suffix)", () => {
@@ -204,7 +212,10 @@ describe("axis composition — classifyKey as projection", () => {
         // currently has both, but tests the projection rule).
         expect(classifyKey("zlibrary_password")).toBe("SECRET");
         expect(classifyKey("extra_plugin_paths")).toBe("SENSITIVE");
-        expect(classifyKey("lastfile")).toBe("EPHEMERAL");
+        // LocalSend_last_update_check is the pure ephemeral case (no change
+        // class). lastfile is sensitive-fs + ephemeral → projection collapses
+        // to SENSITIVE per priority rule; raw hygiene axis still ephemeral.
+        expect(classifyKey("LocalSend_last_update_check")).toBe("EPHEMERAL");
         expect(classifyKey("footer")).toBe("USER");
     });
 });

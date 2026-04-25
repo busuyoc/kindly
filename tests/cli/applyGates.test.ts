@@ -244,13 +244,14 @@ describe("apply — DESTRUCTIVE_YAML_SHAPE (C1c)", () => {
     test("plain user-edit YAML adding many keys is NOT destructive (only removals count)", async () => {
         // Five additions are not destructive — only `removed` kind contributes
         // to the cap. This test guards the semantic: the gate is for
-        // mass-removal, not mass-change.
+        // mass-removal, not mass-change. Keys chosen are USER-class (no
+        // sensitive change-class) so SENSITIVE_REQUIRES_ACK doesn't fire.
         writeYaml(
             "refresh_rate: 5\n" +
-            "screensaver_dir: \"/mnt/us/screensavers\"\n" +
             "page_overlap_pixels: 24\n" +
             "show_hidden: true\n" +
-            "auto_save_paused_counter_minute: 30\n",
+            "auto_save_paused_counter_minute: 30\n" +
+            "screen_warmth: 60\n",
         );
         const code = await main(["apply", "--untrusted-yaml"], env);
         expect(code).toBe(0);

@@ -17,6 +17,7 @@ import type { LuaTable, LuaValue } from "../lua/writer.ts";
 import { ErrorCodes, KindlyError } from "../types/errors.ts";
 import {
     classifyKey, filterForYaml, isSecretPath,
+    exfilClass, hygieneClass,
     type FilterMode, type FilterResult,
 } from "./classify.ts";
 
@@ -180,10 +181,13 @@ export function replaceYamlIntoLua(
 ): Record<string, LuaValue> {
     const out: Record<string, LuaValue> = {};
 
-    // First: preserve SECRET + EPHEMERAL top-level keys unconditionally.
+    // First: preserve secret + ephemeral top-level keys unconditionally.
+    // Use raw axes — not classifyKey projection — so a key that is BOTH
+    // hygiene=ephemeral AND change=sensitive-* (e.g. lastfile) is still
+    // preserved on its hygiene axis. The projection collapses to SENSITIVE
+    // and would skip preservation, which is the wrong behavior here.
     for (const [k, v] of Object.entries(onDevice)) {
-        const cls = classifyKey(k);
-        if (cls === "SECRET" || cls === "EPHEMERAL") out[k] = v;
+        if (exfilClass(k) === "secret" || hygieneClass(k) === "ephemeral") out[k] = v;
     }
 
     // Then: lay down every manifest-declared key. For nested maps, overlay

@@ -14,6 +14,7 @@ import { parseSettingsFile } from "../lua/reader.ts";
 import { dumpSettingsFile, type LuaTable, type LuaValue } from "../lua/writer.ts";
 import {
     filterForYaml, classifyKey, changeHitsSensitive, sensitiveDomain,
+    exfilClass, hygieneClass,
 } from "../schema/classify.ts";
 import { mergeYamlIntoLua, replaceYamlIntoLua } from "../schema/yaml.ts";
 import {
@@ -521,8 +522,15 @@ function executeSetupImportLocked(
     const preservedKeys: Set<string> = new Set();
     if (isReplace) {
         for (const k of Object.keys(onDevice)) {
-            const cls = classifyKey(k);
-            if (cls === "SECRET" || cls === "EPHEMERAL") preservedKeys.add(k);
+            // Preserve by raw axes — not the classifyKey projection — so a
+            // key that is BOTH ephemeral AND sensitive-* (e.g. lastfile,
+            // hygiene=ephemeral + change=sensitive-fs) still gets preserved
+            // on its hygiene axis. The projection collapses to SENSITIVE and
+            // would drop ephemeral preservation, which is wrong: hygiene
+            // and change are orthogonal.
+            if (exfilClass(k) === "secret" || hygieneClass(k) === "ephemeral") {
+                preservedKeys.add(k);
+            }
         }
     }
 

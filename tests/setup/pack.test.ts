@@ -10,6 +10,7 @@ import { packSetup, SetupPackError } from "../../src/setup/pack.ts";
 import { unpackSetup, SetupUnpackError } from "../../src/setup/unpack.ts";
 import { hashBytes, canonicalizeManifest } from "../../src/setup/canonical.ts";
 import { parseManifest, type SetupManifest } from "../../src/setup/schema.ts";
+import { collectPluginDirs, collectPatches } from "../../src/setup/files.ts";
 
 // ---- fixtures --------------------------------------------------------------
 
@@ -115,6 +116,81 @@ describe("unpack — NFD-vs-NFC tolerance (S900 / Angle C)", () => {
         expect(unpacked.files.size).toBe(1);
         expect(unpacked.files.has(nfc)).toBe(true);
         expect(unpacked.files.get(nfc)!.equals(patch)).toBe(true);
+    });
+});
+
+describe("W46 — canonical-hash reproducibility across authoring forms", () => {
+    // The §2-Layer-4 invariant for T2: identical logical content must
+    // produce identical canonical manifest hashes regardless of which
+    // Unicode form the authoring filesystem hands us at readdir time.
+    // Without it, signed `.kset` artifacts (W39) cannot be rebuilt by an
+    // auditor on a different OS / filesystem.
+    //
+    // Drives the full pipeline used in production: collect → pack →
+    // manifestHash. Two builds with on-disk filenames in NFD vs NFC must
+    // yield the same hash. The archive bytes themselves are allowed to
+    // differ (Q1 = canonical-tree, Q3 = canonical-hash-identical).
+    function buildAndPack(
+        formName: "NFC" | "NFD",
+        rootDir: string,
+        outputPath: string,
+    ): { manifestHash: string; archiveBytes: Buffer } {
+        const nfc = "Café.koplugin";
+        const fileNfc = "máin.lua";
+        const pluginName = formName === "NFC" ? nfc.normalize("NFC") : nfc.normalize("NFD");
+        const fileName = formName === "NFC" ? fileNfc.normalize("NFC") : fileNfc.normalize("NFD");
+
+        const pluginsRoot = join(rootDir, "plugins");
+        const patchesRoot = join(rootDir, "patches");
+        mkdirSync(join(pluginsRoot, pluginName), { recursive: true });
+        mkdirSync(patchesRoot, { recursive: true });
+        writeFileSync(join(pluginsRoot, pluginName, fileName), "main\n");
+        writeFileSync(join(pluginsRoot, pluginName, "z.lua"), "z\n");
+        writeFileSync(join(patchesRoot, "1-tweak.lua"), "tweak\n");
+
+        const pluginCollect = collectPluginDirs(pluginsRoot);
+        const patchCollect = collectPatches(patchesRoot);
+
+        const manifest = makeManifest({
+            kindly_setup: "v1",
+            meta: { name: "Repro", created_at: "2026-04-25T00:00:00Z" },
+            apply_mode: "additive",
+            plugins: { files: pluginCollect.declared },
+            patches: patchCollect.declared,
+        });
+        const files = new Map<string, Buffer>();
+        for (const [k, v] of pluginCollect.files) files.set(k, v);
+        for (const [k, v] of patchCollect.files) files.set(k, v);
+
+        const result = packSetup({ manifest, files }, outputPath);
+        return {
+            manifestHash: result.manifestHash,
+            archiveBytes: readFileSync(outputPath),
+        };
+    }
+
+    test("on-disk NFD vs NFC → identical canonical manifest hash", () => {
+        const rootA = join(workDir, "build-nfd");
+        const rootB = join(workDir, "build-nfc");
+        const outA = join(workDir, "nfd.kset");
+        const outB = join(workDir, "nfc.kset");
+
+        const a = buildAndPack("NFD", rootA, outA);
+        const b = buildAndPack("NFC", rootB, outB);
+
+        // Canonical identity invariant.
+        expect(a.manifestHash).toBe(b.manifestHash);
+
+        // Both archives must round-trip through unpackSetup with the
+        // same declared content — guards the lower half of the T2 trust
+        // primitive (verifier sees the same tree no matter who packed).
+        const ua = unpackSetup(outA);
+        const ub = unpackSetup(outB);
+        expect(ua.manifest).toEqual(ub.manifest);
+        expect([...ua.files.keys()].sort()).toEqual([...ub.files.keys()].sort());
+        for (const k of ua.files.keys()) {
+            expect(ua.files.get(k)!.equals(ub.files.get(k)!)).toBe(true);
+        }
     });
 });
 

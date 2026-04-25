@@ -51,6 +51,30 @@ describe("walkCollect — code-unit ordering (S901)", () => {
         expect(paths).toEqual(expectedOrder);
     });
 
+    test("declared paths are NFC even when on-disk names are NFD (S501)", () => {
+        // macOS APFS is form-preserving — if we write a file with NFD
+        // bytes the directory entry stays NFD. The recorded canonical
+        // path must be NFC regardless, so a fat .kset built on macOS
+        // hashes the same as the same plugin tree on Linux.
+        const root = join(workDir, "plugins-nfd");
+        mkdirSync(root, { recursive: true });
+        const pluginDiskName = "Café.koplugin";   // "Café" in NFD: e + U+0301
+        const fileDiskName = "máin.lua";          // NFD á
+        const plugin = join(root, pluginDiskName);
+        mkdirSync(plugin);
+        writeFileSync(join(plugin, fileDiskName), "x\n");
+
+        const { declared, files } = collectPluginDirs(root);
+
+        const recorded = declared.map((d) => d.path);
+        // Both segments must be NFC (single-codepoint composed forms).
+        expect(recorded).toEqual(["Café.koplugin/máin.lua"]);
+        for (const p of recorded) expect(p).toBe(p.normalize("NFC"));
+        // The files map is keyed by the recorded (NFC) path so installs
+        // can round-trip.
+        expect(files.has("Café.koplugin/máin.lua")).toBe(true);
+    });
+
     test("two writes of the same plugin tree yield identical declared order", () => {
         // Build the tree, collect, tear down, rebuild, collect again —
         // the order must match. Filesystem-creation-order shouldn't

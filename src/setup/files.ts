@@ -35,15 +35,18 @@ export function collectPluginDirs(pluginsRoot: string): CollectedFiles {
     const declared: EmbeddedFile[] = [];
     const files = new Map<string, Buffer>();
 
+    // S501 / Angle C: same NFC-on-record discipline as walkCollect — the
+    // plugin-dir name appears in declared[].path, which feeds the
+    // canonical hash. Read disk with the literal name, record NFC.
     const entries = readdirSync(pluginsRoot, { withFileTypes: true })
         .filter((e) => e.isDirectory())
         .filter((e) => e.name.endsWith(".koplugin"))
         .filter((e) => !e.name.startsWith("."))
-        .map((e) => e.name)
-        .sort();
+        .map((e) => ({ disk: e.name, recorded: e.name.normalize("NFC") }))
+        .sort((a, b) => (a.recorded < b.recorded ? -1 : a.recorded > b.recorded ? 1 : 0));
 
     for (const pluginDir of entries) {
-        walkCollect(join(pluginsRoot, pluginDir), pluginDir, declared, files);
+        walkCollect(join(pluginsRoot, pluginDir.disk), pluginDir.recorded, declared, files);
     }
     return { declared, files };
 }
@@ -81,17 +84,19 @@ export function collectPatches(patchesRoot: string): CollectedFiles {
     const declared: EmbeddedFile[] = [];
     const files = new Map<string, Buffer>();
 
+    // S501 / S901: NFC-normalize the recorded path; sort by code-unit on
+    // the NFC form so canonical hash is host- and locale-independent.
     const entries = readdirSync(patchesRoot, { withFileTypes: true })
         .filter((e) => e.isFile())
         .filter((e) => e.name.endsWith(".lua"))
         .filter((e) => !e.name.startsWith("."))
-        .map((e) => e.name)
-        .sort();
+        .map((e) => ({ disk: e.name, recorded: e.name.normalize("NFC") }))
+        .sort((a, b) => (a.recorded < b.recorded ? -1 : a.recorded > b.recorded ? 1 : 0));
 
-    for (const name of entries) {
-        const abs = join(patchesRoot, name);
+    for (const e of entries) {
+        const abs = join(patchesRoot, e.disk);
         const buf = readBytes(abs, "derived-from-mount");
-        const rel = name;                 // flat: no nested dirs
+        const rel = e.recorded;           // flat: no nested dirs
         if (!isSafeRelativePath(rel)) continue;
         declared.push({
             path: rel,
@@ -114,13 +119,25 @@ function walkCollect(
     // walkCollect output (and therefore canonical manifest hash) drift
     // across runtime/locale. Code-unit ordering is a pure function of the
     // string bytes — portable across every JS runtime and every locale.
+    //
+    // S501 / Angle C: NFC-normalize the *recorded* path (the value that
+    // goes into declared[].path → canonical hash). macOS APFS is form-
+    // preserving but the system tar emits NFD and `ls` round-trips NFD,
+    // so a foreign-author plugin with accented filenames hashed on macOS
+    // would not match the same tree hashed on Linux. The on-disk read
+    // still uses the literal entry name; only the recorded path is
+    // normalized.
     const entries = readdirSync(absDir, { withFileTypes: true })
         .filter((e) => !e.name.startsWith("."))   // skip .DS_Store, .git/, ...
-        .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+        .sort((a, b) => {
+            const an = a.name.normalize("NFC");
+            const bn = b.name.normalize("NFC");
+            return an < bn ? -1 : an > bn ? 1 : 0;
+        });
 
     for (const e of entries) {
         const abs = join(absDir, e.name);
-        const rel = posix.join(relPrefix, e.name);
+        const rel = posix.join(relPrefix, e.name.normalize("NFC"));
         if (e.isDirectory()) {
             walkCollect(abs, rel, declared, files);
         } else if (e.isFile()) {

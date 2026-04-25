@@ -13,7 +13,7 @@ import type { ErrorCodes } from "../types/errors.ts";
 // ---- trust boundaries ---------------------------------------------------
 
 /** Where in kindly's mutation path does this gate fire? */
-export type GateBoundary = "import" | "apply";
+export type GateBoundary = "import" | "apply" | "restore";
 
 // ---- gate taxonomy ------------------------------------------------------
 

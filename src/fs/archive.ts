@@ -225,6 +225,33 @@ export function extractTarGz(opts: ExtractOptions): ExtractResult {
     return { destRoot, fileCount: listed.length };
 }
 
+// Read a single archive entry's contents to memory without writing to disk.
+// Used by restore to peek at settings.reader.lua and run classify-aware
+// gates BEFORE any filesystem side effects. Returns null if the entry is
+// not present in the archive.
+export function extractFileToMemory(
+    archivePath: string,
+    entry: string,
+): string | null {
+    if (!exists(archivePath, "user-provided")) {
+        throw new Error(`archive not found: ${archivePath}`);
+    }
+    if (!isSafeRelativePath(entry)) {
+        throw new UnsafeArchivePathError(entry);
+    }
+    // tar -O writes the file content to stdout. Exit status is non-zero
+    // when the entry is missing — distinguish that from a real failure
+    // by checking the listing.
+    const r = spawnSync("tar", ["-xzOf", archivePath, entry], {
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+    });
+    if (r.status === 0) return r.stdout;
+    const listed = listTarGz(archivePath);
+    if (!listed.includes(entry)) return null;
+    throw new Error(`tar extraction failed (exit ${r.status}): ${r.stderr}`);
+}
+
 // Return the list of paths stored in the archive. Used by restore --dry-run
 // and by extractTarGz for file counting.
 export function listTarGz(archivePath: string): string[] {

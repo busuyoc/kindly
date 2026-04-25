@@ -203,6 +203,85 @@ describe("restore", () => {
         expect(stderr.value).toContain("usage");
     });
 
+    test("blocks code-exec-adjacent key (C1b) without --accept-code-exec", async () => {
+        // Build an archive whose settings.reader.lua sets SSH_port. The
+        // archive's settings file must use the strict KOReader dump format
+        // because the gate parses it.
+        const stage = mkdtempSync(join(tmpdir(), "kindly-c1b-stage-"));
+        writeFileSync(join(stage, "settings.reader.lua"),
+            `return {\n    ["SSH_port"] = 2222,\n}\n`);
+        const archive = join(workdir, "evil-ssh.tar.gz");
+        const r = spawnSync("tar", ["-czf", archive, "-C", stage,
+            "settings.reader.lua"], { encoding: "utf8" });
+        expect(r.status).toBe(0);
+
+        const settingsPath = join(fakeKindle, "koreader", "settings.reader.lua");
+        const before = readFileSync(settingsPath, "utf8");
+
+        const code = await main(["restore", archive], env);
+        expect(code).toBe(3);
+        expect(stderr.value).toContain("SSH_port");
+        expect(stderr.value).toContain("--accept-code-exec");
+        // No safety snapshot, no extraction — gate fires before any side effects.
+        expect(existsSync(join(workdir, ".kindly", "pre-restore"))).toBe(false);
+        expect(readFileSync(settingsPath, "utf8")).toBe(before);
+    });
+
+    test("--accept-code-exec lets the restore proceed (C1b)", async () => {
+        const stage = mkdtempSync(join(tmpdir(), "kindly-c1b-stage-"));
+        writeFileSync(join(stage, "settings.reader.lua"),
+            `return {\n    ["SSH_port"] = 2222,\n}\n`);
+        const archive = join(workdir, "ok-ssh.tar.gz");
+        spawnSync("tar", ["-czf", archive, "-C", stage,
+            "settings.reader.lua"], { encoding: "utf8" });
+
+        const code = await main(["restore", archive, "--accept-code-exec"], env);
+        expect(code).toBe(0);
+        const settingsPath = join(fakeKindle, "koreader", "settings.reader.lua");
+        expect(readFileSync(settingsPath, "utf8")).toContain("SSH_port");
+    });
+
+    test("--dry-run bypasses C1b gate (firesIn: non-dry-run)", async () => {
+        const stage = mkdtempSync(join(tmpdir(), "kindly-c1b-stage-"));
+        writeFileSync(join(stage, "settings.reader.lua"),
+            `return {\n    ["SSH_port"] = 2222,\n}\n`);
+        const archive = join(workdir, "dry-ssh.tar.gz");
+        spawnSync("tar", ["-czf", archive, "-C", stage,
+            "settings.reader.lua"], { encoding: "utf8" });
+
+        const code = await main(["restore", archive, "--dry-run"], env);
+        expect(code).toBe(0);
+        const settingsPath = join(fakeKindle, "koreader", "settings.reader.lua");
+        expect(readFileSync(settingsPath, "utf8")).toBe("return { a = 1 }\n");
+    });
+
+    test("archive without settings.reader.lua → no C1b fire", async () => {
+        const stage = mkdtempSync(join(tmpdir(), "kindly-c1b-stage-"));
+        mkdirSync(join(stage, "patches"));
+        writeFileSync(join(stage, "patches", "user.lua"), "-- harmless\n");
+        const archive = join(workdir, "no-settings.tar.gz");
+        spawnSync("tar", ["-czf", archive, "-C", stage, "patches"],
+            { encoding: "utf8" });
+
+        const code = await main(["restore", archive], env);
+        expect(code).toBe(0);
+    });
+
+    test("archive whose settings.reader.lua is unparseable → gate skipped, restore proceeds", async () => {
+        // The reader is strict about KOReader's dump format. Archives
+        // produced by tooling outside that grammar must not be blocked
+        // by the C1b gate (which has no opinion on what it can't parse).
+        const stage = mkdtempSync(join(tmpdir(), "kindly-c1b-stage-"));
+        writeFileSync(join(stage, "settings.reader.lua"),
+            "return { mini = true }\n");
+        const archive = join(workdir, "loose-fmt.tar.gz");
+        spawnSync("tar", ["-czf", archive, "-C", stage,
+            "settings.reader.lua"], { encoding: "utf8" });
+
+        const code = await main(["restore", archive], env);
+        expect(code).toBe(0);
+    });
+
     test("safety snapshot can be used to roll back after a bad restore", async () => {
         // Snapshot "good" state.
         await main(["snapshot"], env);

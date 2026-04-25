@@ -15,15 +15,21 @@ import { ArgError, parseArgs, type FlagSpecs } from "../cli/args.ts";
 import { type CliEnv, resolveMount } from "../cli/env.ts";
 import { dim, heading, info, ok, warn } from "../cli/log.ts";
 import {
-    ArchiveTooLargeError, assertSafeArchive, createTarGz, extractTarGz,
-    listTarGz, UnsafeArchivePathError,
+    ArchiveTooLargeError, assertSafeArchive, createTarGz, extractFileToMemory,
+    extractTarGz, listTarGz, UnsafeArchivePathError,
 } from "../fs/archive.ts";
 import { resolve } from "node:path";
-import { exists } from "../fs/safeRead.ts";
+import { exists, readText } from "../fs/safeRead.ts";
 import type { RestoreResult } from "../types/results.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { emitJson } from "../cli/json.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
+import { parseSettingsFile } from "../lua/reader.ts";
+import type { LuaValue } from "../lua/writer.ts";
+import { computeChanges } from "../schema/diff.ts";
+import { runPhase } from "../gates/orchestrator.ts";
+import { CODE_EXEC_ADJACENT_REQUIRES_ACK } from "../gates/definitions/dual.ts";
+import { appendGateEvent } from "../history/gateLog.ts";
 
 const FLAGS = {
     "dry-run": {
@@ -44,6 +50,11 @@ const FLAGS = {
         type: "string",
         description: "advisory name for this restore — shown in `kindly history`",
     },
+    "accept-code-exec": {
+        type: "boolean",
+        default: false,
+        description: "consent to KOReader interpolating archive-supplied values into shell / os.execute / os.remove calls (SSH_port family)",
+    },
 } as const satisfies FlagSpecs;
 
 const SAFETY_PATHS = [
@@ -60,6 +71,12 @@ export interface RestoreOptions {
     dryRun?: boolean;
     safetySnapshot?: boolean;
     label?: string;
+    /**
+     * C1b: bypass CODE_EXEC_ADJACENT_REQUIRES_ACK at the restore boundary.
+     * Consents to the archive's settings.reader.lua introducing values
+     * KOReader interpolates into os.execute / os.remove / shell calls.
+     */
+    acceptCodeExec?: boolean;
 }
 
 export function executeRestore(opts: RestoreOptions, env: CliEnv): RestoreResult {
@@ -97,6 +114,13 @@ export function executeRestore(opts: RestoreOptions, env: CliEnv): RestoreResult
         throw e;
     }
     const entries = listTarGz(archivePath);
+
+    // C1b: run classify-aware gates against the archive's would-be writes
+    // BEFORE safety-snapshot or extraction. Any code-exec-adjacent key the
+    // archive's settings.reader.lua sets (SSH_port, httpinspector_port,
+    // cover_image_path) requires --accept-code-exec consent. Other gate
+    // families (SENSITIVE, EXTRA_PLUGIN_PATHS) follow in C1c.
+    runRestoreGates(archivePath, entries, mount.settingsPath, opts, env);
 
     if (opts.dryRun) {
         return {
@@ -189,11 +213,78 @@ export async function runRestore(argv: readonly string[], env: CliEnv): Promise<
         dryRun: flags["dry-run"],
         safetySnapshot: flags["safety-snapshot"],
         label: flags.label,
+        acceptCodeExec: flags["accept-code-exec"],
     }, env);
 
     if (env.jsonMode) emitJson(env, "restore", result);
     else renderRestore(result, env);
     return 0;
+}
+
+function runRestoreGates(
+    archivePath: string,
+    entries: string[],
+    deviceSettingsPath: string,
+    opts: RestoreOptions,
+    env: CliEnv,
+): void {
+    if (!entries.includes("settings.reader.lua")) return;
+
+    const archiveSrc = extractFileToMemory(archivePath, "settings.reader.lua");
+    if (archiveSrc === null) return;
+
+    // If either side fails to parse, skip the gate. The reader is strict
+    // about KOReader's exact dump format; archives produced by tooling
+    // outside that grammar (or already-corrupt device files) shouldn't
+    // block a restore attempt here. KOReader itself will reject anything
+    // it can't load when the user reboots.
+    let fromArchive: Record<string, LuaValue>;
+    try {
+        fromArchive = parseSettingsFile(archiveSrc) as Record<string, LuaValue>;
+    } catch {
+        return;
+    }
+
+    let onDevice: Record<string, LuaValue> = {};
+    if (exists(deviceSettingsPath, "derived-from-mount")) {
+        try {
+            onDevice = parseSettingsFile(
+                readText(deviceSettingsPath, "derived-from-mount"),
+            ) as Record<string, LuaValue>;
+        } catch {
+            // Device file unparseable → treat as empty so the gate flags
+            // any code-exec-adjacent key the archive introduces.
+        }
+    }
+
+    const changes = computeChanges(onDevice, fromArchive);
+
+    runPhase({
+        boundary: "restore",
+        registry: [CODE_EXEC_ADJACENT_REQUIRES_ACK],
+        dryRun: opts.dryRun ?? false,
+        strictImports: false,
+        opts: {
+            changes,
+            acceptCodeExec: !!opts.acceptCodeExec,
+        },
+        logger: (fired) => {
+            if (fired.result.kind === "bypass") {
+                appendGateEvent(env, {
+                    gate_id: fired.id,
+                    boundary: fired.boundary,
+                    kind: "bypass",
+                    bypass_flag: fired.result.byFlag,
+                });
+            } else if (fired.result.kind === "block") {
+                appendGateEvent(env, {
+                    gate_id: fired.id,
+                    boundary: fired.boundary,
+                    kind: "block",
+                });
+            }
+        },
+    });
 }
 
 function isoStamp(d: Date): string {
@@ -205,11 +296,15 @@ kindly restore <archive> — extract a snapshot back into the Kindle.
 
 usage: kindly restore <archive.tar.gz> [--dry-run] [--no-safety-snapshot]
                                        [--label <text>] [--mount <path>]
+                                       [--accept-code-exec]
 
   --dry-run              list entries without writing
   --no-safety-snapshot   skip the pre-restore snapshot of current state
   --label <text>         advisory name logged into kindly history
   --mount <path>         path to a mounted Kindle (auto-detect by default)
+  --accept-code-exec     consent to KOReader interpolating archive values
+                         into shell / os.execute / os.remove (SSH_port,
+                         httpinspector_port, cover_image_path)
 
 By default, takes a safety snapshot of the CURRENT device state first. If
 restore goes wrong, re-extract that file to roll back. The safety snapshot

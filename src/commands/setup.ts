@@ -538,6 +538,106 @@ async function runSetupHash(argv: readonly string[], env: CliEnv): Promise<numbe
     return 0;
 }
 
+// ---- `kindly setup sign <archive>` -----------------------------------------
+
+const SIGN_FLAGS = {
+    "key-file": {
+        type: "string",
+        description: "path to an Ed25519 private key in PEM (PKCS8) format",
+    },
+    "public-key-file": {
+        type: "string",
+        description: "path to the matching Ed25519 public key in PEM (SPKI) format",
+    },
+} as const satisfies FlagSpecs;
+
+async function runSetupSign(argv: readonly string[], env: CliEnv): Promise<number> {
+    const { positional, flags } = parseArgs(argv, SIGN_FLAGS);
+    const fileArg = positional[0];
+    if (!fileArg) {
+        throw new ArgError("usage: kindly setup sign <archive> --key-file <priv.pem> --public-key-file <pub.pem>");
+    }
+    if (positional.length > 1) {
+        throw new ArgError(`unexpected extra argument: ${positional[1]}`);
+    }
+    const privPath = flags["key-file"];
+    const pubPath = flags["public-key-file"];
+    if (!privPath) throw new ArgError("--key-file is required");
+    if (!pubPath) throw new ArgError("--public-key-file is required");
+
+    const archivePath = resolve(env.cwd, fileArg);
+    const privKeyPath = resolve(env.cwd, privPath);
+    const pubKeyPath = resolve(env.cwd, pubPath);
+
+    const { readFileSync } = await import("node:fs");
+    const { signSetupArchive } = await import("../setup/signing.ts");
+    const sidecar = signSetupArchive({
+        archivePath,
+        privateKeyPem: readFileSync(privKeyPath, "utf8"),
+        publicKeyPem: readFileSync(pubKeyPath, "utf8"),
+    });
+
+    if (env.jsonMode) {
+        emitJson(env, "setup sign", {
+            archive: archivePath,
+            sidecar: `${archivePath}.sig`,
+            manifest_hash: sidecar.manifest_hash,
+            signer_key_id: sidecar.signer_key_id,
+            filter_version: sidecar.filter_version,
+        });
+        return 0;
+    }
+
+    ok(env, `signed ${archivePath}`);
+    info(env, dim(env, `  manifest_hash: ${sidecar.manifest_hash}`));
+    info(env, dim(env, `  signer_key_id: ${sidecar.signer_key_id}`));
+    info(env, dim(env, `  sidecar:       ${archivePath}.sig`));
+    return 0;
+}
+
+// ---- `kindly setup verify <archive>` ---------------------------------------
+
+async function runSetupVerify(argv: readonly string[], env: CliEnv): Promise<number> {
+    const { positional } = parseArgs(argv, {} as const satisfies FlagSpecs);
+    const fileArg = positional[0];
+    if (!fileArg) throw new ArgError("usage: kindly setup verify <archive>");
+    if (positional.length > 1) {
+        throw new ArgError(`unexpected extra argument: ${positional[1]}`);
+    }
+
+    const archivePath = resolve(env.cwd, fileArg);
+    const { verifySetupArchive, SigningError } = await import("../setup/signing.ts");
+
+    try {
+        const result = verifySetupArchive(archivePath);
+        if (env.jsonMode) {
+            emitJson(env, "setup verify", {
+                archive: archivePath,
+                ok: true,
+                manifest_hash: result.derivedManifestHash,
+                signer_key_id: result.signerKeyId,
+                filter_version: result.sidecar.filter_version,
+            });
+            return 0;
+        }
+        ok(env, `signature verified — ${archivePath}`);
+        info(env, dim(env, `  manifest_hash: ${result.derivedManifestHash}`));
+        info(env, dim(env, `  signer_key_id: ${result.signerKeyId}`));
+        info(env, dim(env, `  filter_version: ${result.sidecar.filter_version}`));
+        info(env, dim(env, "  (signer trust is YOUR call — kindly only verifies the crypto)"));
+        return 0;
+    } catch (e) {
+        if (e instanceof SigningError) {
+            // Map crypto-layer failures to a runtime-error exit (1).
+            // Trust decisions live above this layer.
+            throw new KindlyError(ErrorCodes.SETUP_SIGNATURE_INVALID, e.message, [
+                { text: "re-run with --json to see the structured error code", command: `kindly setup verify --json ${archivePath}` },
+            ]);
+        }
+        throw e;
+    }
+}
+
 // ---- `kindly setup import <file>` ------------------------------------------
 
 const IMPORT_FLAGS = {
@@ -1145,6 +1245,8 @@ export async function runSetup(argv: readonly string[], env: CliEnv): Promise<nu
             case "inspect":   env.stdout.write(inspectHelp + "\n");   return 0;
             case "list":      env.stdout.write(listHelp + "\n");      return 0;
             case "hash":      env.stdout.write(hashHelp + "\n");      return 0;
+            case "sign":      env.stdout.write(signHelp + "\n");      return 0;
+            case "verify":    env.stdout.write(verifyHelp + "\n");    return 0;
             case "import":    env.stdout.write(importHelp + "\n");    return 0;
             case "templates": env.stdout.write(templatesHelp + "\n"); return 0;
             default: break; // fall through — unknown sub yields below
@@ -1156,6 +1258,8 @@ export async function runSetup(argv: readonly string[], env: CliEnv): Promise<nu
         case "inspect":   return await runSetupInspect(rest, env);
         case "list":      return await runSetupList(rest, env);
         case "hash":      return await runSetupHash(rest, env);
+        case "sign":      return await runSetupSign(rest, env);
+        case "verify":    return await runSetupVerify(rest, env);
         case "import":    return await runSetupImport(rest, env);
         case "templates": return await runSetupTemplates(rest, env);
         default:
@@ -1175,6 +1279,8 @@ Subcommands:
   list            list Setups in ~/.kindly/setups/
   templates       list curated templates (use with export --template)
   hash <file>     print a Setup file's content hash
+  sign <archive>  attach an Ed25519 signature sidecar to a fat .kset
+  verify <arch>   check the signature sidecar of a fat .kset
 
 Run \`kindly setup <sub> --help\` for per-subcommand flags.
 
@@ -1212,6 +1318,39 @@ usage: kindly setup hash <file>
 Hashes the raw bytes of the file — the bytes ARE the identity. If the
 file isn't in canonical form, a warning also shows what the canonical
 hash would be. Use for pinning or verifying shared Setups.
+`.trim();
+
+const signHelp = `
+kindly setup sign <archive> — attach an Ed25519 signature sidecar.
+
+usage: kindly setup sign <archive> --key-file <priv.pem> --public-key-file <pub.pem>
+
+Signs the canonical manifest hash of a fat .kset using an Ed25519 key
+pair. Writes a JSON sidecar at <archive>.sig containing the public key,
+key id, manifest hash, filter version, and signature.
+
+Generate a key pair with:
+  openssl genpkey -algorithm ed25519 -out priv.pem
+  openssl pkey -in priv.pem -pubout -out pub.pem
+
+Trust distribution (TOFU vs publisher registry) is OUT of scope here —
+the sidecar embeds the public key so kindly can verify the crypto, but
+deciding whether to trust the signer is the user's call.
+`.trim();
+
+const verifyHelp = `
+kindly setup verify <archive> — check a .kset signature sidecar.
+
+usage: kindly setup verify <archive>
+
+Reads <archive>.sig, re-derives the canonical manifest hash from the
+archive contents, and verifies the Ed25519 signature against the
+embedded public key. Reports the signer_key_id on success — comparing
+that to a known list is YOUR job.
+
+Failure modes: missing sidecar, hash mismatch (archive tampered or sig
+bound to a different .kset), signature invalid, unsupported filter
+version.
 `.trim();
 
 const templatesHelp = `

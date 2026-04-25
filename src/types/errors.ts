@@ -88,6 +88,7 @@ export const ErrorCodes = {
     DESTRUCTIVE_YAML_SHAPE: "DESTRUCTIVE_YAML_SHAPE",
     LOCK_HELD:            "LOCK_HELD",
     CONTROL_BYTES_IN_VALUE: "CONTROL_BYTES_IN_VALUE",
+    SETUP_SIGNATURE_INVALID: "SETUP_SIGNATURE_INVALID",
 } as const;
 
 export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];

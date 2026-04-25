@@ -83,6 +83,7 @@ export const ErrorCodes = {
     YAML_CYCLIC:          "YAML_CYCLIC",
     YAML_DIRECTIVE:       "YAML_DIRECTIVE",
     YAML_RESERVED_KEY:    "YAML_RESERVED_KEY",
+    DESTRUCTIVE_YAML_SHAPE: "DESTRUCTIVE_YAML_SHAPE",
 } as const;
 
 export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];
@@ -98,4 +99,5 @@ export const POLICY_BLOCK_CODES = new Set<string>([
     ErrorCodes.SCHEMA_VIOLATION,
     ErrorCodes.MANIFEST_HASH_MISMATCH,
     ErrorCodes.YAML_SHAPE_BLOCKED,
+    ErrorCodes.DESTRUCTIVE_YAML_SHAPE,
 ]);

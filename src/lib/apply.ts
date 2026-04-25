@@ -21,7 +21,10 @@ import { appendHistoryEntry } from "../history/writer.ts";
 import { runPhase } from "../gates/orchestrator.ts";
 import { YAML_SHAPE_NORMAL } from "../gates/definitions/shape.ts";
 import { CODE_EXEC_ADJACENT_REQUIRES_ACK } from "../gates/definitions/dual.ts";
+import { SENSITIVE_REQUIRES_ACK } from "../gates/definitions/consent.ts";
+import { DESTRUCTIVE_YAML_SHAPE } from "../gates/definitions/destruction.ts";
 import { appendGateEvent } from "../history/gateLog.ts";
+import type { GateDefinition } from "../gates/types.ts";
 
 export interface ApplyOptions {
     file?: string;
@@ -34,6 +37,18 @@ export interface ApplyOptions {
      * os.execute / os.remove / shell calls.
      */
     acceptCodeExec?: boolean;
+    /**
+     * C1c: treat the YAML as untrusted input. Activates the apply-side
+     * SENSITIVE_REQUIRES_ACK + DESTRUCTIVE_YAML_SHAPE gates. Default off
+     * because hand-written kindly.yaml is usually authored by the user.
+     */
+    untrustedYaml?: boolean;
+    /** C1c: bypass SENSITIVE_REQUIRES_ACK (only meaningful with untrustedYaml). */
+    acceptSensitive?: boolean;
+    /** C1c: per-key SENSITIVE bypass list (only meaningful with untrustedYaml). */
+    acceptKey?: Set<string>;
+    /** C1c: bypass DESTRUCTIVE_YAML_SHAPE (only meaningful with untrustedYaml). */
+    acceptDestructive?: boolean;
 }
 
 export function executeApply(opts: ApplyOptions, env: CliEnv): ApplyResult {
@@ -74,15 +89,26 @@ export function executeApply(opts: ApplyOptions, env: CliEnv): ApplyResult {
     // --untrusted-yaml; DESTRUCTIVE_YAML_SHAPE for mass-removal) are
     // queued for Step 12b — they have real FP risk on legitimate user
     // edits and want their own activation/flag surface.
+    const registry: GateDefinition[] = [
+        YAML_SHAPE_NORMAL,
+        CODE_EXEC_ADJACENT_REQUIRES_ACK,
+    ];
+    if (opts.untrustedYaml) {
+        registry.push(SENSITIVE_REQUIRES_ACK, DESTRUCTIVE_YAML_SHAPE);
+    }
+
     runPhase({
         boundary: "apply",
-        registry: [YAML_SHAPE_NORMAL, CODE_EXEC_ADJACENT_REQUIRES_ACK],
+        registry,
         dryRun: opts.dryRun ?? false,
         strictImports: false,
         opts: {
             yamlSettings: fromYaml,
             changes,
             acceptCodeExec: !!opts.acceptCodeExec,
+            acceptSensitive: !!opts.acceptSensitive,
+            acceptKey: opts.acceptKey ?? new Set<string>(),
+            acceptDestructive: !!opts.acceptDestructive,
         },
         logger: (fired) => {
             if (fired.result.kind === "bypass") {

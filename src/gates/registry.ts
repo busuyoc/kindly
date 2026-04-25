@@ -17,7 +17,10 @@ import {
     SENSITIVE_REQUIRES_ACK,
     STRICT_SENSITIVE_CHANGES,
 } from "./definitions/consent.ts";
-import { STRICT_REPLACE_REMOVAL_CAP } from "./definitions/destruction.ts";
+import {
+    STRICT_REPLACE_REMOVAL_CAP,
+    DESTRUCTIVE_YAML_SHAPE,
+} from "./definitions/destruction.ts";
 import { EXTRA_PLUGIN_PATHS_DUAL, CODE_EXEC_ADJACENT_REQUIRES_ACK } from "./definitions/dual.ts";
 import {
     STRICT_PLUGIN_HASH_CHECK,
@@ -45,10 +48,7 @@ export const GATES: ReadonlyArray<GateDefinition> = [
     SENSITIVE_REQUIRES_ACK,
     EXTRA_PLUGIN_PATHS_DUAL,
     CODE_EXEC_ADJACENT_REQUIRES_ACK,
-    // (Step 12 adds the apply boundary to the gates that already declare
-    //  appliesAt: [\"apply\"] — YAML_SHAPE_NORMAL, SENSITIVE_REQUIRES_ACK,
-    //  and the new DESTRUCTIVE_YAML_SHAPE — plus registers apply's new
-    //  --untrusted-yaml flag.)
+    DESTRUCTIVE_YAML_SHAPE,
 ];
 
 /** For tests / internal tooling: override the registry in a scoped way. */

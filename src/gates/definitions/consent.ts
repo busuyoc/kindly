@@ -131,7 +131,7 @@ export const STRICT_SENSITIVE_CHANGES: GateDefinition = {
 export const SENSITIVE_REQUIRES_ACK: GateDefinition = {
     id: "SENSITIVE_REQUIRES_ACK",
     category: "CONSENT",
-    appliesAt: ["import"],  // apply side added in Step 12 (behind --untrusted-yaml)
+    appliesAt: ["import", "apply"],  // apply side: behind --untrusted-yaml (C1c)
     requires: ["sensitiveHits"],
     firesIn: "non-dry-run",
     bypassFlags: ["--accept-sensitive"],

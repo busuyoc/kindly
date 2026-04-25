@@ -50,6 +50,27 @@ const FLAGS = {
             "consent to KOReader interpolating YAML values into os.execute / " +
             "os.remove / shell calls (SSH_port, httpinspector_port, cover_image_path)",
     },
+    "untrusted-yaml": {
+        type: "boolean",
+        default: false,
+        description:
+            "treat the YAML as untrusted: activates apply-side SENSITIVE + " +
+            "DESTRUCTIVE_YAML_SHAPE gates (use for shared/edited YAML)",
+    },
+    "accept-sensitive": {
+        type: "boolean",
+        default: false,
+        description: "with --untrusted-yaml: blanket consent for SENSITIVE-class changes",
+    },
+    "accept-key": {
+        type: "string",
+        description: "with --untrusted-yaml: per-key consent (comma-separated dotted paths)",
+    },
+    "accept-destructive": {
+        type: "boolean",
+        default: false,
+        description: "with --untrusted-yaml: consent to mass-removal of USER keys",
+    },
 } as const satisfies FlagSpecs;
 
 export function renderApply(result: ApplyResult, env: CliEnv): void {
@@ -83,12 +104,20 @@ export async function runApply(argv: readonly string[], env: CliEnv): Promise<nu
     const { flags } = parseArgs(argv, FLAGS);
     if (flags.mount) env = { ...env, mountOverride: flags.mount };
 
+    const acceptKey = flags["accept-key"]
+        ? new Set(flags["accept-key"].split(",").map((s) => s.trim()).filter(Boolean))
+        : undefined;
+
     const result = executeApply({
         file: flags.file,
         dryRun: flags["dry-run"],
         backupDir: flags["backup-dir"],
         label: flags.label,
         acceptCodeExec: flags["accept-code-exec"],
+        untrustedYaml: flags["untrusted-yaml"],
+        acceptSensitive: flags["accept-sensitive"],
+        acceptKey,
+        acceptDestructive: flags["accept-destructive"],
     }, env);
 
     if (env.jsonMode) emitJson(env, "apply", result);
@@ -118,7 +147,8 @@ export const applyHelp = `
 kindly apply — merge kindly.yaml into the device's settings.reader.lua.
 
 usage: kindly apply [--file <path>] [--dry-run] [--mount <path>] [--backup-dir <path>]
-                    [--accept-code-exec]
+                    [--accept-code-exec] [--untrusted-yaml]
+                    [--accept-sensitive | --accept-key=<a,b>] [--accept-destructive]
 
   --file <path>        YAML to apply (default: kindly.yaml)
   --dry-run            show changes without writing
@@ -128,6 +158,11 @@ usage: kindly apply [--file <path>] [--dry-run] [--mount <path>] [--backup-dir <
   --accept-code-exec   consent to KOReader interpolating YAML values into
                        os.execute / os.remove / shell calls (SSH_port,
                        httpinspector_port, cover_image_path)
+  --untrusted-yaml     treat YAML as untrusted: activates SENSITIVE + DESTRUCTIVE
+                       gates on apply (use for YAML you didn't author)
+  --accept-sensitive   with --untrusted-yaml: blanket SENSITIVE consent
+  --accept-key=<a,b>   with --untrusted-yaml: per-key SENSITIVE consent
+  --accept-destructive with --untrusted-yaml: consent to mass USER-key removal
 
 Apply is non-destructive: on-device keys not present in YAML are preserved
 (this is how secrets and ephemerals survive round-tripping through YAML).

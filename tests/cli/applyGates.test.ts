@@ -176,3 +176,83 @@ describe("apply — CODE_EXEC_ADJACENT_REQUIRES_ACK (C1a)", () => {
         expect(code).toBe(0);
     });
 });
+
+// ============================================================================
+// C1c: --untrusted-yaml activates SENSITIVE_REQUIRES_ACK at apply boundary +
+// new DESTRUCTIVE_YAML_SHAPE gate. Default off — hand-authored kindly.yaml
+// runs without these.
+// ============================================================================
+
+describe("apply — SENSITIVE_REQUIRES_ACK on apply (C1c, behind --untrusted-yaml)", () => {
+    test("ota_server change passes WITHOUT --untrusted-yaml (default trusted mode)", async () => {
+        writeYaml("ota_server: \"https://attacker.example/koreader\"\n");
+        const code = await main(["apply"], env);
+        expect(code).toBe(0);
+    });
+
+    test("ota_server change BLOCKS under --untrusted-yaml", async () => {
+        writeYaml("ota_server: \"https://attacker.example/koreader\"\n");
+        const code = await main(["apply", "--untrusted-yaml"], env);
+        expect(code).toBe(3);
+        expect(err.value).toContain("ota_server");
+        expect(err.value).toContain("security-sensitive");
+    });
+
+    test("--untrusted-yaml + --accept-sensitive lets it through", async () => {
+        writeYaml("ota_server: \"https://attacker.example/koreader\"\n");
+        const code = await main(
+            ["apply", "--untrusted-yaml", "--accept-sensitive"],
+            env,
+        );
+        expect(code).toBe(0);
+    });
+
+    test("--untrusted-yaml + --accept-key=ota_server lets it through", async () => {
+        writeYaml("ota_server: \"https://attacker.example/koreader\"\n");
+        const code = await main(
+            ["apply", "--untrusted-yaml", "--accept-key=ota_server"],
+            env,
+        );
+        expect(code).toBe(0);
+    });
+
+    test("--dry-run --untrusted-yaml does not block (firesIn: non-dry-run)", async () => {
+        writeYaml("ota_server: \"https://attacker.example/koreader\"\n");
+        const code = await main(
+            ["apply", "--dry-run", "--untrusted-yaml"],
+            env,
+        );
+        expect(code).toBe(0);
+    });
+});
+
+describe("apply — DESTRUCTIVE_YAML_SHAPE (C1c)", () => {
+    test("does NOT fire on a small change without --untrusted-yaml", async () => {
+        writeYaml("refresh_rate: 5\n");
+        const code = await main(["apply"], env);
+        expect(code).toBe(0);
+    });
+
+    test("does NOT fire when removed-USER-keys < threshold (5)", async () => {
+        // Default device has refresh_rate, zlibrary_password, kosync.{...}.
+        // No top-level USER removals — threshold not reached.
+        writeYaml("refresh_rate: 5\n");
+        const code = await main(["apply", "--untrusted-yaml"], env);
+        expect(code).toBe(0);
+    });
+
+    test("plain user-edit YAML adding many keys is NOT destructive (only removals count)", async () => {
+        // Five additions are not destructive — only `removed` kind contributes
+        // to the cap. This test guards the semantic: the gate is for
+        // mass-removal, not mass-change.
+        writeYaml(
+            "refresh_rate: 5\n" +
+            "screensaver_dir: \"/mnt/us/screensavers\"\n" +
+            "page_overlap_pixels: 24\n" +
+            "show_hidden: true\n" +
+            "auto_save_paused_counter_minute: 30\n",
+        );
+        const code = await main(["apply", "--untrusted-yaml"], env);
+        expect(code).toBe(0);
+    });
+});

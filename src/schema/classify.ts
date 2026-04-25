@@ -113,15 +113,22 @@ const SUFFIX_RULES: ReadonlyArray<{ suffix: string; set: Partial<KeyEntry> }> =
 /** Look up an entry for a top-level key OR a dotted nested path
  *  (e.g. "kosync.userkey"). Exact match wins; rules (suffix then regex)
  *  fall through. Missing entries return an empty object — callers project
- *  through the *Class functions, which default to the safe cell. */
+ *  through the *Class functions, which default to the safe cell.
+ *
+ *  C5: input is NFC-normalized before any comparison. parseYamlSafe
+ *  rejects non-NFC keys at the boundary, but classify.ts is also called
+ *  from non-YAML paths (parsed Lua, archive entry names, --accept-key
+ *  CLI args) — normalize here as belt-and-suspenders so a single
+ *  attacker-controlled non-NFC byte cannot defeat the lookup. */
 function lookup(keyOrPath: string): Partial<KeyEntry> {
-    const exact = DATA.keys[keyOrPath];
+    const k = keyOrPath.normalize("NFC");
+    const exact = DATA.keys[k];
     if (exact) return exact;
     for (const r of SUFFIX_RULES) {
-        if (keyOrPath.endsWith(r.suffix)) return r.set;
+        if (k.endsWith(r.suffix)) return r.set;
     }
     for (const r of REGEX_RULES) {
-        if (r.re.test(keyOrPath)) return r.set;
+        if (r.re.test(k)) return r.set;
     }
     return {};
 }
@@ -186,7 +193,8 @@ export function isSensitivePath(parent: string, child: string): boolean {
 /** Is this dotted string a known SENSITIVE top-level key or nested path?
  *  Used by the CLI layer to validate --accept-key= entries. */
 export function isSensitiveKeyName(name: string): boolean {
-    return SENSITIVE_TOPLEVEL.has(name) || SENSITIVE_NESTED.has(name);
+    const k = name.normalize("NFC");
+    return SENSITIVE_TOPLEVEL.has(k) || SENSITIVE_NESTED.has(k);
 }
 
 /** Keys whose values KOReader interpolates into os.execute / os.remove /
@@ -203,7 +211,7 @@ const CODE_EXEC_ADJACENT: ReadonlySet<string> = new Set(
 /** Is the value at this key interpolated into a KOReader shell / os.remove /
  *  os.execute call? */
 export function isCodeExecAdjacent(keyOrPath: string): boolean {
-    return CODE_EXEC_ADJACENT.has(keyOrPath);
+    return CODE_EXEC_ADJACENT.has(keyOrPath.normalize("NFC"));
 }
 
 /** Return the direct nested children of `parent` that carry exfil=secret.
@@ -258,7 +266,7 @@ function findSensitiveInValue(
     }
     for (const [k, v] of Object.entries(value as Record<string, LuaValue>)) {
         const full = [...pathPrefix, k];
-        const dotted = full.join(".");
+        const dotted = full.join(".").normalize("NFC");
         if (full.length === 1 && SENSITIVE_TOPLEVEL.has(dotted)) hits.push(dotted);
         else if (SENSITIVE_NESTED.has(dotted)) hits.push(dotted);
         hits.push(...findSensitiveInValue(full, v));
@@ -269,7 +277,7 @@ function findSensitiveInValue(
 /** Returns dotted paths of SENSITIVE keys touched by a single change entry.
  *  Handles both direct matches and subtree-carrier cases (88 §4.7). */
 export function changeHitsSensitive(c: Change): string[] {
-    const direct = c.path.join(".");
+    const direct = c.path.join(".").normalize("NFC");
     const hits: string[] = [];
     if (c.path.length === 1 && SENSITIVE_TOPLEVEL.has(direct)) hits.push(direct);
     if (c.path.length >= 2 && SENSITIVE_NESTED.has(direct)) hits.push(direct);
@@ -290,11 +298,12 @@ export function collectSensitiveFromSettings(
     settings: Record<string, unknown>,
 ): string[] {
     const hits: string[] = [];
-    for (const [k, v] of Object.entries(settings)) {
+    for (const [rawK, v] of Object.entries(settings)) {
+        const k = rawK.normalize("NFC");
         if (SENSITIVE_TOPLEVEL.has(k)) hits.push(k);
         if (v !== null && typeof v === "object" && !Array.isArray(v)) {
-            for (const child of Object.keys(v as Record<string, unknown>)) {
-                const dotted = `${k}.${child}`;
+            for (const rawChild of Object.keys(v as Record<string, unknown>)) {
+                const dotted = `${k}.${rawChild.normalize("NFC")}`;
                 if (SENSITIVE_NESTED.has(dotted)) hits.push(dotted);
             }
         }

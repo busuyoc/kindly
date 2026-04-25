@@ -94,4 +94,73 @@ h: [*g,*g,*g,*g,*g,*g,*g,*g,*g]
             expect(parseYamlSafe('note: "see %YAML docs"\n')).toEqual({ note: "see %YAML docs" });
         });
     });
+
+    describe("C5 — non-NFC key rejection (Lead 19, S730-S739)", () => {
+        // codepoint construction — see below
+        // Build NFD/NFC variants explicitly from codepoints so the test
+        // doesn't depend on what form the editor saved this file in.
+        // Both render as "café"; bytes differ.
+        const NFC = "café";              // c a f é (precomposed)
+        const NFD = "café";        // c a f e + combining acute
+
+        test("self-test: NFD differs by bytes, equals by NFC", () => {
+            expect(NFD).not.toBe(NFC);
+            expect(NFD.normalize("NFC")).toBe(NFC);
+            expect(NFC.normalize("NFC")).toBe(NFC);
+        });
+
+        test("rejects an NFD-decomposed top-level key", () => {
+            expect(() => parseYamlSafe(`${NFD}: 1\n`))
+                .toThrow(/Unicode Normalization Form C/);
+        });
+
+        test("error code is YAML_NON_NFC_KEY", () => {
+            try {
+                parseYamlSafe(`${NFD}: 1\n`);
+                expect.unreachable();
+            } catch (e: any) {
+                expect(e.code).toBe(ErrorCodes.YAML_NON_NFC_KEY);
+            }
+        });
+
+        test("rejects a non-NFC nested key (recursion)", () => {
+            const doc = `kosync:\n  ${NFD}: x\n`;
+            expect(() => parseYamlSafe(doc)).toThrow(/Unicode Normalization Form C/);
+        });
+
+        test("path hint points at the offending location", () => {
+            try {
+                parseYamlSafe(`kosync:\n  ${NFD}: x\n`);
+                expect.unreachable();
+            } catch (e: any) {
+                expect(e.message).toContain("$.kosync");
+            }
+        });
+
+        test("plain ASCII keys pass through (NFC == self)", () => {
+            expect(parseYamlSafe("kosync:\n  userkey: v\n")).toEqual({
+                kosync: { userkey: "v" },
+            });
+        });
+
+        test("NFC-precomposed accents pass through", () => {
+            expect(parseYamlSafe(`${NFC}: 1\n`)).toEqual({ [NFC]: 1 });
+        });
+
+        test("ZWSP-injected key is preserved by NFC and so passes parseYamlSafe", () => {
+            // U+200B is preserved by NFC normalization. The defense for
+            // ZWSP-injected SECRET-key bypasses lives in classify.ts not
+            // matching the variant against the denylist (no homoglyph
+            // folding), NOT in parseYamlSafe rejecting the byte. Verify
+            // this distinction so the two layers stay decoupled.
+            const variant = "kosync​";
+            expect(variant.normalize("NFC")).toBe(variant);
+            expect(parseYamlSafe(`${variant}: 1\n`)).toEqual({ [variant]: 1 });
+        });
+
+        test("array entries are walked", () => {
+            const doc = `list:\n  - ${NFD}: 1\n`;
+            expect(() => parseYamlSafe(doc)).toThrow(/Unicode Normalization Form C/);
+        });
+    });
 });

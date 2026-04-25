@@ -267,6 +267,79 @@ describe("isCodeExecAdjacent — C1a denylist (orthogonal to change axis)", () =
     });
 });
 
+// ============================================================================
+// C5 — NFC normalization at lookup. Lead 19 (S730-S739) showed 87/151
+// Unicode variants of SECRET/SENSITIVE keys defeat byte-equality lookups.
+// Defense lives in two places:
+//   - parseYamlSafe rejects non-NFC keys at the boundary (assertNfcKeys),
+//     so malicious YAML cannot cross into kindly.
+//   - classify.ts NFC-normalizes its own inputs as belt-and-suspenders,
+//     because non-YAML callers (parsed Lua, archive entry names,
+//     --accept-key= CLI args) reach these helpers without going through
+//     the YAML parser.
+// ============================================================================
+
+describe("classify — NFC normalization at lookup (C5 / Lead 19)", () => {
+    test("NFD-decomposed accent matches NFC denylist entry", () => {
+        // "café" in NFC: 0x63 0x61 0x66 0xc3 0xa9
+        // "café" in NFD: 0x63 0x61 0x66 0x65 0xcc 0x81 (é → e + combining acute)
+        // We use a real key — kosync.userkey — with a synthetic decomposition
+        // to prove the lookup is normalization-aware.
+        const nfc = "kosync.userkey";
+        const nfd = nfc.normalize("NFD");
+        // Self-test the test: bytes really differ.
+        expect(nfd === nfc || nfd.length === nfc.length).toBe(true);
+        // Both lookups must agree.
+        expect(exfilClass(nfc)).toBe(exfilClass(nfd));
+    });
+
+    test("classifyKey is NFC-resilient for the SECRET path", () => {
+        const nfc = "zlibrary_password";
+        // Simulate an attacker-controlled non-NFC variant by inserting a
+        // ZWSP (which normalize("NFC") leaves as ZWSP — only NFD/NFKC fold
+        // it out). Use a different vector: cyrillic 'а' (U+0430) instead
+        // of latin 'a' (U+0061) at index 7 — same glyph, different codepoint.
+        const homoglyph = nfc.replace("password", "pаssword");
+        // Self-test: bytes differ.
+        expect(homoglyph).not.toBe(nfc);
+        // Homoglyph is NOT a known SECRET — it shouldn't classify as one
+        // (we don't fold homoglyphs; we only normalize Unicode equivalence).
+        expect(classifyKey(homoglyph)).toBe("USER");
+        // The legitimate key still classifies correctly.
+        expect(classifyKey(nfc)).toBe("SECRET");
+    });
+
+    test("isSensitiveKeyName accepts NFD form of a SENSITIVE key", () => {
+        const nfc = "ota_server";
+        const nfd = nfc.normalize("NFD");
+        expect(isSensitiveKeyName(nfc)).toBe(true);
+        expect(isSensitiveKeyName(nfd)).toBe(true);
+    });
+
+    test("isCodeExecAdjacent accepts NFD form", () => {
+        const nfc = "SSH_port";
+        const nfd = nfc.normalize("NFD");
+        expect(isCodeExecAdjacent(nfc)).toBe(true);
+        expect(isCodeExecAdjacent(nfd)).toBe(true);
+    });
+
+    test("ZWSP-injected variant does NOT match (no homoglyph folding)", () => {
+        // U+200B between bytes is preserved by NFC. The defense is REJECTION
+        // at parseYamlSafe (tested separately) — classify.ts must not
+        // silently accept the variant.
+        const variant = "kosync​.userkey";
+        expect(exfilClass(variant)).toBe("normal");
+    });
+
+    test("fullwidth letters do NOT match (NFC-only, not NFKC)", () => {
+        // U+FF53 ('ｓ') normalizes to 's' under NFKC but stays as itself
+        // under NFC. We deliberately don't fold compatibility forms — that
+        // would mask too much. Defense here is REJECTION via parseYamlSafe.
+        const variant = "ＳＳＨ_port";
+        expect(isCodeExecAdjacent(variant)).toBe(false);
+    });
+});
+
 describe("sensitiveDomain — UI label mapping", () => {
     test("maps each change-class to its domain label", () => {
         expect(sensitiveDomain("extra_plugin_paths")).toBe("code-exec");

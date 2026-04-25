@@ -22,7 +22,7 @@ import { writeInProgressMarker, clearInProgressMarker } from "../history/inProgr
 import { withLock } from "../fs/lockfile.ts";
 import { createHash } from "node:crypto";
 import { runPhase } from "../gates/orchestrator.ts";
-import { YAML_SHAPE_NORMAL } from "../gates/definitions/shape.ts";
+import { YAML_SHAPE_NORMAL, CONTROL_BYTES_IN_VALUE } from "../gates/definitions/shape.ts";
 import { CODE_EXEC_ADJACENT_REQUIRES_ACK } from "../gates/definitions/dual.ts";
 import { SENSITIVE_REQUIRES_ACK } from "../gates/definitions/consent.ts";
 import { DESTRUCTIVE_YAML_SHAPE } from "../gates/definitions/destruction.ts";
@@ -98,6 +98,7 @@ function executeApplyLocked(opts: ApplyOptions, env: CliEnv): ApplyResult {
     // edits and want their own activation/flag surface.
     const registry: GateDefinition[] = [
         YAML_SHAPE_NORMAL,
+        CONTROL_BYTES_IN_VALUE,
         CODE_EXEC_ADJACENT_REQUIRES_ACK,
     ];
     if (opts.untrustedYaml) {

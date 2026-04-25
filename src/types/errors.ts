@@ -87,6 +87,7 @@ export const ErrorCodes = {
     YAML_NON_NFC_KEY:     "YAML_NON_NFC_KEY",
     DESTRUCTIVE_YAML_SHAPE: "DESTRUCTIVE_YAML_SHAPE",
     LOCK_HELD:            "LOCK_HELD",
+    CONTROL_BYTES_IN_VALUE: "CONTROL_BYTES_IN_VALUE",
 } as const;
 
 export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];
@@ -103,4 +104,5 @@ export const POLICY_BLOCK_CODES = new Set<string>([
     ErrorCodes.MANIFEST_HASH_MISMATCH,
     ErrorCodes.YAML_SHAPE_BLOCKED,
     ErrorCodes.DESTRUCTIVE_YAML_SHAPE,
+    ErrorCodes.CONTROL_BYTES_IN_VALUE,
 ]);

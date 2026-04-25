@@ -30,6 +30,7 @@ import type { LuaValue } from "../lua/writer.ts";
 import { computeChanges } from "../schema/diff.ts";
 import { runPhase } from "../gates/orchestrator.ts";
 import { CODE_EXEC_ADJACENT_REQUIRES_ACK } from "../gates/definitions/dual.ts";
+import { CONTROL_BYTES_IN_VALUE } from "../gates/definitions/shape.ts";
 import { appendGateEvent } from "../history/gateLog.ts";
 
 const FLAGS = {
@@ -273,11 +274,12 @@ function runRestoreGates(
 
     runPhase({
         boundary: "restore",
-        registry: [CODE_EXEC_ADJACENT_REQUIRES_ACK],
+        registry: [CODE_EXEC_ADJACENT_REQUIRES_ACK, CONTROL_BYTES_IN_VALUE],
         dryRun: opts.dryRun ?? false,
         strictImports: false,
         opts: {
             changes,
+            yamlSettings: fromArchive,
             acceptCodeExec: !!opts.acceptCodeExec,
         },
         logger: (fired) => {

@@ -40,7 +40,7 @@ import {
     STRICT_SCANNER_FINDINGS,
 } from "../gates/definitions/integrity.ts";
 import { COMPAT_INCOMPATIBLE } from "../gates/definitions/compat.ts";
-import { SCHEMA_VIOLATION, YAML_SHAPE_NORMAL } from "../gates/definitions/shape.ts";
+import { SCHEMA_VIOLATION, YAML_SHAPE_NORMAL, CONTROL_BYTES_IN_VALUE } from "../gates/definitions/shape.ts";
 import { formatSensitiveChange as formatSensitiveChangeShared } from "../gates/sensitiveFormat.ts";
 import { parseManifest, SetupSchemaError, type EmbeddedFile, type SetupManifest } from "../setup/schema.ts";
 import { unpackSetup } from "../setup/unpack.ts";
@@ -371,6 +371,7 @@ function executeSetupImportLocked(
         registry: [
             MANIFEST_HASH_ASSERT,
             YAML_SHAPE_NORMAL,
+            CONTROL_BYTES_IN_VALUE,
             PLUGINS_REQUIRE_ACK,
             PATCHES_REQUIRE_ACK,
         ],

@@ -17,6 +17,7 @@ import { schemaFindings } from "./schemaFindings.ts";
 import { changes } from "./changes.ts";
 import { replaceWarnings } from "./replaceWarnings.ts";
 import { normalizedYaml } from "./normalizedYaml.ts";
+import { controlByteHits } from "./controlByteHits.ts";
 
 export const PRODUCERS: Readonly<Record<string, Producer<unknown>>> = {
     manifestIdentity,
@@ -29,4 +30,5 @@ export const PRODUCERS: Readonly<Record<string, Producer<unknown>>> = {
     changes,
     replaceWarnings,
     normalizedYaml,
+    controlByteHits,
 };

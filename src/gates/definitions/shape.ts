@@ -4,6 +4,7 @@
 import type { GateDefinition } from "../types.ts";
 import type { ValidationReport } from "../../schema/report.ts";
 import type { NormalizedYaml } from "../producers/normalizedYaml.ts";
+import type { ControlByteReport } from "../producers/controlByteHits.ts";
 import { formatValidationReport } from "../../schema/report.ts";
 
 /**
@@ -92,6 +93,49 @@ export const YAML_SHAPE_NORMAL: GateDefinition = {
             kind: "block",
             message:
                 `YAML input would damage on-device SECRETs (${normalized.errors.length} issue(s)):\n` +
+                lines.join("\n"),
+        };
+    },
+};
+
+/**
+ * CONTROL_BYTES_IN_VALUE — C11 (Batch O closure).
+ *
+ * Rejects YAML strings that contain raw control bytes (NUL, ESC, BEL, CR,
+ * etc.) at SECRET / code-exec-adjacent / sensitive-* keys. Closes the
+ * S321 / S322 / S324 chain where YAML-supplied bytes propagate through
+ * settings.reader.lua into KOReader's logging, dialog rendering, or HTTP
+ * client (CRLF smuggle).
+ *
+ * Structural, not consent-bearing. There is no legitimate use case for a
+ * raw ESC inside `extra_plugin_paths` or a CR inside `kosync.username`.
+ * Fires on import + apply, never bypassable. The error message lists hex
+ * codepoints, never the raw value (that would re-emit attacker bytes
+ * through stderr — Batch M sibling concern).
+ */
+export const CONTROL_BYTES_IN_VALUE: GateDefinition = {
+    id: "CONTROL_BYTES_IN_VALUE",
+    category: "SHAPE",
+    appliesAt: ["import", "apply", "restore"],
+    requires: ["controlByteHits"],
+    firesIn: "always",
+    bypassFlags: [],
+    errorCode: "CONTROL_BYTES_IN_VALUE",
+    remediation: [
+        { text: "Remove the control bytes (ESC, CR, NUL, BEL, ...) from the listed value(s)." },
+        { text: "If the YAML came from an untrusted source, treat the file as hostile and do not apply." },
+    ],
+    check: (ctx) => {
+        const report = ctx.producers.controlByteHits as ControlByteReport;
+        if (report.hits.length === 0) return { kind: "pass" };
+        const lines = report.hits.map((h) =>
+            `  [${h.class}] ${h.path}\n    forbidden bytes: ${h.bytes.join(", ")}`,
+        );
+        return {
+            kind: "block",
+            message:
+                `YAML contains control bytes inside SECRET / SENSITIVE / code-exec ` +
+                `string value(s) (${report.hits.length} hit(s)):\n` +
                 lines.join("\n"),
         };
     },

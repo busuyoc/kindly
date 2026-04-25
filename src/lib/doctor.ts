@@ -7,7 +7,7 @@
 // grandfathered per 90 §7 "never rename an id".
 
 import {
-    mkdirSync, readdirSync, rmdirSync, statfsSync,
+    mkdtempSync, readdirSync, rmSync, statfsSync,
 } from "node:fs";
 import { join } from "node:path";
 import { exists, readText, statFollow } from "../fs/safeRead.ts";
@@ -495,32 +495,23 @@ function runDiskChecks(env: CliEnv, mount: KindleMount): DoctorCheck[] {
     const out: DoctorCheck[] = [];
     const kindlyDir = join(env.cwd, ".kindly");
 
-    // disk.kindly_writable: probe creatability if absent; probe writable
-    // bit if present. We don't want to leave side effects, so creation
-    // attempts use a sentinel subdir we immediately remove — simpler is
-    // just: if missing, check the parent is writable; if present, stat it.
+    // disk.kindly_writable: doctor is contractually read-only, so we
+    // probe writability without creating `.kindly/` itself. If `.kindly`
+    // exists, we mkdtempSync a sibling probe inside it (PID-collision
+    // safe — closes S428) and immediately remove it. If `.kindly` does
+    // NOT exist, we probe the cwd directly — the lazy `.kindly` creation
+    // that other commands rely on will succeed iff cwd is writable.
+    // This closes S426: doctor no longer mkdir's `.kindly/` as a side
+    // effect of running.
     let writable = false;
     let writableDetail: string | undefined;
-    if (exists(kindlyDir, "derived-from-cwd")) {
-        try {
-            const probe = join(kindlyDir, `.doctor-probe-${process.pid}`);
-            mkdirSync(probe);
-            try { rmdirSync(probe); } catch { /* cleanup best-effort */ }
-            writable = true;
-        } catch (e) {
-            writableDetail = `not writable: ${(e as Error).message}`;
-        }
-    } else {
-        // Not present — try to create it. doctor IS allowed to mkdir
-        // `.kindly/` because every other command does so lazily on first
-        // write; reporting "would fail to apply" without attempting is
-        // less useful than just making the directory.
-        try {
-            mkdirSync(kindlyDir, { recursive: true });
-            writable = true;
-        } catch (e) {
-            writableDetail = `cannot create: ${(e as Error).message}`;
-        }
+    const probeRoot = exists(kindlyDir, "derived-from-cwd") ? kindlyDir : env.cwd;
+    try {
+        const probe = mkdtempSync(join(probeRoot, ".doctor-probe-"));
+        try { rmSync(probe, { recursive: true, force: true }); } catch { /* cleanup best-effort */ }
+        writable = true;
+    } catch (e) {
+        writableDetail = `not writable: ${(e as Error).message}`;
     }
     out.push({
         id: "disk.kindly_writable",
@@ -578,6 +569,40 @@ function runDiskChecks(env: CliEnv, mount: KindleMount): DoctorCheck[] {
             } : {}),
         });
     }
+
+    // disk.mount_writable (S1397): apply writes settings.reader.lua via
+    // safeWrite's atomic rename pipeline; if the mount is read-only or
+    // out of inodes, the failure surfaces deep in step-3 with EROFS or
+    // ENOSPC and a half-written .tmp left behind. Catch it up front by
+    // probing with mkdtempSync inside the koreader directory (a place
+    // we'd write to anyway) and removing the probe immediately. Fatal
+    // if the probe fails — apply will not succeed.
+    let mountWritable = false;
+    let mountWritableDetail: string | undefined;
+    try {
+        const probe = mkdtempSync(join(mount.koreaderRoot, ".doctor-mw-"));
+        try { rmSync(probe, { recursive: true, force: true }); } catch { /* best-effort */ }
+        mountWritable = true;
+    } catch (e) {
+        mountWritableDetail = (e as Error).message;
+    }
+    out.push({
+        id: "disk.mount_writable",
+        category: "disk",
+        severity: mountWritable ? "info" : "fatal",
+        ok: mountWritable,
+        label: mountWritable
+            ? `mount writable at ${mount.koreaderRoot}`
+            : `mount NOT writable at ${mount.koreaderRoot}`,
+        ...(mountWritableDetail ? { detail: mountWritableDetail } : {}),
+        data: { path: mount.koreaderRoot, writable: mountWritable },
+        ...(mountWritable ? {} : {
+            remediation: [
+                { text: "Re-mount the device read-write, or check that it isn't being held by another process." },
+                { text: "On Kindle hardware, ensure the device is fully connected over USB and not in `Restart` mode." },
+            ],
+        }),
+    });
 
     // disk.backups_size: additive .kindly/backups/ — F9 from 87. Loud
     // advisory until W34h rotation lands.

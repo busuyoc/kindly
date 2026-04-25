@@ -3,7 +3,7 @@
 // mount failure becomes a failing check, not an exception.
 
 import { describe, test, expect, beforeEach } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -402,12 +402,35 @@ describe("executeDoctor — W34c catalog.* (90 §5.3)", () => {
 });
 
 describe("executeDoctor — W34d disk.* (90 §5.6)", () => {
-    test("kindly_writable: fresh workdir auto-creates .kindly → info", () => {
+    test("kindly_writable: fresh workdir → info (probes cwd, does NOT create .kindly)", () => {
+        // S426: doctor is contractually read-only — must probe writability
+        // without leaving `.kindly/` behind. Verify cwd remains as it was.
         const r = executeDoctor(env);
         const k = r.checks.find((c) => c.id === "disk.kindly_writable")!;
         expect(k.severity).toBe("info");
         expect(k.data).toMatchObject({ writable: true });
         expect((k.data as { path: string }).path).toBe(join(workdir, ".kindly"));
+        expect(existsSync(join(workdir, ".kindly"))).toBe(false);
+    });
+
+    test("kindly_writable: probes inside existing .kindly with mkdtempSync (S428: PID-collision-safe)", () => {
+        // S428: previous code used `.doctor-probe-${process.pid}` which
+        // could collide on PID reuse. Verify no probe directory survives,
+        // and concurrent doctor invocations would not collide.
+        mkdirSync(join(workdir, ".kindly"), { recursive: true });
+        const r = executeDoctor(env);
+        const k = r.checks.find((c) => c.id === "disk.kindly_writable")!;
+        expect(k.severity).toBe("info");
+        const probeLeftovers = readdirSync(join(workdir, ".kindly"))
+            .filter((f) => f.startsWith(".doctor-probe-"));
+        expect(probeLeftovers).toEqual([]);
+    });
+
+    test("mount_writable: writable mount → info (S1397)", () => {
+        const r = executeDoctor(env);
+        const m = r.checks.find((c) => c.id === "disk.mount_writable")!;
+        expect(m.severity).toBe("info");
+        expect(m.data).toMatchObject({ writable: true });
     });
 
     test("free_space: healthy fs → info with non-null bytes_free", () => {

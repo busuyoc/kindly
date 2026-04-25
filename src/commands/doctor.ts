@@ -113,7 +113,10 @@ Each finding carries one of four severities:
   ⚠ warning  drift / staleness / best-effort failure
   ✓ info     passing check, or advisory reporting
 
-Exit 1 if any finding is fatal or error; exit 0 for warning or info only.
+Exit codes:
+  1 — at least one fatal or error finding
+  4 — at least one warning (no fatal/error)
+  0 — all info, no findings above info severity
 
 Also lists on-device secret keys (passwords, PINs) that kindly won't sync,
 so you can rescue them to a password manager before a factory reset.

@@ -164,6 +164,85 @@ settings:
     });
 });
 
+describe("embedded-file arrays sort by path (S905 / Angle C)", () => {
+    test("canonicalize: plugins.files in two orders → identical bytes", () => {
+        const a = make({
+            ...baseRaw,
+            plugins: {
+                files: [
+                    { path: "z.koplugin/main.lua", hash: "sha256:" + "0".repeat(64), bytes: 1 },
+                    { path: "a.koplugin/main.lua", hash: "sha256:" + "1".repeat(64), bytes: 2 },
+                    { path: "m.koplugin/main.lua", hash: "sha256:" + "2".repeat(64), bytes: 3 },
+                ],
+            },
+        });
+        const b = make({
+            ...baseRaw,
+            plugins: {
+                files: [
+                    { path: "a.koplugin/main.lua", hash: "sha256:" + "1".repeat(64), bytes: 2 },
+                    { path: "m.koplugin/main.lua", hash: "sha256:" + "2".repeat(64), bytes: 3 },
+                    { path: "z.koplugin/main.lua", hash: "sha256:" + "0".repeat(64), bytes: 1 },
+                ],
+            },
+        });
+        expect(canonicalizeManifest(a)).toBe(canonicalizeManifest(b));
+    });
+
+    test("canonicalize: patches in two orders → identical bytes", () => {
+        const a = make({
+            ...baseRaw,
+            patches: [
+                { path: "9-z.lua", hash: "sha256:" + "0".repeat(64), bytes: 1 },
+                { path: "1-a.lua", hash: "sha256:" + "1".repeat(64), bytes: 2 },
+            ],
+        });
+        const b = make({
+            ...baseRaw,
+            patches: [
+                { path: "1-a.lua", hash: "sha256:" + "1".repeat(64), bytes: 2 },
+                { path: "9-z.lua", hash: "sha256:" + "0".repeat(64), bytes: 1 },
+            ],
+        });
+        expect(canonicalizeManifest(a)).toBe(canonicalizeManifest(b));
+    });
+
+    test("non-EmbeddedFile arrays still preserve order", () => {
+        // tags is z.array(z.string()) — meaningful order.
+        const s = canonicalizeManifest(make({
+            ...baseRaw,
+            meta: {
+                name: "x",
+                created_at: "2026-04-21T12:00:00Z",
+                tags: ["gamma", "alpha", "beta"],
+            },
+        }));
+        const tagsBlock = s.slice(s.indexOf("tags:"));
+        expect(tagsBlock.indexOf("gamma")).toBeLessThan(tagsBlock.indexOf("alpha"));
+        expect(tagsBlock.indexOf("alpha")).toBeLessThan(tagsBlock.indexOf("beta"));
+    });
+
+    test("EmbeddedFile sort uses code-units, not localeCompare", () => {
+        // Accented filenames sort by codepoint in canonical output. Under
+        // localeCompare they'd interleave with ASCII; under code-unit they
+        // come AFTER all ASCII (codepoints > 0x7F).
+        const m = make({
+            ...baseRaw,
+            patches: [
+                { path: "ä.lua", hash: "sha256:" + "0".repeat(64), bytes: 1 },
+                { path: "z.lua", hash: "sha256:" + "1".repeat(64), bytes: 1 },
+                { path: "a.lua", hash: "sha256:" + "2".repeat(64), bytes: 1 },
+            ],
+        });
+        const s = canonicalizeManifest(m);
+        const idxA = s.indexOf("a.lua");
+        const idxZ = s.indexOf("z.lua");
+        const idxAccent = s.indexOf("ä.lua");
+        expect(idxA).toBeLessThan(idxZ);
+        expect(idxZ).toBeLessThan(idxAccent);
+    });
+});
+
 describe("manifestHash", () => {
     test("format is sha256:<64 lowercase hex>", () => {
         const h = manifestHash(make(baseRaw));

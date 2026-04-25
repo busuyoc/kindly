@@ -72,6 +72,52 @@ afterEach(() => {
 
 // ---- pack / unpack round-trip ---------------------------------------------
 
+describe("unpack — NFD-vs-NFC tolerance (S900 / Angle C)", () => {
+    test("manifest declares NFC path, tar lists NFD form → unpack succeeds", () => {
+        // macOS APFS + system tar emit NFD on `tar -tzf` for filenames
+        // with combining marks. Manifests come from `readdir` which yields
+        // NFC. Pre-S900, the NFC manifest path missed the NFD tar entry
+        // → `archive contains undeclared file`. unpackSetup now NFC-
+        // normalizes both sides for the membership check and reads back
+        // by the original disk-side form for form-strict filesystems.
+        const nfc = "ä.lua";          // ä as single codepoint
+        const nfd = "ä.lua";         // a + combining diaeresis
+        // Self-check that we actually built distinct byte sequences.
+        expect(Buffer.from(nfc, "utf8").length).not.toBe(Buffer.from(nfd, "utf8").length);
+
+        const patch = patchBytes();
+        const m = makeManifest({
+            kindly_setup: "v1",
+            meta: { name: "Accented", created_at: "2026-04-21T12:00:00Z" },
+            apply_mode: "additive",
+            patches: [
+                { path: nfc, hash: hashBytes(patch), bytes: patch.length },
+            ],
+        });
+
+        // Stage a fake fat-archive layout, but write the patch file with
+        // the NFD-form name. Then tar from stage — the resulting archive
+        // entry retains the NFD bytes (APFS form-preserving + GNU/BSD tar
+        // pass-through).
+        const stage = join(workDir, "nfd-stage");
+        mkdirSync(join(stage, "patches"), { recursive: true });
+        writeFileSync(join(stage, "manifest.yaml"), canonicalizeManifest(m));
+        writeFileSync(join(stage, "patches", nfd), patch);
+        const archive = join(workDir, "nfd.kset");
+        const r = spawnSync("tar", [
+            "-czf", archive, "-C", stage,
+            "manifest.yaml", "patches",
+        ]);
+        expect(r.status).toBe(0);
+
+        const unpacked = unpackSetup(archive);
+        // Returned files map keyed by NFC path (manifest form).
+        expect(unpacked.files.size).toBe(1);
+        expect(unpacked.files.has(nfc)).toBe(true);
+        expect(unpacked.files.get(nfc)!.equals(patch)).toBe(true);
+    });
+});
+
 describe("packSetup + unpackSetup round-trip", () => {
     test("preserves manifest and files", () => {
         const m = fatManifest();

@@ -109,9 +109,14 @@ function walkCollect(
     declared: EmbeddedFile[],
     files: Map<string, Buffer>,
 ): void {
+    // S901 / Angle C: code-unit comparison, NOT localeCompare. Bun/JSC
+    // hardcodes en-US; Node honors LC_ALL. Using localeCompare here makes
+    // walkCollect output (and therefore canonical manifest hash) drift
+    // across runtime/locale. Code-unit ordering is a pure function of the
+    // string bytes — portable across every JS runtime and every locale.
     const entries = readdirSync(absDir, { withFileTypes: true })
         .filter((e) => !e.name.startsWith("."))   // skip .DS_Store, .git/, ...
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 
     for (const e of entries) {
         const abs = join(absDir, e.name);

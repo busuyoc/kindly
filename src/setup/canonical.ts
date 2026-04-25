@@ -22,12 +22,26 @@ import { stringify as yamlStringify } from "yaml";
 import { createHash } from "node:crypto";
 import type { SetupManifest } from "./schema.ts";
 
-// Deep-sort object keys; arrays preserve order; primitives pass through.
-// Plain object literals (Object.prototype-inheriting) are the only map
-// shape we produce — Zod gives us those.
+// Deep-sort object keys; primitives pass through. Most arrays preserve
+// order — but arrays whose elements are objects with a `path` string
+// field (the EmbeddedFile shape — plugins.files, patches) are sorted by
+// path code-units. S905 / Angle C: without this, embedded-file arrays
+// inherit `walkCollect`'s order, which in turn depends on readdir()'s
+// platform-specific ordering and (pre-S901) locale. Sorting these
+// arrays here makes canonical output a pure function of logical content.
 function sortRecursive(v: unknown): unknown {
     if (v === null || typeof v !== "object") return v;
-    if (Array.isArray(v)) return v.map(sortRecursive);
+    if (Array.isArray(v)) {
+        const mapped = v.map(sortRecursive);
+        if (isEmbeddedFileArray(mapped)) {
+            return [...mapped].sort((a, b) => {
+                const ap = (a as { path: string }).path;
+                const bp = (b as { path: string }).path;
+                return ap < bp ? -1 : ap > bp ? 1 : 0;
+            });
+        }
+        return mapped;
+    }
     const sorted: Record<string, unknown> = {};
     for (const k of Object.keys(v as object).sort()) {
         const val = (v as Record<string, unknown>)[k];
@@ -35,6 +49,16 @@ function sortRecursive(v: unknown): unknown {
         sorted[k] = sortRecursive(val);
     }
     return sorted;
+}
+
+function isEmbeddedFileArray(arr: unknown[]): boolean {
+    if (arr.length === 0) return false;
+    for (const el of arr) {
+        if (el === null || typeof el !== "object" || Array.isArray(el)) return false;
+        const path = (el as Record<string, unknown>).path;
+        if (typeof path !== "string") return false;
+    }
+    return true;
 }
 
 // Canonical YAML form: lexicographically sorted keys at every depth,

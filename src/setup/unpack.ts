@@ -60,7 +60,22 @@ export function unpackSetup(archivePath: string): UnpackedSetup {
 
     // Collect the file entries (ignore directory entries — tar lists
     // them with a trailing "/" and we don't need them in the files map).
-    const fileEntries = listed.filter((p) => !p.endsWith("/"));
+    // S900 / Angle C: macOS system tar emits NFD on `tar -tzf` for accented
+    // filenames (`ä.lua`, `é-menu.lua`, ...) — APFS stores in NFD on disk
+    // and tar passes that through verbatim. Manifest paths come from
+    // `readdir` on the publisher side, which yields NFC. NFC-normalize
+    // entries here so downstream membership checks ride a single form.
+    // The original disk-side form is retained in `entryToDiskPath` for
+    // filesystem reads on form-strict filesystems (ext4); APFS is
+    // form-insensitive so the read works either way there.
+    const rawEntries = listed.filter((p) => !p.endsWith("/"));
+    const entryToDiskPath = new Map<string, string>();
+    const fileEntries: string[] = [];
+    for (const raw of rawEntries) {
+        const nfc = raw.normalize("NFC");
+        fileEntries.push(nfc);
+        entryToDiskPath.set(nfc, raw);
+    }
 
     // Path-safety sweep.
     for (const entry of fileEntries) {
@@ -106,13 +121,19 @@ export function unpackSetup(archivePath: string): UnpackedSetup {
         }
 
         // Build the set of entries the manifest accounts for, keyed by
-        // the FULL in-archive path (plugins/... or patches/...).
+        // the FULL in-archive path (plugins/... or patches/...). Keys are
+        // NFC-normalized to match the entries from `fileEntries` (which
+        // were normalized above) — see S900 note. The path stored inside
+        // each value is also NFC-normalized so the returned files Map
+        // and downstream installPluginFiles see a single form.
         const declared = new Map<string, { path: string; hash: string; bytes: number }>();
         for (const f of manifest.plugins?.files ?? []) {
-            declared.set(`plugins/${f.path}`, { path: f.path, hash: f.hash, bytes: f.bytes });
+            const nfcPath = f.path.normalize("NFC");
+            declared.set(`plugins/${nfcPath}`, { path: nfcPath, hash: f.hash, bytes: f.bytes });
         }
         for (const f of manifest.patches ?? []) {
-            declared.set(`patches/${f.path}`, { path: f.path, hash: f.hash, bytes: f.bytes });
+            const nfcPath = f.path.normalize("NFC");
+            declared.set(`patches/${nfcPath}`, { path: nfcPath, hash: f.hash, bytes: f.bytes });
         }
 
         // Every non-manifest file must be declared.
@@ -129,7 +150,13 @@ export function unpackSetup(archivePath: string): UnpackedSetup {
         // arbitrary host files.
         const files = new Map<string, Buffer>();
         for (const [fullPath, d] of declared.entries()) {
-            const abs = join(stage, fullPath.split("/").join(sep));
+            // `fullPath` is NFC; the on-disk form may be NFD on macOS-
+            // authored archives. Resolve back to the disk-side form via
+            // `entryToDiskPath` so reads work on form-strict filesystems
+            // (Linux ext4) too. Falls back to fullPath if the entry was
+            // already in NFC form.
+            const diskRel = entryToDiskPath.get(fullPath) ?? fullPath;
+            const abs = join(stage, diskRel.split("/").join(sep));
             if (!exists(abs, "extracted-archive")) {
                 throw new SetupUnpackError(`manifest declares ${fullPath} but archive doesn't contain it`);
             }

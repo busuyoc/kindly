@@ -290,6 +290,56 @@ describe("signing primitive — failure modes", () => {
     });
 });
 
+describe("signing — Q2 Option B filter-invariance enforcement", () => {
+    // The publisher pipeline must produce filter-invariant bytes before
+    // signing. Q2b: sign() refuses unprepared input. Q2 Option B:
+    // verify() also re-runs the filter, so a compromised pipeline can't
+    // ship signed-but-malformed bytes — receiver catches it.
+    test("sign refuses non-NFC manifest input", async () => {
+        // Build an archive whose manifest carries an NFD string. We
+        // bypass the canonical pack path by writing manifest bytes
+        // directly so unpackSetup will accept it but filter check fails.
+        const ssh = Buffer.from("-- SSH\n", "utf8");
+        const sshHash = hashBytes(ssh);
+        const nameNFD = "Café".normalize("NFD");
+        // Self-check: NFD form has more codepoints than NFC.
+        expect(nameNFD.length).toBeGreaterThan("Café".normalize("NFC").length);
+        const yaml =
+            "apply_mode: additive\n" +
+            "kindly_setup: v1\n" +
+            "meta:\n" +
+            "  created_at: 2026-04-25T00:00:00Z\n" +
+            `  name: ${nameNFD}\n` +
+            "plugins:\n" +
+            "  files:\n" +
+            "    - bytes: " + ssh.length + "\n" +
+            "      hash: " + sshHash + "\n" +
+            "      path: SSH.koplugin/main.lua\n";
+
+        const stage = mkdtempSync(join(tmpdir(), "kindly-filtertest-"));
+        try {
+            mkdirSync(join(stage, "plugins/SSH.koplugin"), { recursive: true });
+            writeFileSync(join(stage, "manifest.yaml"), yaml, "utf8");
+            writeFileSync(join(stage, "plugins/SSH.koplugin/main.lua"), ssh);
+            const archive = join(workDir, "nfd.kset");
+            const { spawnSync } = await import("node:child_process");
+            const r = spawnSync("tar", ["-czf", archive, "-C", stage, "manifest.yaml", "plugins"]);
+            expect(r.status).toBe(0);
+
+            const keys = mkKeyPair();
+            try {
+                signSetupArchive({ archivePath: archive, ...keys });
+                throw new Error("expected throw");
+            } catch (e) {
+                expect(e).toBeInstanceOf(SigningError);
+                expect((e as SigningError).code).toBe("FILTER_NOT_INVARIANT");
+            }
+        } finally {
+            rmSync(stage, { recursive: true, force: true });
+        }
+    });
+});
+
 describe("signing — canonical-tree binding (W46 invariant)", () => {
     // The whole point of Q1 = canonical-tree: a signature made over
     // archive A built on macOS must verify against archive B built on

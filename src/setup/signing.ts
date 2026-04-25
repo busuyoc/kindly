@@ -6,20 +6,20 @@
 //   signing input = "kindly-sig:v1\n" + manifest_hash + "\n" + filter_version + "\n"
 //   signature     = Ed25519(signing input, signer_private_key)
 //
+// Filter-invariance (Q2 Option B): both sign and verify call
+// assertManifestFilterInvariant() on the canonical manifest. Sign refuses
+// non-invariant input (Q2b: forces publisher pipelines to canonicalize
+// before any signed bytes leave their machine); verify refuses on the
+// receiver side, so a compromised publisher cannot escape the membership
+// test. The filter rules live in filterCheck.ts and are versioned by
+// KINDLY_FILTER_VERSION.
+//
 // What's deliberately NOT here yet:
-//   - Q2 Option B re-filter check (verifier asserts filter(input) == input).
-//     The filter is currently spread across producers (apply.ts, restore.ts,
-//     importSetup.ts) and not packaged as a single deterministic function.
-//     Today the filter_version field rides in the signing payload but no
-//     re-filter is run. Once filter is consolidated, verify() must reject
-//     inputs whose filter_version isn't supported AND whose canonical bytes
-//     don't survive the re-filter unchanged.
-//   - Q2b mandatory `prepare` step. Today sign() accepts any valid .kset.
-//     Once the filter is packaged, sign() should refuse if the input isn't
-//     filter-invariant under its declared filter_version.
 //   - Key distribution (TOFU vs publisher registry). Sidecar embeds the
 //     full public key so verify() is self-contained crypto-wise — trust
 //     decisions live above this module.
+//   - Q2a generation window: today only the exact KINDLY_FILTER_VERSION
+//     is accepted. v0.13 needs N=2 logic before older sigs verify.
 //
 // Sidecar format (JSON, written next to <archive>.kset as <archive>.kset.sig):
 //   {
@@ -44,6 +44,7 @@ import {
 } from "node:crypto";
 import { unpackSetup } from "./unpack.ts";
 import { manifestHash as computeManifestHash } from "./canonical.ts";
+import { assertManifestFilterInvariant, FilterInvariantError } from "./filterCheck.ts";
 
 /** The filter version this build of kindly speaks. Bound into every
  *  signature so v0.13's tightened filter doesn't silently re-validate
@@ -84,7 +85,8 @@ export type SigningErrorCode =
     | "MANIFEST_HASH_MISMATCH"
     | "SIGNATURE_INVALID"
     | "UNSUPPORTED_FILTER_VERSION"
-    | "UNSUPPORTED_FORMAT";
+    | "UNSUPPORTED_FORMAT"
+    | "FILTER_NOT_INVARIANT";
 
 /** Bytes that get fed to Ed25519. Must match exactly between sign and
  *  verify. UTF-8 encoded, newline-terminated, length-implicit-via-prefix
@@ -151,9 +153,17 @@ export function signSetupArchive(opts: {
     const unpacked = unpackSetup(opts.archivePath);
     const derivedHash = computeManifestHash(unpacked.manifest);
 
-    // TODO(Q2b): once C1 is consolidated, re-filter the canonical tree
-    // and refuse if filter(tree) != tree. Today: accept anything that
-    // unpackSetup accepted.
+    // Q2b: refuse to sign a non-filter-invariant manifest. Forces the
+    // publisher to fix their pipeline (re-canonicalize, NFC-normalize,
+    // strip control bytes) before any signed bytes leave their machine.
+    try {
+        assertManifestFilterInvariant(unpacked.manifest);
+    } catch (e) {
+        if (e instanceof FilterInvariantError) {
+            throw new SigningError(e.message, "FILTER_NOT_INVARIANT");
+        }
+        throw e;
+    }
 
     const priv = createPrivateKey(opts.privateKeyPem);
     if (priv.asymmetricKeyType !== "ed25519") {
@@ -239,6 +249,20 @@ export function verifySetupArchive(archivePath: string): VerifyResult {
 
     const unpacked = unpackSetup(archivePath);
     const derivedHash = computeManifestHash(unpacked.manifest);
+
+    // Q2 Option B: verifier re-runs the filter and rejects any .kset
+    // whose canonical content isn't filter-invariant. The publisher's
+    // signature is irrelevant if the bytes themselves don't pass our
+    // membership test.
+    try {
+        assertManifestFilterInvariant(unpacked.manifest);
+    } catch (e) {
+        if (e instanceof FilterInvariantError) {
+            throw new SigningError(e.message, "FILTER_NOT_INVARIANT");
+        }
+        throw e;
+    }
+
     if (derivedHash !== sidecar.manifest_hash) {
         throw new SigningError(
             `manifest hash mismatch: archive yields ${derivedHash}, sidecar declares ${sidecar.manifest_hash}`,

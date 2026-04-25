@@ -16,7 +16,7 @@ import { type CliEnv, resolveMount } from "../cli/env.ts";
 import { dim, heading, info, ok, warn } from "../cli/log.ts";
 import {
     ArchiveTooLargeError, assertSafeArchive, createTarGz, extractFileToMemory,
-    extractTarGz, listTarGz, UnsafeArchivePathError,
+    extractTarGz, listTarGz, MalformedArchiveError, UnsafeArchivePathError,
 } from "../fs/archive.ts";
 import { resolve } from "node:path";
 import { exists, readText } from "../fs/safeRead.ts";
@@ -109,6 +109,13 @@ export function executeRestore(opts: RestoreOptions, env: CliEnv): RestoreResult
                 ErrorCodes.ARCHIVE_TOO_LARGE,
                 e.message,
                 [{ text: "Archive exceeds kindly's compression-bomb guard. Verify its provenance before restoring." }],
+            );
+        }
+        if (e instanceof MalformedArchiveError) {
+            throw new KindlyError(
+                ErrorCodes.ARCHIVE_MALFORMED,
+                e.message,
+                [{ text: "Archive does not match kindly's gzipped-tar format, or contains hardlink/symlink entries kindly refuses to extract. Produce a fresh snapshot with `kindly snapshot`." }],
             );
         }
         throw e;

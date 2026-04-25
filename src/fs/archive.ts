@@ -16,6 +16,11 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { exists, statFollow } from "./safeRead.ts";
 import { isSafeRelativePath } from "./paths.ts";
+import {
+    assertGzipMagic, inspectTarGz, MalformedArchiveError,
+} from "./tarInspect.ts";
+
+export { MalformedArchiveError } from "./tarInspect.ts";
 
 export type CreateOptions = {
     /** Root directory whose children will be archived. Paths inside the
@@ -148,13 +153,17 @@ function readGzipSizes(archivePath: string): { compressed: number; uncompressed:
     return { compressed, uncompressed };
 }
 
-/** A9: reject archives likely to be compression bombs BEFORE extraction.
- *  Three independent caps; any one trips the refusal. Throws
- *  ArchiveTooLargeError. */
+/** A9 + C4: reject archives likely to be compression bombs BEFORE
+ *  extraction. Three gzip-level caps + per-entry tar-header cap +
+ *  hardlink/symlink rejection. Any one trips the refusal. Throws
+ *  ArchiveTooLargeError or MalformedArchiveError. */
 function enforceSizeCaps(archivePath: string, opts: ExtractOptions): void {
     const maxArchive = opts.maxArchiveBytes ?? DEFAULT_MAX_ARCHIVE_BYTES;
     const maxUncompressed = opts.maxUncompressedBytes ?? DEFAULT_MAX_UNCOMPRESSED_BYTES;
     const maxRatio = opts.maxCompressionRatio ?? DEFAULT_MAX_COMPRESSION_RATIO;
+
+    // C4: format-sniff before any other work — closes S941.
+    assertGzipMagic(archivePath);
 
     const archiveBytes = statFollow(archivePath, "user-provided").size;
     if (archiveBytes > maxArchive) {
@@ -164,21 +173,53 @@ function enforceSizeCaps(archivePath: string, opts: ExtractOptions): void {
         );
     }
     const sizes = readGzipSizes(archivePath);
-    if (sizes !== null) {
-        if (sizes.uncompressed > maxUncompressed) {
+    // C4: fail closed when the gzip trailer can't be read. After the
+    // magic-byte check this should be rare, but the previous open-
+    // coded skip would silently disable the uncompressed and ratio
+    // guards on any archive `gzip -l` couldn't parse.
+    if (sizes === null) {
+        throw new ArchiveTooLargeError(
+            "archive gzip trailer unreadable; refusing to extract without size bound",
+            "uncompressed_bytes", -1, maxUncompressed,
+        );
+    }
+    if (sizes.uncompressed > maxUncompressed) {
+        throw new ArchiveTooLargeError(
+            `archive expands to ${sizes.uncompressed} bytes, exceeds ${maxUncompressed} limit`,
+            "uncompressed_bytes", sizes.uncompressed, maxUncompressed,
+        );
+    }
+    if (sizes.compressed > 0) {
+        const ratio = sizes.uncompressed / sizes.compressed;
+        if (ratio > maxRatio) {
             throw new ArchiveTooLargeError(
-                `archive expands to ${sizes.uncompressed} bytes, exceeds ${maxUncompressed} limit`,
-                "uncompressed_bytes", sizes.uncompressed, maxUncompressed,
+                `archive compression ratio is ${ratio.toFixed(1)}:1, exceeds ${maxRatio}:1 limit`,
+                "ratio", Math.round(ratio), maxRatio,
             );
         }
-        if (sizes.compressed > 0) {
-            const ratio = sizes.uncompressed / sizes.compressed;
-            if (ratio > maxRatio) {
-                throw new ArchiveTooLargeError(
-                    `archive compression ratio is ${ratio.toFixed(1)}:1, exceeds ${maxRatio}:1 limit`,
-                    "ratio", Math.round(ratio), maxRatio,
-                );
-            }
+    }
+
+    // C4: walk tar headers in memory and (a) sum per-entry declared
+    // sizes — catches sparse-tar bombs where ISIZE ≪ sum of file sizes,
+    // and (b) reject hardlink (typeflag 1) and symlink (typeflag 2)
+    // entries before tar lays them down.
+    const inspection = inspectTarGz(archivePath, maxUncompressed);
+    if (inspection.totalApparentBytes > maxUncompressed) {
+        throw new ArchiveTooLargeError(
+            `archive's tar headers declare ${inspection.totalApparentBytes} bytes of files, exceeds ${maxUncompressed} limit`,
+            "uncompressed_bytes", inspection.totalApparentBytes, maxUncompressed,
+        );
+    }
+    for (const e of inspection.entries) {
+        if (e.type === "hardlink") {
+            throw new MalformedArchiveError(
+                `archive contains hardlink entry (typeflag 1) at ${e.path}; kindly does not extract links`,
+            );
+        }
+        if (e.type === "symlink") {
+            throw new MalformedArchiveError(
+                `archive contains symlink entry (typeflag 2) at ${e.path}; kindly does not extract links`,
+            );
         }
     }
 }
@@ -239,6 +280,7 @@ export function extractFileToMemory(
     if (!isSafeRelativePath(entry)) {
         throw new UnsafeArchivePathError(entry);
     }
+    assertGzipMagic(archivePath);
     // tar -O writes the file content to stdout. Exit status is non-zero
     // when the entry is missing — distinguish that from a real failure
     // by checking the listing.
@@ -258,6 +300,7 @@ export function listTarGz(archivePath: string): string[] {
     if (!exists(archivePath, "user-provided")) {
         throw new Error(`archive not found: ${archivePath}`);
     }
+    assertGzipMagic(archivePath);
     const r = spawnSync("tar", ["-tzf", archivePath], { encoding: "utf8" });
     if (r.status !== 0) {
         throw new Error(`tar listing failed (exit ${r.status}): ${r.stderr}`);

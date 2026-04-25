@@ -17,7 +17,7 @@
 
 import { mkdirSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { copyFile, exists, readBytes, statFollow } from "../fs/safeRead.ts";
+import { copyFile, exists, readBytes, readText, statFollow } from "../fs/safeRead.ts";
 
 import { ArgError, parseArgs, type FlagSpecs } from "../cli/args.ts";
 import { type CliEnv, resolveMount } from "../cli/env.ts";
@@ -34,6 +34,12 @@ import {
     findHistoryEntryByIndex,
     type HistoryEntryWithIndex,
 } from "../history/reader.ts";
+import { parseSettingsFile } from "../lua/reader.ts";
+import type { LuaValue } from "../lua/writer.ts";
+import { computeChanges } from "../schema/diff.ts";
+import { runPhase } from "../gates/orchestrator.ts";
+import { CODE_EXEC_ADJACENT_REQUIRES_ACK } from "../gates/definitions/dual.ts";
+import { appendGateEvent } from "../history/gateLog.ts";
 
 const FLAGS = {
     "dry-run": {
@@ -58,6 +64,13 @@ const FLAGS = {
         type: "string",
         description: "roll back using history entry #N's safety snapshot (oldest = 1)",
     },
+    "accept-code-exec": {
+        type: "boolean",
+        default: false,
+        description:
+            "consent to KOReader interpolating snapshot values into os.execute / " +
+            "os.remove / shell calls (SSH_port, httpinspector_port, cover_image_path)",
+    },
 } as const satisfies FlagSpecs;
 
 const SETTINGS_FILENAME = "settings.reader.lua";
@@ -68,6 +81,7 @@ export interface RollbackOptions {
     dryRun?: boolean;
     safetySnapshot?: boolean;
     label?: string;
+    acceptCodeExec?: boolean;
 }
 
 export function executeRollback(opts: RollbackOptions, env: CliEnv): RollbackResult {
@@ -109,6 +123,16 @@ export function executeRollback(opts: RollbackOptions, env: CliEnv): RollbackRes
             );
         }
     }
+
+    // C7 / S606: code-exec-adjacent keys (SSH_port, httpinspector_port,
+    // cover_image_path) require --accept-code-exec consent at rollback,
+    // mirroring apply and restore. Other gate families don't apply: a
+    // rollback restores kindly's own snapshot bytes, so the SENSITIVE/
+    // DESTRUCTIVE consents would have fired (or been ack'd) when those
+    // bytes first hit the device. Code-exec is the orthogonal hazard
+    // that survives the original gating — its consent is a separate
+    // mental model, gated independently every time.
+    runRollbackGates(snapshotDir, hasSettings, mount.settingsPath, opts, env);
 
     if (opts.dryRun) {
         return {
@@ -184,6 +208,71 @@ export function executeRollback(opts: RollbackOptions, env: CliEnv): RollbackRes
         fatFileCount,
         preRollbackDir,
     };
+}
+
+function runRollbackGates(
+    snapshotDir: string,
+    hasSettings: boolean,
+    deviceSettingsPath: string,
+    opts: RollbackOptions,
+    env: CliEnv,
+): void {
+    if (!hasSettings) return;
+    const settingsSnap = join(snapshotDir, SETTINGS_FILENAME);
+
+    let fromSnapshot: Record<string, LuaValue>;
+    try {
+        fromSnapshot = parseSettingsFile(
+            readBytes(settingsSnap, "user-provided").toString("utf8"),
+        ) as Record<string, LuaValue>;
+    } catch {
+        // Snapshot file unparseable — skip the gate. KOReader will reject
+        // it on its own load path. Mirrors restore's lenient stance
+        // (S606 is a rollback-side echo of the same parser-strictness
+        // decision).
+        return;
+    }
+
+    let onDevice: Record<string, LuaValue> = {};
+    if (exists(deviceSettingsPath, "derived-from-mount")) {
+        try {
+            onDevice = parseSettingsFile(
+                readText(deviceSettingsPath, "derived-from-mount"),
+            ) as Record<string, LuaValue>;
+        } catch {
+            // Device file unparseable → treat as empty so the gate flags
+            // any code-exec-adjacent key the snapshot would re-introduce.
+        }
+    }
+
+    const changes = computeChanges(onDevice, fromSnapshot);
+
+    runPhase({
+        boundary: "rollback",
+        registry: [CODE_EXEC_ADJACENT_REQUIRES_ACK],
+        dryRun: opts.dryRun ?? false,
+        strictImports: false,
+        opts: {
+            changes,
+            acceptCodeExec: !!opts.acceptCodeExec,
+        },
+        logger: (fired) => {
+            if (fired.result.kind === "bypass") {
+                appendGateEvent(env, {
+                    gate_id: fired.id,
+                    boundary: fired.boundary,
+                    kind: "bypass",
+                    bypass_flag: fired.result.byFlag,
+                });
+            } else if (fired.result.kind === "block") {
+                appendGateEvent(env, {
+                    gate_id: fired.id,
+                    boundary: fired.boundary,
+                    kind: "block",
+                });
+            }
+        },
+    });
 }
 
 export function renderRollback(result: RollbackResult, env: CliEnv): void {
@@ -329,6 +418,7 @@ export async function runRollback(argv: readonly string[], env: CliEnv): Promise
         dryRun: flags["dry-run"],
         safetySnapshot: flags["safety-snapshot"],
         label: flags.label,
+        acceptCodeExec: flags["accept-code-exec"],
     }, env);
 
     if (env.jsonMode) emitJson(env, "rollback", result);
@@ -350,8 +440,10 @@ Two ways to pick the snapshot:
 Usage:
   kindly rollback <snapshot-dir> [--dry-run] [--no-safety-snapshot]
                                  [--label <text>] [--mount <path>]
+                                 [--accept-code-exec]
   kindly rollback --to <N>       [--dry-run] [--no-safety-snapshot]
                                  [--label <text>] [--mount <path>]
+                                 [--accept-code-exec]
 
 Options:
   --to <N>              resolve snapshot from history entry #N
@@ -361,6 +453,9 @@ Options:
                          .kindly/pre-rollback/<stamp>/)
   --label <text>        advisory name logged into kindly history
   --mount <path>        point at a specific Kindle mount
+  --accept-code-exec    consent to KOReader interpolating snapshot values
+                        into os.execute / os.remove / shell calls
+                        (SSH_port, httpinspector_port, cover_image_path)
 
 \`--to <N>\` works for apply, setup:import, and prior rollback entries.
 restore entries point you at the archive (\`kindly restore <path>\`); snapshot

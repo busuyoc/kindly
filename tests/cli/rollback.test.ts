@@ -233,3 +233,113 @@ describe("rollback — round-trip", () => {
         expect(readFileSync(kindle.settingsPath, "utf8")).toBe(pristine);
     });
 });
+
+// ============================================================================
+// C7 / S606: code-exec-adjacent gate at rollback boundary. A snapshot that
+// would re-introduce SSH_port / httpinspector_port / cover_image_path on a
+// device that has since cleared them must require --accept-code-exec, just
+// like apply and restore.
+// ============================================================================
+
+const DEVICE_LUA = `return {
+    ["refresh_rate"] = 2,
+}
+`;
+const SNAP_WITH_SSH_PORT = `return {
+    ["refresh_rate"] = 2,
+    ["SSH_port"] = 2222,
+}
+`;
+
+describe("rollback — CODE_EXEC_ADJACENT_REQUIRES_ACK (C7)", () => {
+    test("snapshot adding SSH_port blocks without --accept-code-exec", async () => {
+        const kindle = makeFakeKindle();
+        writeFileSync(kindle.settingsPath, DEVICE_LUA);
+        const snap = join(workdir, "snap");
+        mkdirSync(snap, { recursive: true });
+        writeFileSync(join(snap, "settings.reader.lua"), SNAP_WITH_SSH_PORT);
+
+        const { env, err } = makeEnv(workdir, kindle.root);
+        const code = await main(["rollback", snap], env);
+        expect(code).toBe(3);
+        expect(err.value).toContain("SSH_port");
+        expect(err.value).toContain("--accept-code-exec");
+        // Device unchanged.
+        expect(readFileSync(kindle.settingsPath, "utf8")).toBe(DEVICE_LUA);
+    });
+
+    test("--accept-code-exec lets the rollback proceed", async () => {
+        const kindle = makeFakeKindle();
+        writeFileSync(kindle.settingsPath, DEVICE_LUA);
+        const snap = join(workdir, "snap");
+        mkdirSync(snap, { recursive: true });
+        writeFileSync(join(snap, "settings.reader.lua"), SNAP_WITH_SSH_PORT);
+
+        const { env } = makeEnv(workdir, kindle.root);
+        const code = await main(["rollback", snap, "--accept-code-exec"], env);
+        expect(code).toBe(0);
+        expect(readFileSync(kindle.settingsPath, "utf8")).toBe(SNAP_WITH_SSH_PORT);
+    });
+
+    test("--dry-run bypasses gate (firesIn: non-dry-run)", async () => {
+        const kindle = makeFakeKindle();
+        writeFileSync(kindle.settingsPath, DEVICE_LUA);
+        const snap = join(workdir, "snap");
+        mkdirSync(snap, { recursive: true });
+        writeFileSync(join(snap, "settings.reader.lua"), SNAP_WITH_SSH_PORT);
+
+        const { env } = makeEnv(workdir, kindle.root);
+        const code = await main(["rollback", snap, "--dry-run"], env);
+        expect(code).toBe(0);
+        expect(readFileSync(kindle.settingsPath, "utf8")).toBe(DEVICE_LUA);
+    });
+
+    test("snapshot without code-exec-adjacent keys is unaffected", async () => {
+        const kindle = makeFakeKindle();
+        writeFileSync(kindle.settingsPath, DEVICE_LUA);
+        const snap = join(workdir, "snap");
+        mkdirSync(snap, { recursive: true });
+        const benign = `return {
+    ["refresh_rate"] = 5,
+}
+`;
+        writeFileSync(join(snap, "settings.reader.lua"), benign);
+
+        const { env } = makeEnv(workdir, kindle.root);
+        const code = await main(["rollback", snap], env);
+        expect(code).toBe(0);
+        expect(readFileSync(kindle.settingsPath, "utf8")).toBe(benign);
+    });
+
+    test("no-op (snapshot value matches device) does not fire the gate", async () => {
+        const kindle = makeFakeKindle();
+        // Device already has SSH_port at the same value the snapshot stores.
+        writeFileSync(kindle.settingsPath, SNAP_WITH_SSH_PORT);
+        const snap = join(workdir, "snap");
+        mkdirSync(snap, { recursive: true });
+        writeFileSync(join(snap, "settings.reader.lua"), SNAP_WITH_SSH_PORT);
+
+        const { env } = makeEnv(workdir, kindle.root);
+        const code = await main(["rollback", snap], env);
+        expect(code).toBe(0);
+    });
+
+    test("snapshot with only fat archive (no settings) doesn't trip the gate", async () => {
+        const kindle = makeFakeKindle();
+        const snap = join(workdir, "snap");
+        mkdirSync(snap, { recursive: true });
+        // Build a minimal fat archive with one plugin file.
+        const stagingDir = mkdtempSync(join(tmpdir(), "kindly-rb-stage-"));
+        mkdirSync(join(stagingDir, "plugins", "noop.koplugin"), { recursive: true });
+        writeFileSync(join(stagingDir, "plugins", "noop.koplugin", "main.lua"), "return {}\n");
+        createTarGz({
+            cwd: stagingDir,
+            paths: ["plugins/noop.koplugin/main.lua"],
+            outputPath: join(snap, "plugins-patches.tar.gz"),
+        });
+
+        const { env } = makeEnv(workdir, kindle.root);
+        const code = await main(["rollback", snap], env);
+        expect(code).toBe(0);
+    });
+});

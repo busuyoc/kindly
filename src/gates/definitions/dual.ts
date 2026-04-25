@@ -66,12 +66,15 @@ export const EXTRA_PLUGIN_PATHS_DUAL: GateDefinition = {
  * chosen-arg primitive against KOReader — distinct threat class from
  * the generic SENSITIVE data-flow consent.
  *
- * Fires at import, apply, and restore — at import, a fat Setup
- * declaring these keys triggers the gate; at apply, a plain
+ * Fires at import, apply, restore, and rollback — at import, a fat
+ * Setup declaring these keys triggers the gate; at apply, a plain
  * `kindly apply` with these keys in the YAML does the same (closes
  * Lead 7's apply-side gap for this specific key family); at restore,
  * an archive whose settings.reader.lua sets these keys is gated
- * before any extraction occurs (closes S601 for this key family).
+ * before any extraction occurs (closes S601 for this key family); at
+ * rollback, a snapshot whose settings.reader.lua would change a
+ * code-exec-adjacent key vs. current device state is gated before
+ * the byte-exact restore (closes S606 for this key family).
  * Bypass is a dedicated `--accept-code-exec` flag; --accept-sensitive
  * does NOT bypass.
  *
@@ -81,7 +84,7 @@ export const EXTRA_PLUGIN_PATHS_DUAL: GateDefinition = {
 export const CODE_EXEC_ADJACENT_REQUIRES_ACK: GateDefinition = {
     id: "CODE_EXEC_ADJACENT_REQUIRES_ACK",
     category: "DUAL",
-    appliesAt: ["import", "apply", "restore"],
+    appliesAt: ["import", "apply", "restore", "rollback"],
     requires: ["codeExecAdjacentHits"],
     firesIn: "non-dry-run",
     bypassFlags: ["--accept-code-exec"],

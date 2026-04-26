@@ -134,4 +134,193 @@ describe("history reader — S1101 schema validation", () => {
         expect(r.total).toBe(1);
         expect(r.entries[0]!.mount).toBeUndefined();
     });
+
+    // Round 3 history-rendering F3 (S362 sibling): ts must be ISO-8601.
+    // Forged ts could poison `since` lex-filter or render as terminal-
+    // injection bait. monthKey already enforces a regex on the slice;
+    // make the schema match so all consumers see the same shape.
+    describe("ts format validation (F3)", () => {
+        test("non-ISO ts → entry dropped as malformed", () => {
+            writeHistory([
+                { ts, cmd: "apply", kindly_version: "0.13.0", index: 1, summary: {} },
+                { ts: "not-a-real-timestamp", cmd: "apply", kindly_version: "0.13.0", index: 2, summary: {} },
+                { ts, cmd: "apply", kindly_version: "0.13.0", index: 3, summary: {} },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(1);
+            expect(r.total).toBe(2);
+            expect(r.entries.map((e) => e.index)).toEqual([3, 1]);
+        });
+
+        test("ts with traversal segment (`../../`) → dropped (S362 sibling)", () => {
+            writeHistory([
+                { ts: "../../../etc/passwd", cmd: "apply", kindly_version: "0.13.0", index: 1, summary: {} },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(1);
+            expect(r.total).toBe(0);
+        });
+
+        test("ts missing milliseconds (legacy variant) → dropped", () => {
+            // toISOString always emits .sssZ; missing the millis is forged.
+            writeHistory([
+                { ts: "2026-04-26T12:00:00Z", cmd: "apply", kindly_version: "0.13.0", index: 1, summary: {} },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(1);
+            expect(r.total).toBe(0);
+        });
+
+        test("ts with trailing terminal-injection bytes → dropped", () => {
+            writeHistory([
+                { ts: "2026-04-26T12:00:00.000Z]0;pwn",
+                  cmd: "apply", kindly_version: "0.13.0", index: 1, summary: {} },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(1);
+        });
+
+        test("legitimate ISO ts variants are accepted", () => {
+            writeHistory([
+                { ts: "2026-04-26T12:00:00.000Z", cmd: "apply", kindly_version: "0.13.0", index: 1, summary: {} },
+                { ts: "1999-12-31T23:59:59.999Z", cmd: "apply", kindly_version: "0.13.0", index: 2, summary: {} },
+                { ts: "0000-01-01T00:00:00.000Z", cmd: "apply", kindly_version: "0.13.0", index: 3, summary: {} },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(0);
+            expect(r.total).toBe(3);
+        });
+    });
+
+    // Round-3 history-rendering F4: read-time length caps on entry/summary
+    // string fields. A forged entry with a 10MB label or kindly_version
+    // would otherwise flow through `kindly history --json` as-is and
+    // flood downstream consumers' stdout. Cap-violations now drop into
+    // the malformed bucket alongside other schema rejections.
+    describe("F4 — entry field length caps", () => {
+        test("oversized label (>240 bytes) → dropped", () => {
+            writeHistory([
+                {
+                    ts, cmd: "apply", kindly_version: "0.13.0", index: 1,
+                    label: "a".repeat(241), summary: {},
+                },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(1);
+            expect(r.total).toBe(0);
+        });
+
+        test("label at exact 240-byte cap is accepted", () => {
+            writeHistory([
+                {
+                    ts, cmd: "apply", kindly_version: "0.13.0", index: 1,
+                    label: "a".repeat(240), summary: {},
+                },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(0);
+            expect(r.total).toBe(1);
+        });
+
+        test("oversized kindly_version (>64 bytes) → dropped", () => {
+            writeHistory([
+                {
+                    ts, cmd: "apply", kindly_version: "0.13.0-" + "x".repeat(70),
+                    index: 1, summary: {},
+                },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(1);
+        });
+
+        test("oversized backup_path (>8 KiB) → dropped", () => {
+            writeHistory([
+                {
+                    ts, cmd: "apply", kindly_version: "0.13.0", index: 1,
+                    summary: { backup_path: "/" + "a".repeat(9000) },
+                },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(1);
+        });
+
+        test("realistic path lengths (< 8 KiB) are accepted", () => {
+            writeHistory([
+                {
+                    ts, cmd: "apply", kindly_version: "0.13.0", index: 1,
+                    summary: {
+                        backup_path: "/Users/x/proj/.kindly/backups/2026-04-26T12-00-00-000Z-abc/settings.reader.lua",
+                        pre_import_path: "/Users/x/proj/.kindly/pre-import/2026-04-26T12-00-00-000Z-def",
+                    },
+                },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(0);
+            expect(r.total).toBe(1);
+        });
+    });
+
+    // Round-3 history-rendering F5: setup_id has a fixed shape (12-byte
+    // shortId, lowercase hex) at the writer side, but the schema accepted
+    // any string. A forged entry with `setup_id: "../etc/passwd]0;..."`
+    // would otherwise render raw in `history show`. Constrain to the
+    // actual format.
+    describe("F5 — setup_id shape", () => {
+        test("setup_id with non-hex chars → dropped", () => {
+            writeHistory([
+                {
+                    ts, cmd: "setup:export", kindly_version: "0.13.0", index: 1,
+                    summary: { setup_id: "../../../etc" },
+                },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(1);
+        });
+
+        test("setup_id with uppercase hex → dropped", () => {
+            // Writer emits lowercase only; uppercase is a forgery signal.
+            writeHistory([
+                {
+                    ts, cmd: "setup:export", kindly_version: "0.13.0", index: 1,
+                    summary: { setup_id: "ABCDEF012345" },
+                },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(1);
+        });
+
+        test("setup_id of wrong length (< 12 chars) → dropped", () => {
+            writeHistory([
+                {
+                    ts, cmd: "setup:export", kindly_version: "0.13.0", index: 1,
+                    summary: { setup_id: "abc" },
+                },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(1);
+        });
+
+        test("setup_id of wrong length (> 12 chars) → dropped", () => {
+            writeHistory([
+                {
+                    ts, cmd: "setup:export", kindly_version: "0.13.0", index: 1,
+                    summary: { setup_id: "abcdef0123456" },
+                },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(1);
+        });
+
+        test("legitimate 12-hex setup_id is accepted", () => {
+            writeHistory([
+                {
+                    ts, cmd: "setup:export", kindly_version: "0.13.0", index: 1,
+                    summary: { setup_id: "abcdef012345" },
+                },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(0);
+            expect(r.total).toBe(1);
+        });
+    });
 });

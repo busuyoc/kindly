@@ -126,7 +126,7 @@ describe("history show — entries without a settings pre-state", () => {
     test("setup:export → diffUnavailable", async () => {
         seedHistory(workdir, [
             { ts: "2026-04-22T12:00:00.000Z", cmd: "setup:export", kindly_version: "0.3.0",
-              index: 1, summary: { output_path: "/x.kset", setup_id: "abc" } },
+              index: 1, summary: { output_path: "/x.kset", setup_id: "abcdef012345" } },
         ]);
         const { env, out } = makeEnv(workdir);
         await main(["history", "show", "1"], env);
@@ -212,7 +212,7 @@ describe("history show — reconstructed diff", () => {
             { ts: "2026-04-22T12:00:00.000Z", cmd: "apply", kindly_version: "0.3.0",
               index: 1, summary: { settings_delta_n: 1, backup_path: backupA } },
             { ts: "2026-04-22T12:05:00.000Z", cmd: "setup:import", kindly_version: "0.3.0",
-              index: 2, summary: { settings_delta_n: 1, pre_import_path: preImport, setup_id: "xyz" } },
+              index: 2, summary: { settings_delta_n: 1, pre_import_path: preImport, setup_id: "abcdef012345" } },
         ]);
         const { env, out } = makeEnv(workdir);
         await main(["history", "show", "1"], env);

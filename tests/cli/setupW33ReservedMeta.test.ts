@@ -22,6 +22,8 @@ import {
 
 const HASH_A = "sha256:" + "a".repeat(64);
 const HASH_B = "sha256:" + "b".repeat(64);
+const KEY_ID_C = "sha256:" + "c".repeat(64);
+const KEY_ID_D = "sha256:" + "d".repeat(64);
 
 function makeFakeKindle(): { root: string; settingsPath: string } {
     const root = mkdtempSync(join(tmpdir(), "kindly-w33-k-"));
@@ -86,13 +88,13 @@ describe("W33 schema — §2", () => {
             author: "Alice",
             source_url: "https://alice.dev/setups",
             version: "2",
-            author_key_id: "RWT1234567890",
+            author_key_id: KEY_ID_C,
             supersedes: [HASH_A, HASH_B],
         });
         expect(m.meta.author).toBe("Alice");
         expect(m.meta.source_url).toBe("https://alice.dev/setups");
         expect(m.meta.version).toBe("2");
-        expect(m.meta.author_key_id).toBe("RWT1234567890");
+        expect(m.meta.author_key_id).toBe(KEY_ID_C);
         expect(m.meta.supersedes).toEqual([HASH_A, HASH_B]);
     });
 
@@ -107,7 +109,7 @@ describe("W33 schema — §2", () => {
     test("each new field individually → parses", () => {
         expect(makeManifest({ source_url: "https://x.test/s" }).meta.source_url).toBe("https://x.test/s");
         expect(makeManifest({ version: "v2.1" }).meta.version).toBe("v2.1");
-        expect(makeManifest({ author_key_id: "RWT..." }).meta.author_key_id).toBe("RWT...");
+        expect(makeManifest({ author_key_id: KEY_ID_D }).meta.author_key_id).toBe(KEY_ID_D);
         expect(makeManifest({ supersedes: [HASH_A] }).meta.supersedes).toEqual([HASH_A]);
     });
 
@@ -126,10 +128,38 @@ describe("W33 schema — §2", () => {
         expect(m.meta.supersedes).toEqual([]);
     });
 
-    test("author_key_id as arbitrary string → accepted (W39 validates format)", () => {
-        expect(makeManifest({ author_key_id: "" }).meta.author_key_id).toBe("");
-        expect(makeManifest({ author_key_id: "literally anything goes here" }).meta.author_key_id)
-            .toBe("literally anything goes here");
+    test("author_key_id format guard (S963) — must be sha256:<hex64>", () => {
+        // Valid: matches sidecar.signer_key_id shape produced by
+        // keyIdFromPublicKey (sha256 of raw 32B Ed25519 pubkey).
+        expect(makeManifest({ author_key_id: KEY_ID_C }).meta.author_key_id).toBe(KEY_ID_C);
+
+        // Reject empty string (S963: zero-length passed pre-W39).
+        expect(() => makeManifest({ author_key_id: "" })).toThrow(SetupSchemaError);
+
+        // Reject pre-W39 free-text values like minisign's "RWT...".
+        expect(() => makeManifest({ author_key_id: "RWT123" })).toThrow(SetupSchemaError);
+        expect(() => makeManifest({ author_key_id: "literally anything goes here" }))
+            .toThrow(SetupSchemaError);
+
+        // Reject control bytes + ANSI (S963 angleX: ESC, NUL, oversize).
+        expect(() => makeManifest({ author_key_id: "sha256:" + "\x1b".repeat(64) }))
+            .toThrow(SetupSchemaError);
+        expect(() => makeManifest({ author_key_id: "sha256:" + "\x00".repeat(64) }))
+            .toThrow(SetupSchemaError);
+
+        // Reject wrong length (regex pins exactly 64 hex chars).
+        expect(() => makeManifest({ author_key_id: "sha256:" + "a".repeat(63) }))
+            .toThrow(SetupSchemaError);
+        expect(() => makeManifest({ author_key_id: "sha256:" + "a".repeat(65) }))
+            .toThrow(SetupSchemaError);
+
+        // Reject uppercase hex (regex pins lowercase, like supersedes).
+        expect(() => makeManifest({ author_key_id: "sha256:" + "A".repeat(64) }))
+            .toThrow(SetupSchemaError);
+
+        // Reject wrong algorithm prefix.
+        expect(() => makeManifest({ author_key_id: "md5:" + "a".repeat(32) }))
+            .toThrow(SetupSchemaError);
     });
 });
 
@@ -158,10 +188,10 @@ describe("W33 text mode — §3.1 UNVERIFIED suffix", () => {
     });
 
     test("setup inspect with meta.author_key_id → shows (UNVERIFIED)", async () => {
-        writeManifestFile(manifestPath, makeManifest({ author_key_id: "RWT123" }));
+        writeManifestFile(manifestPath, makeManifest({ author_key_id: KEY_ID_C }));
         await main(["setup", "inspect", manifestPath], env);
         expect(stdout.value).toContain("author_key:");
-        expect(stdout.value).toContain("RWT123");
+        expect(stdout.value).toContain(KEY_ID_C);
         expect(stdout.value).toContain("(UNVERIFIED)");
     });
 
@@ -217,10 +247,10 @@ describe("W33 JSON mode — §3.2 identity-claim wrapper", () => {
     });
 
     test("setup inspect --json: author_key_id wrapped", async () => {
-        writeManifestFile(manifestPath, makeManifest({ author_key_id: "RWT1" }));
+        writeManifestFile(manifestPath, makeManifest({ author_key_id: KEY_ID_C }));
         await main(["setup", "inspect", manifestPath, "--json"], env);
         const payload = JSON.parse(stdout.value);
-        expect(payload.data.authorKeyId).toEqual({ value: "RWT1", verified: false });
+        expect(payload.data.authorKeyId).toEqual({ value: KEY_ID_C, verified: false });
     });
 
     test("setup inspect --json: supersedes wrapped with array value", async () => {

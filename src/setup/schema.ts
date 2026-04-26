@@ -93,12 +93,18 @@ export const MetaSchema = z.object({
     // "2026-04-21T12:00:00Z", with optional milliseconds, with Z or ±HH:MM.
     created_at: z.iso.datetime({ offset: true }),
     tags: z.array(z.string()).optional(),
-    // W33 reserved fields — accepted, displayed with `(UNVERIFIED)`,
-    // never trusted until W39 minisign verification ships. See
-    // docs/91-reserved-meta-fields-spec.md §2 + §6.
+    // W33 reserved fields — displayed with `(UNVERIFIED)` until a
+    // sidecar signature checks out under the user's local trust roster.
+    // See docs/91-reserved-meta-fields-spec.md §2 + §6.
     source_url: z.string().url().optional(),
     version: z.string().optional(),
-    author_key_id: z.string().optional(),
+    // W39 closes S963: shape must match `sidecar.signer_key_id` so a
+    // verifier can compare directly. SHA256_HEX is the keyIdFromPublicKey
+    // output (sha256 of raw 32B Ed25519 pubkey, lowercase hex).
+    author_key_id: z.string().regex(
+        SHA256_HEX,
+        "author_key_id must be 'sha256:' + 64 lowercase hex chars (matches sidecar.signer_key_id)",
+    ).optional(),
     supersedes: z.array(
         z.string().regex(SHA256_HEX, "supersedes entry must be 'sha256:' + 64 lowercase hex chars")
     ).optional(),

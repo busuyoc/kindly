@@ -12,6 +12,8 @@
 
 import { z } from "zod";
 
+import { sanitizeForTerminal } from "../cli/sanitize.ts";
+
 // ---- Setting values (recursive) --------------------------------------------
 //
 // A setting value is anything KOReader's dump.lua emits: primitives,
@@ -27,6 +29,23 @@ export type SettingValue =
     | SettingValue[]
     | { [key: string]: SettingValue };
 
+// S964 (Angle X): reserved-key denylist for settings keys.
+//
+// `__proto__` is stripped naturally — yaml@2 emits null-prototype objects
+// and Zod's record parser drops it during enumeration — but `constructor`
+// and `prototype` are regular own properties that survive every layer up
+// to mergeYamlIntoLua and writer.ts, where they become literal Lua keys.
+// On apply, KOReader reads them back via `for k, v in pairs(t)` and
+// metatable shadowing becomes possible. The yaml.ts plainToLua chokepoint
+// catches these for `kindly apply`, but `setup import` flattens the
+// validated manifest directly into the apply pipeline without going
+// through plainToLua — close that hole at the schema seam.
+const RESERVED_SETTING_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+const SettingKeySchema = z.string().refine(
+    (k) => !RESERVED_SETTING_KEYS.has(k),
+    { message: "key is reserved (__proto__, constructor, prototype not allowed)" },
+);
+
 export const SettingValueSchema: z.ZodType<SettingValue> = z.lazy(() =>
     z.union([
         z.string(),
@@ -34,7 +53,7 @@ export const SettingValueSchema: z.ZodType<SettingValue> = z.lazy(() =>
         z.boolean(),
         z.null(),
         z.array(SettingValueSchema),
-        z.record(z.string(), SettingValueSchema),
+        z.record(SettingKeySchema, SettingValueSchema),
     ])
 );
 
@@ -96,7 +115,18 @@ export const MetaSchema = z.object({
     // W33 reserved fields — displayed with `(UNVERIFIED)` until a
     // sidecar signature checks out under the user's local trust roster.
     // See docs/91-reserved-meta-fields-spec.md §2 + §6.
-    source_url: z.string().url().optional(),
+    //
+    // S961 (Angle X): scheme allowlist. `z.url()` accepts any RFC3986
+    // URL — including `javascript:`, `data:`, `file:`, `vbscript:` —
+    // which become click-through hazards when the v0.13 GUI consumes
+    // this for a "view source" button. Restrict to schemes that make
+    // sense for "where did this Setup come from": http(s) for repos
+    // and download pages, mailto for author contact, git+https for
+    // package-style references.
+    source_url: z.string().url().refine(
+        (v) => /^(https?:|mailto:|git\+https:)/i.test(v),
+        { message: "source_url scheme must be http, https, mailto, or git+https" },
+    ).optional(),
     version: z.string().optional(),
     // W39 closes S963: shape must match `sidecar.signer_key_id` so a
     // verifier can compare directly. SHA256_HEX is the keyIdFromPublicKey
@@ -138,7 +168,7 @@ export const SetupManifestSchema = z.object({
     meta: MetaSchema,
     compat: CompatSchema.optional(),
     apply_mode: z.enum(["additive", "replace"]),
-    settings: z.record(z.string(), SettingValueSchema).optional(),
+    settings: z.record(SettingKeySchema, SettingValueSchema).optional(),
     plugins: PluginsSchema.optional(),
     patches: EmbeddedFileArraySchema.optional(),
 }).strict();
@@ -161,10 +191,22 @@ export function parseManifest(raw: unknown): SetupManifest {
     const result = SetupManifestSchema.safeParse(raw);
     if (result.success) return result.data;
 
+    // S962 (Angle X): `issue.path` segments are author-controlled — for
+    // `settings.<key>` validation issues, the segment is the literal key
+    // bytes (`settings.kosync.username`), and an attacker key like
+    // `\x1b]0;pwn\x07kosync` would inject OSC bytes into the thrown
+    // Error.message. Renderers sanitize stdout/stderr, but `e.message`
+    // direct reads (test harnesses, GUI serve IPC error envelopes,
+    // future log forwarders) bypass the renderer. Strip at construction.
     const issues = result.error.issues;
     const summary = issues
         .slice(0, 5)
-        .map((i) => `${i.path.length ? i.path.join(".") : "<root>"}: ${i.message}`)
+        .map((i) => {
+            const path = i.path.length
+                ? i.path.map((seg) => sanitizeForTerminal(String(seg))).join(".")
+                : "<root>";
+            return `${path}: ${sanitizeForTerminal(i.message)}`;
+        })
         .join("; ");
     const more = issues.length > 5 ? ` (+${issues.length - 5} more)` : "";
     throw new SetupSchemaError(`invalid Setup manifest: ${summary}${more}`, issues);

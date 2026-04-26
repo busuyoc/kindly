@@ -53,4 +53,30 @@ describe("isSafeRelativePath", () => {
         expect(isSafeRelativePath("a//b")).toBe(false);
         expect(isSafeRelativePath("a/")).toBe(false);
     });
+
+    // S965 (Angle X): zero-width controls glued onto `.` / `..` would slip
+    // past strict-equality if we compared raw bytes; NFC-normalized + ZW
+    // strip catches them. ZW-only segments are equivalent to empty and
+    // also rejected.
+    test("rejects `..` and `.` masked by zero-width characters (S965)", () => {
+        // ZWSP-suffixed dotdot → strips to `..` → reject.
+        expect(isSafeRelativePath("..​")).toBe(false);
+        expect(isSafeRelativePath("​..")).toBe(false);
+        // ZWNJ between dots and rest of path component.
+        expect(isSafeRelativePath("a/..‌/b")).toBe(false);
+        // BOM-prefixed `.` segment.
+        expect(isSafeRelativePath("﻿.")).toBe(false);
+        // WJ-suffixed `.` segment.
+        expect(isSafeRelativePath(".⁠")).toBe(false);
+        // ZWJ-only segment → strips to empty → reject.
+        expect(isSafeRelativePath("a/‍/b")).toBe(false);
+    });
+
+    test("accepts segments where ZW chars decorate but don't mask `.`/`..`", () => {
+        // ZWSP after a real name → strips to `valid` → still a valid name.
+        expect(isSafeRelativePath("valid​")).toBe(true);
+        // Combining accent on dotdot is a literal 3-character filename, not
+        // path-equivalent to parent reference. NFC keeps the combining mark.
+        expect(isSafeRelativePath("..́")).toBe(true);
+    });
 });

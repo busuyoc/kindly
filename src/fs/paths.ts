@@ -14,7 +14,17 @@ export function isSafeRelativePath(p: string): boolean {
     if (/^[a-zA-Z]:/.test(p)) return false;          // Windows drive letter
     if (p.includes("\\")) return false;              // Windows separator
     for (const seg of p.split("/")) {
-        if (seg === "" || seg === "." || seg === "..") return false;
+        // S965 (Angle X): compare against NFC-normalized segment so that
+        // visually-identical bytes — ZWSP-suffixed `.`, NFD-decomposed
+        // segments, BOM-prefixed `..` — cannot pass the strict-equality
+        // check by shape. Zero-width controls (ZWSP/ZWNJ/ZWJ/WJ/BOM) are
+        // stripped before normalizing so a segment built from `.` plus
+        // ZWSP collapses to `.` and is rejected. Without this, the
+        // predicate's "by shape, not by trust" comment overstates the
+        // guarantee — see Lead 19 / S690 cousin findings.
+        // U+200B-U+200D = ZWSP/ZWNJ/ZWJ; U+2060 = WJ; U+FEFF = BOM/ZWNBSP.
+        const norm = seg.normalize("NFC").replace(/[​-‍⁠﻿]/g, "");
+        if (norm === "" || norm === "." || norm === "..") return false;
         // empty: leading/trailing/double slash; `.`: current-dir segment
         // that would collapse `./X` to the parent dir (S690 wipe primitive
         // via installPluginFiles seg=`.` → rmSync(pluginsRoot)); `..`: escape.

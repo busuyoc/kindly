@@ -53,6 +53,10 @@ export type CliEnv = {
     /** Where `setup export` writes by default and `setup list` reads from.
      * Undefined means "~/.kindly/setups". Tests override with a tmpdir. */
     setupsDir?: string;
+    /** Override for `os.homedir()`. Used by the keyring loader/saver and
+     * any future per-user-config path. Tests pass a tmpdir; production
+     * leaves it undefined. */
+    homeOverride?: string;
     /** When true, commands emit a JSON envelope to stdout instead of human
      * text, and the dispatcher emits a JSON error envelope to stderr on
      * failure. Set by the dispatcher when --json is present in argv. */

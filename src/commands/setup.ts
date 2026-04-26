@@ -638,6 +638,181 @@ async function runSetupVerify(argv: readonly string[], env: CliEnv): Promise<num
     }
 }
 
+// ---- `kindly setup trust <list|add|remove>` --------------------------------
+
+const TRUST_ADD_FLAGS = {
+    label: {
+        type: "string",
+        description: "human-readable label for this key (e.g. publisher name)",
+    },
+} as const satisfies FlagSpecs;
+
+async function runSetupTrustList(argv: readonly string[], env: CliEnv): Promise<number> {
+    const { positional } = parseArgs(argv, {} as const satisfies FlagSpecs);
+    if (positional.length > 0) {
+        throw new ArgError(`unexpected argument: ${positional[0]}`);
+    }
+    const { loadKeyring } = await import("../setup/keyring.ts");
+    const file = loadKeyring(env);
+
+    if (env.jsonMode) {
+        emitJson(env, "setup trust list", {
+            keys: file.keys.map((k) => ({
+                key_id: k.key_id,
+                ...(k.label !== undefined ? { label: k.label } : {}),
+                added_at: k.added_at,
+            })),
+        });
+        return 0;
+    }
+
+    if (file.keys.length === 0) {
+        info(env, dim(env, "no trusted keys yet."));
+        info(env, dim(env, "  add one with: kindly setup trust add <pubkey.pem> [--label <name>]"));
+        return 0;
+    }
+
+    heading(env, `trusted keys (${file.keys.length})`);
+    env.stdout.write("\n");
+    for (const k of file.keys) {
+        env.stdout.write(`  ${k.label ?? dim(env, "(no label)")}\n`);
+        env.stdout.write(`    key_id:    ${k.key_id}\n`);
+        env.stdout.write(`    added_at:  ${k.added_at}\n`);
+        env.stdout.write("\n");
+    }
+    return 0;
+}
+
+async function runSetupTrustAdd(argv: readonly string[], env: CliEnv): Promise<number> {
+    const { positional, flags } = parseArgs(argv, TRUST_ADD_FLAGS);
+    const fileArg = positional[0];
+    if (!fileArg) {
+        throw new ArgError("usage: kindly setup trust add <pubkey.pem> [--label <name>]");
+    }
+    if (positional.length > 1) {
+        throw new ArgError(`unexpected extra argument: ${positional[1]}`);
+    }
+
+    const { readFileSync } = await import("node:fs");
+    const { loadKeyring, saveKeyring, addKey, KeyringError } = await import("../setup/keyring.ts");
+
+    const pubPath = resolve(env.cwd, fileArg);
+    let pubPem: string;
+    try {
+        pubPem = readFileSync(pubPath, "utf8");
+    } catch (e) {
+        throw new KindlyError(
+            ErrorCodes.YAML_NOT_FOUND,
+            `cannot read public key at ${pubPath}: ${(e as Error).message}`,
+            [{ text: "Verify the path and try again." }],
+        );
+    }
+
+    const before = loadKeyring(env);
+    let added: { key_id: string; label?: string; added_at: string };
+    let updated;
+    try {
+        const result = addKey(before, {
+            publicKeyPem: pubPem,
+            ...(flags.label !== undefined ? { label: flags.label } : {}),
+            now: env.now(),
+        });
+        updated = result.file;
+        added = result.added;
+    } catch (e) {
+        if (e instanceof KeyringError) {
+            throw new KindlyError(
+                ErrorCodes.SETUP_SIGNATURE_INVALID,
+                e.message,
+                e.code === "KEYRING_DUP_KEY"
+                    ? [{ text: "Already trusted. Run `kindly setup trust list` to confirm." }]
+                    : [{ text: "Provide a valid Ed25519 public key in PEM (SPKI) format." }],
+            );
+        }
+        throw e;
+    }
+    saveKeyring(env, updated);
+
+    if (env.jsonMode) {
+        emitJson(env, "setup trust add", {
+            added: {
+                key_id: added.key_id,
+                ...(added.label !== undefined ? { label: added.label } : {}),
+                added_at: added.added_at,
+            },
+            roster_size: updated.keys.length,
+        });
+        return 0;
+    }
+    ok(env, `added key ${added.key_id}`);
+    if (added.label) info(env, dim(env, `  label:     ${added.label}`));
+    info(env, dim(env, `  added_at:  ${added.added_at}`));
+    return 0;
+}
+
+async function runSetupTrustRemove(argv: readonly string[], env: CliEnv): Promise<number> {
+    const { positional } = parseArgs(argv, {} as const satisfies FlagSpecs);
+    const prefix = positional[0];
+    if (!prefix) {
+        throw new ArgError("usage: kindly setup trust remove <key_id_or_prefix>");
+    }
+    if (positional.length > 1) {
+        throw new ArgError(`unexpected extra argument: ${positional[1]}`);
+    }
+    const { loadKeyring, saveKeyring, removeKey, KeyringError } = await import("../setup/keyring.ts");
+    const before = loadKeyring(env);
+    let updated;
+    let removed;
+    try {
+        ({ file: updated, removed } = removeKey(before, prefix));
+    } catch (e) {
+        if (e instanceof KeyringError) {
+            throw new KindlyError(
+                ErrorCodes.SETUP_SIGNATURE_INVALID,
+                e.message,
+                e.code === "KEYRING_KEY_AMBIGUOUS"
+                    ? [{ text: "Pass a longer prefix that uniquely identifies the key." }]
+                    : [{ text: "Run `kindly setup trust list` to see trusted key ids." }],
+            );
+        }
+        throw e;
+    }
+    saveKeyring(env, updated);
+
+    if (env.jsonMode) {
+        emitJson(env, "setup trust remove", {
+            removed: {
+                key_id: removed.key_id,
+                ...(removed.label !== undefined ? { label: removed.label } : {}),
+            },
+            roster_size: updated.keys.length,
+        });
+        return 0;
+    }
+    ok(env, `removed key ${removed.key_id}`);
+    if (removed.label) info(env, dim(env, `  was labeled: ${removed.label}`));
+    return 0;
+}
+
+async function runSetupTrust(argv: readonly string[], env: CliEnv): Promise<number> {
+    const [sub, ...rest] = argv;
+    if (!sub || sub === "--help" || sub === "-h") {
+        env.stdout.write(trustHelp + "\n");
+        return 0;
+    }
+    if (rest[0] === "--help" || rest[0] === "-h") {
+        env.stdout.write(trustHelp + "\n");
+        return 0;
+    }
+    switch (sub) {
+        case "list":   return await runSetupTrustList(rest, env);
+        case "add":    return await runSetupTrustAdd(rest, env);
+        case "remove": return await runSetupTrustRemove(rest, env);
+        default:
+            throw new ArgError(`unknown setup trust subcommand: ${sub}`);
+    }
+}
+
 // ---- `kindly setup import <file>` ------------------------------------------
 
 const IMPORT_FLAGS = {
@@ -1247,6 +1422,7 @@ export async function runSetup(argv: readonly string[], env: CliEnv): Promise<nu
             case "hash":      env.stdout.write(hashHelp + "\n");      return 0;
             case "sign":      env.stdout.write(signHelp + "\n");      return 0;
             case "verify":    env.stdout.write(verifyHelp + "\n");    return 0;
+            case "trust":     env.stdout.write(trustHelp + "\n");     return 0;
             case "import":    env.stdout.write(importHelp + "\n");    return 0;
             case "templates": env.stdout.write(templatesHelp + "\n"); return 0;
             default: break; // fall through — unknown sub yields below
@@ -1260,6 +1436,7 @@ export async function runSetup(argv: readonly string[], env: CliEnv): Promise<nu
         case "hash":      return await runSetupHash(rest, env);
         case "sign":      return await runSetupSign(rest, env);
         case "verify":    return await runSetupVerify(rest, env);
+        case "trust":     return await runSetupTrust(rest, env);
         case "import":    return await runSetupImport(rest, env);
         case "templates": return await runSetupTemplates(rest, env);
         default:
@@ -1281,6 +1458,7 @@ Subcommands:
   hash <file>     print a Setup file's content hash
   sign <archive>  attach an Ed25519 signature sidecar to a fat .kset
   verify <arch>   check the signature sidecar of a fat .kset
+  trust <list|add|remove>  manage the local roster of trusted signer keys
 
 Run \`kindly setup <sub> --help\` for per-subcommand flags.
 
@@ -1345,12 +1523,40 @@ usage: kindly setup verify <archive>
 
 Reads <archive>.sig, re-derives the canonical manifest hash from the
 archive contents, and verifies the Ed25519 signature against the
-embedded public key. Reports the signer_key_id on success — comparing
-that to a known list is YOUR job.
+embedded public key. Reports the signer_key_id on success.
+
+If the signer is in your local trust roster (~/.kindly/trusted-keys.json),
+the output indicates "trusted ✓" with the key's label. Otherwise it
+shows the key as untrusted with a hint to run \`kindly setup trust add\`.
 
 Failure modes: missing sidecar, hash mismatch (archive tampered or sig
 bound to a different .kset), signature invalid, unsupported filter
 version.
+`.trim();
+
+const trustHelp = `
+kindly setup trust — manage the local roster of trusted signer keys.
+
+usage:
+  kindly setup trust list
+  kindly setup trust add <pubkey.pem> [--label <name>]
+  kindly setup trust remove <key_id_or_prefix>
+
+The trust roster lives at ~/.kindly/trusted-keys.json — per-user,
+cross-project. Adding a key is always an explicit action; kindly does
+NOT auto-trust a signer the first time you encounter their key (that
+moment is exactly when impersonation is most likely).
+
+Distribute keys out-of-band — fingerprints over a side channel you
+already trust, .pub files attached to a release announcement, etc.
+There is no built-in publisher registry.
+
+Subcommands:
+  list                show all trusted keys (label, key_id, added_at)
+  add <pem> [...]     add an Ed25519 public key (PEM/SPKI) to the roster
+                      --label <name>  human-readable tag for this key
+  remove <prefix>     remove the key whose key_id starts with <prefix>;
+                      ambiguous prefixes are rejected
 `.trim();
 
 const templatesHelp = `

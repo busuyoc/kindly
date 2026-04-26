@@ -221,6 +221,158 @@ describe("history reader — S1101 schema validation", () => {
             expect(r.malformed).toBe(4);
             expect(r.total).toBe(0);
         });
+
+        // Post-round-3 audit batch AA (live probe 2026-04-26 evening):
+        // the digit-count regex still accepted Apr 31 / Feb 30 / Jun 31 /
+        // similar invalid calendar dates. Defense: round-trip through
+        // `Date#toISOString` which never emits invalid wall-clock values.
+        test("ts with calendar-invalid day-for-month is rejected", () => {
+            writeHistory([
+                { ts: "2026-04-31T12:00:00.000Z", cmd: "apply", kindly_version: "0.13.0", index: 1, summary: {} },
+                { ts: "2026-02-30T12:00:00.000Z", cmd: "apply", kindly_version: "0.13.0", index: 2, summary: {} },
+                { ts: "2026-06-31T12:00:00.000Z", cmd: "apply", kindly_version: "0.13.0", index: 3, summary: {} },
+                { ts: "2026-09-31T12:00:00.000Z", cmd: "apply", kindly_version: "0.13.0", index: 4, summary: {} },
+                { ts: "2026-11-31T12:00:00.000Z", cmd: "apply", kindly_version: "0.13.0", index: 5, summary: {} },
+                { ts: "2025-02-29T12:00:00.000Z", cmd: "apply", kindly_version: "0.13.0", index: 6, summary: {} },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(6);
+            expect(r.total).toBe(0);
+        });
+
+        test("ts with calendar-valid edge dates is accepted (Feb 29 leap, Apr 30, Dec 31)", () => {
+            writeHistory([
+                { ts: "2024-02-29T12:00:00.000Z", cmd: "apply", kindly_version: "0.13.0", index: 1, summary: {} },
+                { ts: "2026-04-30T12:00:00.000Z", cmd: "apply", kindly_version: "0.13.0", index: 2, summary: {} },
+                { ts: "2026-12-31T23:59:59.999Z", cmd: "apply", kindly_version: "0.13.0", index: 3, summary: {} },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(0);
+            expect(r.total).toBe(3);
+        });
+    });
+
+    // Post-round-3 audit batch AC (live probe 2026-04-26 evening): the
+    // snapshot integrity binding accepts MISSING `snapshot_sha256` for
+    // backward-compat with pre-round-3 entries. A forged round-3-era
+    // entry can pretend to be pre-round-3 by omitting the field,
+    // bypassing rollback hash verification. Defense: require the field
+    // for entries with `kindly_version >= 0.13.0` AND any rollable
+    // snapshot path. Pre-0.13 entries still bypass legitimately.
+    describe("snapshot_sha256 required on round-3+ entries with rollable paths", () => {
+        const hash = "sha256:" + "a".repeat(64);
+
+        test("kindly_version 0.13.0 + backup_path + no hash → dropped", () => {
+            writeHistory([
+                {
+                    ts, cmd: "apply", kindly_version: "0.13.0", index: 1,
+                    summary: { backup_path: "/x/.kindly/backups/y/settings.reader.lua" },
+                },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(1);
+            expect(r.total).toBe(0);
+        });
+
+        test("kindly_version 0.13.0 + pre_import_path + no hash → dropped", () => {
+            writeHistory([
+                {
+                    ts, cmd: "setup:import", kindly_version: "0.13.0", index: 1,
+                    summary: { pre_import_path: "/x/.kindly/pre-import/y" },
+                },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(1);
+            expect(r.total).toBe(0);
+        });
+
+        test("kindly_version 0.13.0 + pre_rollback_path + no hash → dropped", () => {
+            writeHistory([
+                {
+                    ts, cmd: "rollback", kindly_version: "0.13.0", index: 1,
+                    summary: { pre_rollback_path: "/x/.kindly/pre-rollback/y" },
+                },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(1);
+        });
+
+        test("kindly_version 0.13.0 + pre_restore_path + no hash → dropped", () => {
+            writeHistory([
+                {
+                    ts, cmd: "restore", kindly_version: "0.13.0", index: 1,
+                    summary: { pre_restore_path: "/x/.kindly/pre-restore/y.tgz" },
+                },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(1);
+        });
+
+        test("kindly_version 0.13.0 + rollable path + valid hash → accepted", () => {
+            writeHistory([
+                {
+                    ts, cmd: "apply", kindly_version: "0.13.0", index: 1,
+                    summary: {
+                        backup_path: "/x/.kindly/backups/y/settings.reader.lua",
+                        snapshot_sha256: hash,
+                    },
+                },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(0);
+            expect(r.total).toBe(1);
+        });
+
+        test("kindly_version 0.12.0 + rollable path + no hash → accepted (pre-round-3 backward-compat)", () => {
+            writeHistory([
+                {
+                    ts, cmd: "apply", kindly_version: "0.12.0", index: 1,
+                    summary: { backup_path: "/x/.kindly/backups/y/settings.reader.lua" },
+                },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(0);
+            expect(r.total).toBe(1);
+        });
+
+        test("kindly_version 0.3.0 + rollable path + no hash → accepted (legacy backward-compat)", () => {
+            writeHistory([
+                {
+                    ts, cmd: "apply", kindly_version: "0.3.0", index: 1,
+                    summary: { backup_path: "/x/.kindly/backups/y/settings.reader.lua" },
+                },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(0);
+            expect(r.total).toBe(1);
+        });
+
+        test("kindly_version 0.13.0 + no rollable path + no hash → accepted (snapshot/setup:export shape)", () => {
+            writeHistory([
+                {
+                    ts, cmd: "snapshot", kindly_version: "0.13.0", index: 1,
+                    summary: { archive_path: "/x/out.tgz" },
+                },
+                {
+                    ts, cmd: "setup:export", kindly_version: "0.13.0", index: 2,
+                    summary: { output_path: "/x/y.kset", setup_id: "abcdef012345" },
+                },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(0);
+            expect(r.total).toBe(2);
+        });
+
+        test("kindly_version 1.0.0 + rollable path + no hash → dropped (post-round-3 future)", () => {
+            writeHistory([
+                {
+                    ts, cmd: "apply", kindly_version: "1.0.0", index: 1,
+                    summary: { backup_path: "/x/.kindly/backups/y/settings.reader.lua" },
+                },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(1);
+        });
     });
 
     // Round-3 history-rendering F4: read-time length caps on entry/summary
@@ -282,6 +434,7 @@ describe("history reader — S1101 schema validation", () => {
                     summary: {
                         backup_path: "/Users/x/proj/.kindly/backups/2026-04-26T12-00-00-000Z-abc/settings.reader.lua",
                         pre_import_path: "/Users/x/proj/.kindly/pre-import/2026-04-26T12-00-00-000Z-def",
+                        snapshot_sha256: "sha256:" + "a".repeat(64),
                     },
                 },
             ]);

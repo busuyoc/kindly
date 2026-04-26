@@ -102,11 +102,71 @@ export const historySummarySchema = z.object({
 // minute/second 00-59) — exactly the shape `Date#toISOString()`
 // emits. JS Date never emits invalid wall-clock values; legitimate
 // writers always pass, only forged ones fail.
+//
+// Post-round-3 audit batch AA (live probe 2026-04-26 evening): the
+// digit-count regex still admits invalid calendar dates — `"2026-04-31"`
+// (April has 30 days), `"2026-02-30"`, etc. Lex-compare `--since`
+// filtering is then skewed (Apr 31 sorts between Apr 30 and May 1) and
+// `new Date()` auto-advances silently. Defense: round-trip through
+// `Date#toISOString` — the canonical form every writer emits — which
+// never produces invalid calendar values. Mismatch flags the forge.
 const ISO_TS_REGEX =
     /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T([01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}Z$/;
 
+function isCalendarValidIsoTs(s: string): boolean {
+    const d = new Date(s);
+    return !Number.isNaN(d.getTime()) && d.toISOString() === s;
+}
+
+// Post-round-3 audit batch AC (live probe 2026-04-26 evening): the
+// snapshot integrity binding rejected drift in committed bytes but
+// accepted MISSING `snapshot_sha256` for backward-compat with
+// pre-round-3 entries. A forged entry authored on round-3-or-later
+// kindly can pretend to be pre-round-3 by simply omitting the field,
+// bypassing hash verification at `rollback --to N` and restoring
+// attacker-chosen bytes. Defense: require the field for entries
+// whose `kindly_version` is at-or-after the round-3 cutoff (0.13.0)
+// AND that have a rollable snapshot path. Pre-0.13 entries with no
+// hash legitimately bypass; a forged round-3 entry with no hash is
+// dropped to the malformed bucket and not resolvable via `--to`.
+const HASH_REQUIRED_AT_VERSION = "0.13.0";
+
+function parseSemver(v: string): [number, number, number] | null {
+    const m = /^(\d+)\.(\d+)\.(\d+)/.exec(v);
+    if (!m) return null;
+    return [Number(m[1]), Number(m[2]), Number(m[3])];
+}
+
+function semverGte(a: string, b: string): boolean {
+    const ap = parseSemver(a);
+    const bp = parseSemver(b);
+    if (!ap) return true;
+    if (!bp) return false;
+    for (let i = 0; i < 3; i++) {
+        if (ap[i]! > bp[i]!) return true;
+        if (ap[i]! < bp[i]!) return false;
+    }
+    return true;
+}
+
+function hasRollableSnapshotPath(summary: {
+    backup_path?: string;
+    pre_import_path?: string;
+    pre_restore_path?: string;
+    pre_rollback_path?: string;
+}): boolean {
+    return Boolean(
+        summary.backup_path
+        || summary.pre_import_path
+        || summary.pre_restore_path
+        || summary.pre_rollback_path,
+    );
+}
+
 export const historyEntrySchema = z.object({
-    ts: z.string().regex(ISO_TS_REGEX, "ts must be ISO-8601 (YYYY-MM-DDTHH:MM:SS.sssZ)"),
+    ts: z.string()
+        .regex(ISO_TS_REGEX, "ts must be ISO-8601 (YYYY-MM-DDTHH:MM:SS.sssZ)")
+        .refine(isCalendarValidIsoTs, "ts must be a calendar-valid date (April has 30 days, February 28/29)"),
     cmd: historyCommandSchema,
     // F4 cap: --label is user-provided, but it surfaces in the formatted
     // list view (truncated to LABEL_COL_WIDTH) AND in `--json` output
@@ -129,4 +189,13 @@ export const historyEntrySchema = z.object({
     index: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
     mount: mountFingerprintSchema.optional(),
     summary: historySummarySchema,
-}).strict();
+}).strict().superRefine((data, ctx) => {
+    if (data.summary.snapshot_sha256) return;
+    if (!semverGte(data.kindly_version, HASH_REQUIRED_AT_VERSION)) return;
+    if (!hasRollableSnapshotPath(data.summary)) return;
+    ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["summary", "snapshot_sha256"],
+        message: `entry from kindly_version ${data.kindly_version} (round-3+) with a rollable snapshot path must include snapshot_sha256`,
+    });
+});

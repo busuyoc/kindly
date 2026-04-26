@@ -471,6 +471,14 @@ function assertSnapshotUnderExpectedSubtype(
 // can't retroactively bind history that was written before the hash
 // was added. New entries always carry the hash — apply, setup:import,
 // and rollback all wire `hashSnapshotDir` into appendHistoryEntry.
+//
+// Post-round-3 audit batch AC (live probe 2026-04-26 evening): the
+// missing-hash bypass was forgeable — an attacker authoring on round-3
+// kindly could omit `snapshot_sha256` and pretend to be pre-round-3.
+// `historyEntrySchema` now drops such entries to malformed before they
+// reach this function (refuses kindly_version >= 0.13.0 + rollable
+// path + missing hash). The early-return below is now only reachable
+// for legitimately pre-0.13 entries that pass schema validation.
 function assertSnapshotHashMatches(
     snapshotDir: string,
     recordedHash: string | undefined,

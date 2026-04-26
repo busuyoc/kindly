@@ -226,10 +226,27 @@ function readActiveRaw(path: string): HistoryEntry[] {
     return entries;
 }
 
+// Round-3 follow-up (live probe 2026-04-26): a forged history line
+// containing `"index": 99999999999999999999` parses (via JSON.parse) to
+// a f64 = 1e20, which is > MAX_SAFE_INTEGER. Without the safe-integer
+// guard, highestIndexOf returns 1e20, +1 still rounds to 1e20, and
+// every subsequent legit entry shares the duplicate index — collapsing
+// the monotonic invariant `kindly history` and `rollback --to N` rely
+// on. Treat any non-safe-integer index as forged and ignore it for the
+// purpose of computing nextIndex. Reader-side schema (S1101) marks the
+// same line malformed; this is defense in depth for the case where a
+// tampered file is observed by the writer before any reader.
+function isSafeIndex(n: unknown): n is number {
+    return typeof n === "number"
+        && Number.isInteger(n)
+        && n >= 0
+        && n <= Number.MAX_SAFE_INTEGER;
+}
+
 function highestIndexOf(entries: HistoryEntry[]): number {
     let max = 0;
     for (const e of entries) {
-        if (typeof e.index === "number" && e.index > max) max = e.index;
+        if (isSafeIndex(e.index) && e.index > max) max = e.index;
     }
     return max;
 }
@@ -245,7 +262,7 @@ function highestArchivedIndex(cwd: string): number {
             if (line.length === 0) continue;
             try {
                 const parsed = JSON.parse(line) as HistoryEntry;
-                if (typeof parsed.index === "number" && parsed.index > max) {
+                if (isSafeIndex(parsed.index) && parsed.index > max) {
                     max = parsed.index;
                 }
             } catch {

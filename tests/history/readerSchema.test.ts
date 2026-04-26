@@ -354,4 +354,56 @@ describe("history reader — S1101 schema validation", () => {
             expect(r.total).toBe(1);
         });
     });
+
+    // Round-3 follow-up (live probe 2026-04-26): index must be a
+    // non-negative safe integer. JSON parses literal
+    // `99999999999999999999` to the f64 1e20 which sits past
+    // MAX_SAFE_INTEGER; the writer's increment then rounds to the same
+    // value, collapsing index monotonicity. Bounding at the schema lets
+    // forged entries fall to the malformed bucket so `kindly history`
+    // and `rollback --to N` keep their ordering invariants.
+    describe("index bounds (f64 precision-loss defense)", () => {
+        test("index past MAX_SAFE_INTEGER (1e20) → dropped", () => {
+            const dir = join(workdir, ".kindly");
+            mkdirSync(dir, { recursive: true });
+            const p = join(dir, "history.jsonl");
+            // Hand-write the line so JSON.parse coerces the literal to
+            // f64 1e20; JSON.stringify({index: 1e20}) would emit the
+            // exponential form, and either still > MAX_SAFE_INTEGER.
+            const line = `{"ts":"${ts}","cmd":"apply","kindly_version":"0.13.0","index":99999999999999999999,"summary":{}}`;
+            writeFileSync(p, line + "\n");
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(1);
+            expect(r.total).toBe(0);
+        });
+
+        test("index at exact MAX_SAFE_INTEGER is accepted", () => {
+            writeHistory([
+                { ts, cmd: "apply", kindly_version: "0.13.0",
+                  index: Number.MAX_SAFE_INTEGER, summary: {} },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(0);
+            expect(r.total).toBe(1);
+            expect(r.entries[0]!.index).toBe(Number.MAX_SAFE_INTEGER);
+        });
+
+        test("negative index → dropped", () => {
+            writeHistory([
+                { ts, cmd: "apply", kindly_version: "0.13.0", index: -1, summary: {} },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(1);
+            expect(r.total).toBe(0);
+        });
+
+        test("fractional index → dropped", () => {
+            writeHistory([
+                { ts, cmd: "apply", kindly_version: "0.13.0", index: 1.5, summary: {} },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(1);
+            expect(r.total).toBe(0);
+        });
+    });
 });

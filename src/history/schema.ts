@@ -117,7 +117,16 @@ export const historyEntrySchema = z.object({
     // semver in practice. 64 bytes is generous; anything longer is a
     // forged entry, fall into the malformed bucket.
     kindly_version: z.string().max(64),
-    index: z.number().optional(),
+    // Round-3 follow-up (live probe 2026-04-26): bound index to the
+    // safe-integer range. JSON.parse coerces large numeric literals
+    // (e.g. `99999999999999999999`) to f64, which silently rounds to
+    // a value >2^53-1. The writer's `highestIndexOf` then increments,
+    // hits the same f64-rounding wall, and emits subsequent legit
+    // entries with the same index — collapsing monotonic ordering and
+    // breaking `rollback --to N`. Reject anything past MAX_SAFE_INTEGER
+    // (or fractional, or negative) so a tampered active/archive file
+    // can't poison the counter the next time `kindly history` reads it.
+    index: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
     mount: mountFingerprintSchema.optional(),
     summary: historySummarySchema,
 }).strict();

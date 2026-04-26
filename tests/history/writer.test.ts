@@ -4,7 +4,7 @@
 // with command-level wiring — that's covered by tests/cli/historyEmit.test.ts.
 
 import { describe, test, expect, beforeEach } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -160,5 +160,68 @@ describe("appendHistoryEntry — atomic-rename durability (C3/S1421)", () => {
         for (const line of lines) {
             expect(() => JSON.parse(line)).not.toThrow();
         }
+    });
+});
+
+// Round-3 follow-up (live probe 2026-04-26): a forged active or archive
+// line with a numeric index past Number.MAX_SAFE_INTEGER (e.g. JSON
+// `99999999999999999999` parses to f64 1e20) used to pin nextIndex at
+// the same f64 value because `1e20 + 1 === 1e20` under IEEE-754 rounding.
+// Subsequent legit entries inherited the duplicate, breaking the
+// monotonic-index audit invariant `kindly history` and `rollback --to N`
+// rely on. Defense: highestIndexOf / highestArchivedIndex ignore any
+// index that isn't a non-negative safe integer.
+describe("appendHistoryEntry — forged-index defense (f64 precision-loss)", () => {
+    test("forged active entry with index past MAX_SAFE_INTEGER is ignored for nextIndex", () => {
+        const dir = join(workdir, ".kindly");
+        mkdirSync(dir, { recursive: true });
+        const p = join(dir, "history.jsonl");
+        // Hand-write the forged line so JSON.parse coerces to f64 1e20.
+        const forged = `{"ts":"2026-04-26T20:00:00.000Z","cmd":"apply","kindly_version":"0.13.0","index":99999999999999999999,"summary":{}}`;
+        writeFileSync(p, forged + "\n");
+
+        const env = makeEnv(workdir, "2026-04-26T20:00:01.000Z");
+        const e1 = appendHistoryEntry(env, "apply", { settings_delta_n: 1 });
+        const e2 = appendHistoryEntry(env, "apply", { settings_delta_n: 2 });
+
+        // Pre-fix: e1.index === 1e20, e2.index === 1e20 (duplicate).
+        // Post-fix: forged line ignored, indexes start fresh at 1, 2.
+        expect(e1.index).toBe(1);
+        expect(e2.index).toBe(2);
+        expect(e1.index).toBeLessThanOrEqual(Number.MAX_SAFE_INTEGER);
+        expect(e2.index).toBeLessThanOrEqual(Number.MAX_SAFE_INTEGER);
+        expect(e1.index).not.toBe(e2.index);
+    });
+
+    test("forged archive entry with f64-imprecise index does not poison nextIndex", () => {
+        const dir = join(workdir, ".kindly", "history-archive");
+        mkdirSync(dir, { recursive: true });
+        const archivePath = join(dir, "2026-04.jsonl");
+        const forged = `{"ts":"2026-04-26T20:00:00.000Z","cmd":"apply","kindly_version":"0.13.0","index":99999999999999999999,"summary":{}}`;
+        writeFileSync(archivePath, forged + "\n");
+
+        // Active is empty → writer falls back to highestArchivedIndex.
+        const env = makeEnv(workdir, "2026-04-26T20:00:01.000Z");
+        const e1 = appendHistoryEntry(env, "apply", { settings_delta_n: 1 });
+
+        // Pre-fix: e1.index === 1e20. Post-fix: 1.
+        expect(e1.index).toBe(1);
+        expect(e1.index).toBeLessThanOrEqual(Number.MAX_SAFE_INTEGER);
+    });
+
+    test("forged Infinity-shaped index falls into the malformed bucket and is ignored", () => {
+        // JSON has no `Infinity` literal, so JSON.parse rejects the line
+        // entirely. But a forged line with `"index":1e308` parses to a
+        // huge but finite f64 — same precision-loss territory. Either
+        // way, the writer must not pick it up as the seed for nextIndex.
+        const dir = join(workdir, ".kindly");
+        mkdirSync(dir, { recursive: true });
+        const p = join(dir, "history.jsonl");
+        const forged = `{"ts":"2026-04-26T20:00:00.000Z","cmd":"apply","kindly_version":"0.13.0","index":1e308,"summary":{}}`;
+        writeFileSync(p, forged + "\n");
+
+        const env = makeEnv(workdir, "2026-04-26T20:00:01.000Z");
+        const e1 = appendHistoryEntry(env, "apply", { settings_delta_n: 1 });
+        expect(e1.index).toBe(1);
     });
 });

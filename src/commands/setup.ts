@@ -786,10 +786,9 @@ async function runSetupTrustAdd(argv: readonly string[], env: CliEnv): Promise<n
     }
 
     const { readFileSync } = await import("node:fs");
-    const { loadKeyring, saveKeyring, addKey, KeyringError } = await import("../setup/keyring.ts");
+    const { loadKeyring, saveKeyring, addKey, rawEd25519PublicKey, KeyringError } = await import("../setup/keyring.ts");
     const { loadBuiltinKeyring, findBuiltinKey } = await import("../setup/builtinKeyring.ts");
     const { keyIdFromPublicKey } = await import("../setup/signing.ts");
-    const { createPublicKey } = await import("node:crypto");
 
     const pubPath = resolve(env.cwd, fileArg);
     let pubPem: string;
@@ -806,34 +805,21 @@ async function runSetupTrustAdd(argv: readonly string[], env: CliEnv): Promise<n
     // Pre-derive the key_id so we can reject duplication against the
     // built-in registry BEFORE mutating the local roster — same shape
     // of "no half-mutated state" guarantee that Batch J's diff/history
-    // composition relies on. Mirrors keyring.ts:rawEd25519PublicKey
-    // verbatim so the error shape on a malformed PEM matches addKey().
+    // composition relies on. KeyringError → KindlyError conversion
+    // mirrors the addKey catch below so a malformed PEM produces the
+    // same error shape regardless of which check fires first.
     let candidateKeyId: string;
     try {
-        const k = createPublicKey(pubPem);
-        if (k.asymmetricKeyType !== "ed25519") {
-            throw new KindlyError(
-                ErrorCodes.SETUP_SIGNATURE_INVALID,
-                `expected Ed25519 public key, got ${k.asymmetricKeyType ?? "unknown"}`,
-                [{ text: "Provide a valid Ed25519 public key in PEM (SPKI) format." }],
-            );
-        }
-        const der = k.export({ format: "der", type: "spki" });
-        if (der.length !== 44) {
-            throw new KindlyError(
-                ErrorCodes.SETUP_SIGNATURE_INVALID,
-                `unexpected SPKI length for Ed25519: ${der.length}`,
-                [{ text: "Provide a valid Ed25519 public key in PEM (SPKI) format." }],
-            );
-        }
-        candidateKeyId = keyIdFromPublicKey(Buffer.from(der.subarray(12)));
+        candidateKeyId = keyIdFromPublicKey(rawEd25519PublicKey(pubPem));
     } catch (e) {
-        if (e instanceof KindlyError) throw e;
-        throw new KindlyError(
-            ErrorCodes.SETUP_SIGNATURE_INVALID,
-            `invalid public key PEM: ${(e as Error).message}`,
-            [{ text: "Provide a valid Ed25519 public key in PEM (SPKI) format." }],
-        );
+        if (e instanceof KeyringError) {
+            throw new KindlyError(
+                ErrorCodes.SETUP_SIGNATURE_INVALID,
+                e.message,
+                [{ text: "Provide a valid Ed25519 public key in PEM (SPKI) format." }],
+            );
+        }
+        throw e;
     }
 
     const builtin = loadBuiltinKeyring();

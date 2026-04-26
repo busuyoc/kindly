@@ -226,8 +226,13 @@ export function findKey(file: TrustedKeysFile, keyId: string): TrustedKey | null
 /** Extract raw 32-byte Ed25519 public key from a PEM. Throws
  *  KEYRING_INVALID_KEY for non-Ed25519 or malformed input. Mirrors the
  *  helper in signing.ts so an invalid PEM produces the same shape of
- *  error whether the user is signing or trusting. */
-function rawEd25519PublicKey(keyPem: string): Buffer {
+ *  error whether the user is signing or trusting.
+ *
+ *  Exported for use in `setup trust add` — the CLI needs to derive
+ *  key_id BEFORE mutating the local roster (to check against the
+ *  built-in registry first), so the SPKI-DER-length invariant lives
+ *  here in one place. */
+export function rawEd25519PublicKey(keyPem: string): Buffer {
     let k: ReturnType<typeof createPublicKey>;
     try {
         k = createPublicKey(keyPem);

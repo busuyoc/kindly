@@ -607,9 +607,38 @@ async function runSetupVerify(argv: readonly string[], env: CliEnv): Promise<num
 
     const archivePath = resolve(env.cwd, fileArg);
     const { verifySetupArchive, SigningError } = await import("../setup/signing.ts");
+    const { loadKeyring, findKey, KeyringError } = await import("../setup/keyring.ts");
 
     try {
         const result = verifySetupArchive(archivePath);
+
+        // Step 4 — diagnostic-only trust roster lookup. The crypto check
+        // above proves "the holder of <signer_key_id> signed this." Whether
+        // the user trusts that key is a separate question, answered by
+        // their local roster. We don't gate the verify command on roster
+        // membership (gating happens in `setup import`, step 5) — verify
+        // is a probe, and a probe should always tell the user what it found.
+        let trusted = false;
+        let trustedLabel: string | undefined;
+        let rosterError: string | undefined;
+        try {
+            const roster = loadKeyring(env);
+            const entry = findKey(roster, result.signerKeyId);
+            if (entry !== null) {
+                trusted = true;
+                trustedLabel = entry.label;
+            }
+        } catch (e) {
+            if (e instanceof KeyringError) {
+                // Don't fail verify when the roster file is broken. The
+                // crypto answer is still useful; flag the roster as needing
+                // attention so the user knows trust state is unknown.
+                rosterError = e.message;
+            } else {
+                throw e;
+            }
+        }
+
         if (env.jsonMode) {
             emitJson(env, "setup verify", {
                 archive: archivePath,
@@ -617,14 +646,25 @@ async function runSetupVerify(argv: readonly string[], env: CliEnv): Promise<num
                 manifest_hash: result.derivedManifestHash,
                 signer_key_id: result.signerKeyId,
                 filter_version: result.sidecar.filter_version,
+                trusted,
+                ...(trustedLabel !== undefined ? { signer_label: trustedLabel } : {}),
+                ...(rosterError !== undefined ? { roster_error: rosterError } : {}),
             });
             return 0;
         }
         ok(env, `signature verified — ${archivePath}`);
-        info(env, dim(env, `  manifest_hash: ${result.derivedManifestHash}`));
-        info(env, dim(env, `  signer_key_id: ${result.signerKeyId}`));
+        info(env, dim(env, `  manifest_hash:  ${result.derivedManifestHash}`));
+        info(env, dim(env, `  signer_key_id:  ${result.signerKeyId}`));
         info(env, dim(env, `  filter_version: ${result.sidecar.filter_version}`));
-        info(env, dim(env, "  (signer trust is YOUR call — kindly only verifies the crypto)"));
+        if (rosterError !== undefined) {
+            warn(env, `trust roster unreadable — ${rosterError}`);
+            stderrLine(env, dim(env, "  fix the roster (or move it aside) to see trust status here."));
+        } else if (trusted) {
+            info(env, paint(env, "green", "  trusted ✓") + (trustedLabel ? dim(env, `  (label: ${trustedLabel})`) : ""));
+        } else {
+            info(env, paint(env, "yellow", "  untrusted ✗") + dim(env, "  (signer not in your local roster)"));
+            info(env, dim(env, `  add with: kindly setup trust add <pubkey.pem> --label <name>`));
+        }
         return 0;
     } catch (e) {
         if (e instanceof SigningError) {

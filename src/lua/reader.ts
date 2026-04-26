@@ -25,8 +25,14 @@ export class LuaParseError extends KindlyError {
     }
 }
 
+// KOReader settings have a few levels of nesting (kosync, cre_header_info,
+// statistics, etc.); 64 is well above any legitimate config and well below
+// V8/JSC's call-stack limit even for the recursive descent path here.
+const MAX_TABLE_DEPTH = 64;
+
 class Parser {
     pos = 0;
+    depth = 0;
     constructor(public src: string) {}
 
     fail(msg: string): never {
@@ -217,11 +223,35 @@ class Parser {
         }
         if (!sawDigit) this.fail("expected number");
         const n = Number(this.src.slice(start, this.pos));
-        if (Number.isNaN(n)) this.fail("invalid number");
+        // Red-team S880 (2026-04-26): KOReader's dump.lua emits Infinity as
+        // "1e999" (or any 400-digit integer); parsing as Number yields ±Inf,
+        // luaToYaml then writes ".inf" to YAML, and the next apply throws
+        // an unstructured "cannot serialize non-finite number" — kindly is
+        // wedged. Reject non-finite at parse so the failure has a code and
+        // a position, and a future pull can surface it as a device-side
+        // bug to the user instead of dying on apply.
+        if (!Number.isFinite(n)) this.fail("non-finite number");
         return n;
     }
 
     parseTable(): LuaTable | LuaValue[] {
+        // Red-team S881 (2026-04-26): unbounded recursion in the parseValue
+        // → parseTable → parseValue chain. A 30k-deep nested table from
+        // device read crashes pull with "Maximum call stack size exceeded"
+        // and an UNKNOWN error code (no remediation). Cap depth so the
+        // failure has a structured code and position.
+        if (++this.depth > MAX_TABLE_DEPTH) {
+            this.depth--;
+            this.fail(`nested table depth exceeded ${MAX_TABLE_DEPTH}`);
+        }
+        try {
+            return this.parseTableBody();
+        } finally {
+            this.depth--;
+        }
+    }
+
+    parseTableBody(): LuaTable | LuaValue[] {
         this.expect("{");
         // We preserve insertion order via an object; arrays detected
         // post-hoc if all keys are 1..N integers.

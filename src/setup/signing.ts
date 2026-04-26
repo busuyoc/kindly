@@ -52,8 +52,15 @@ import { assertManifestFilterInvariant, FilterInvariantError } from "./filterChe
  *  rejections, different NFC handling, anything that flips a previously-
  *  passing manifest to failing or vice versa. Pure classify changes
  *  (e.g. S960 plugins_disabled) do NOT bump — filterCheck walks every
- *  string uniformly and is independent of classify. */
-export const KINDLY_FILTER_VERSION = "v0.12.0";
+ *  string uniformly and is independent of classify.
+ *
+ *  v0.12.0 -> v0.13.0 bump (round 3 filter-parity HIGH): filterCheck now
+ *  also rejects Cf/Cc codepoints (ZWSP/ZWNJ/ZWJ/BOM/RLO/C1-controls/...)
+ *  to match what `parseYamlSafe` rejects on the verify side (Lead 19).
+ *  Without parity, v0.12.0-signed bytes containing those codepoints
+ *  passed sign-time filterCheck but failed parse-time YAML check on the
+ *  receiver — signed-but-unusable bytes. */
+export const KINDLY_FILTER_VERSION = "v0.13.0";
 
 /** Q2a generation window. Verifier accepts any sidecar whose
  *  filter_version is in this list. The build's `KINDLY_FILTER_VERSION`
@@ -68,10 +75,14 @@ export const KINDLY_FILTER_VERSION = "v0.12.0";
  *  generations are explicitly out of scope — old filter bugs expire on
  *  a schedule (see docs/security/99-v0.12-implementation-plan.md §Q2a).
  *
- *  Today (v0.12.0 → v0.13.x): only one filter generation has ever
- *  shipped, so the list has one element. The membership-check shape is
- *  in place for the eventual second entry. */
-export const ACCEPTED_FILTER_VERSIONS = ["v0.12.0"] as const;
+ *  Note: even within the grace window the verifier still re-runs
+ *  filterCheck.ts at the *current* generation (Q2 Option B is "trust
+ *  the verifier's filter, not the publisher's"). A v0.12.0-signed
+ *  archive whose bytes already satisfy v0.13.0 rules verifies fine; one
+ *  whose bytes only passed v0.12.0 rules will FILTER_NOT_INVARIANT.
+ *  The grace window therefore widens *acceptance of the version label*,
+ *  not the rule set itself. */
+export const ACCEPTED_FILTER_VERSIONS = ["v0.13.0", "v0.12.0"] as const;
 
 /** Domain-separation prefix in the signing input. Prevents an Ed25519
  *  key reused for kindly from also producing valid signatures under
@@ -102,7 +113,8 @@ export type SigningErrorCode =
     | "SIGNATURE_INVALID"
     | "UNSUPPORTED_FILTER_VERSION"
     | "UNSUPPORTED_FORMAT"
-    | "FILTER_NOT_INVARIANT";
+    | "FILTER_NOT_INVARIANT"
+    | "AUTHOR_KEY_ID_MISMATCH";
 
 /** True iff `v` is in the N=2 generation window. Pure membership check;
  *  no version comparison. */
@@ -219,6 +231,22 @@ export function signSetupArchive(opts: {
     const rawPub = rawEd25519PublicKey(opts.publicKeyPem);
     const keyId = keyIdFromPublicKey(rawPub);
 
+    // Defensive check (red-team H1): refuse to sign a manifest that
+    // claims someone else as author. Catches publisher-pipeline mistakes
+    // (cross-tenant key swap, copy-pasted manifest with stale claim) at
+    // the publisher boundary instead of letting them propagate to
+    // verifiers as AUTHOR_KEY_ID_MISMATCH.
+    if (
+        unpacked.manifest.meta.author_key_id
+        && unpacked.manifest.meta.author_key_id !== keyId
+    ) {
+        throw new SigningError(
+            `refusing to sign: manifest claims author_key_id=${unpacked.manifest.meta.author_key_id} ` +
+            `but signing key is ${keyId}`,
+            "AUTHOR_KEY_ID_MISMATCH",
+        );
+    }
+
     const input = buildSigningInput(derivedHash, filterVersion);
     // For Ed25519, node:crypto wants algorithm = null (the curve carries
     // its own hash internally — Ed25519ph is NOT what we use here).
@@ -319,6 +347,25 @@ export function verifySetupArchive(archivePath: string): VerifyResult {
         throw new SigningError(
             `manifest hash mismatch: archive yields ${derivedHash}, sidecar declares ${sidecar.manifest_hash}`,
             "MANIFEST_HASH_MISMATCH",
+        );
+    }
+
+    // Authority confusion (red-team H1, 2026-04-26): manifest.meta.author_key_id
+    // is a free-form publisher claim ("this setup was authored by key X").
+    // Without this check, an attacker who holds a trusted key K_eve can
+    // re-sign a manifest claiming author_key_id = K_alice; the trust gate
+    // fires on K_eve, but downstream surfaces (verify --json, history,
+    // future social-trust UI) report the lie. Bind the claim to the actual
+    // signer at the same boundary that already binds manifest_hash to
+    // signer_key_id.
+    if (
+        unpacked.manifest.meta.author_key_id
+        && unpacked.manifest.meta.author_key_id !== sidecar.signer_key_id
+    ) {
+        throw new SigningError(
+            `manifest claims author_key_id=${unpacked.manifest.meta.author_key_id} ` +
+            `but signature was made by ${sidecar.signer_key_id}`,
+            "AUTHOR_KEY_ID_MISMATCH",
         );
     }
 

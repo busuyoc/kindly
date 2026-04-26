@@ -147,15 +147,16 @@ h: [*g,*g,*g,*g,*g,*g,*g,*g,*g]
             expect(parseYamlSafe(`${NFC}: 1\n`)).toEqual({ [NFC]: 1 });
         });
 
-        test("ZWSP-injected key is preserved by NFC and so passes parseYamlSafe", () => {
-            // U+200B is preserved by NFC normalization. The defense for
-            // ZWSP-injected SECRET-key bypasses lives in classify.ts not
-            // matching the variant against the denylist (no homoglyph
-            // folding), NOT in parseYamlSafe rejecting the byte. Verify
-            // this distinction so the two layers stay decoupled.
+        test("ZWSP-injected key is rejected as YAML_INVISIBLE_KEY (Lead 19 round 2)", () => {
+            // U+200B is preserved by NFC normalization, so the byte-level
+            // NFC check above wouldn't catch it. The Cf/Cc check in
+            // assertNfcKeys closes that residual gap so attackers can't
+            // smuggle a ZWSP-bearing variant of a SECRET key past the
+            // YAML boundary even though NFC normalization is a no-op.
             const variant = "kosync​";
             expect(variant.normalize("NFC")).toBe(variant);
-            expect(parseYamlSafe(`${variant}: 1\n`)).toEqual({ [variant]: 1 });
+            expect(() => parseYamlSafe(`${variant}: 1\n`))
+                .toThrow(/invisible or control codepoint/);
         });
 
         test("array entries are walked", () => {

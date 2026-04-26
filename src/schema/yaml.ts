@@ -93,10 +93,47 @@ export type ToYamlResult = {
     filter: FilterResult;
 };
 
+// Lead 19 round 2 (2026-04-26): the device-read path bypasses
+// parseYamlSafe's assertNfcKeys — keys come from reader.ts, not YAML.
+// A tampered settings.reader.lua with `kosync​ = { userkey = ... }`
+// would emit the userkey through the YAML filter because
+// `classify.lookup("kosync​.userkey")` finds nothing after NFC
+// (ZWSP is its own NFC form). Mirror the YAML-side rejection at the
+// device boundary: any Cf/Cc codepoint or non-NFC form in a key from
+// device is unexpected — KOReader writes ASCII identifiers — so refuse
+// rather than risk smuggling SECRET/SENSITIVE values out via classify
+// bypass. Used by both luaToYaml (pull side) and the apply-side merge.
+const INVISIBLE_OR_CONTROL_RE_LUA = /[\p{Cf}\p{Cc}]/u;
+function assertSafeLuaKeys(value: unknown, pathHint: string, seen: WeakSet<object>): void {
+    if (value === null || typeof value !== "object") return;
+    if (seen.has(value as object)) return;
+    seen.add(value as object);
+    if (Array.isArray(value)) {
+        for (let i = 0; i < value.length; i++) {
+            assertSafeLuaKeys(value[i], `${pathHint}[${i}]`, seen);
+        }
+        return;
+    }
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        if (k.normalize("NFC") !== k || INVISIBLE_OR_CONTROL_RE_LUA.test(k)) {
+            throw new KindlyError(
+                ErrorCodes.LUA_INVISIBLE_KEY,
+                `device key at ${pathHint} contains a non-NFC, invisible, or control codepoint`,
+                [
+                    { text: "KOReader writes plain ASCII identifiers; a non-conforming key suggests tampering or a non-KOReader writer." },
+                    { text: "Run `kindly doctor` to inspect the device. Restore from a known-good snapshot if anything looks unfamiliar." },
+                ],
+            );
+        }
+        assertSafeLuaKeys(v, `${pathHint}.${k}`, seen);
+    }
+}
+
 // Convert a parsed Lua table → filtered YAML string. The YAML is flat
 // (matches Lua key names 1:1) and alphabetically ordered for stable diffs.
 export function luaToYaml(data: LuaTable, mode: FilterMode): ToYamlResult {
     const plain = luaToPlain(data as LuaValue) as Record<string, unknown>;
+    assertSafeLuaKeys(plain, "$", new WeakSet());
     const filter = filterForYaml(plain, mode);
 
     // Sort keys alphabetically so `kindly pull` is idempotent (same file →

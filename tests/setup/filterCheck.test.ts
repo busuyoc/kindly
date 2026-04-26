@@ -92,6 +92,31 @@ describe("filter-invariance — reject cases", () => {
         expectViolation(m, "control-byte", "extra_plugin_paths[1]");
     });
 
+    test("ZWSP in settings key → reject (round 3 filter-parity)", () => {
+        const m = clean();
+        const settings = m.settings as Record<string, unknown>;
+        settings["home_dir​x"] = "/tmp/x";
+        expectViolation(m, "control-byte", "home_dir");
+    });
+
+    test("RLO in meta.name → reject (round 3 filter-parity)", () => {
+        const m = clean();
+        m.meta.name = "evil‮VoiD";
+        expectViolation(m, "control-byte", "meta.name");
+    });
+
+    test("BOM in a string value → reject (round 3 filter-parity)", () => {
+        const m = clean();
+        (m.settings as Record<string, unknown>)["home_dir"] = "/tmp/﻿x";
+        expectViolation(m, "control-byte", "home_dir");
+    });
+
+    test("C1 control U+0085 (NEL) in a string value → reject (round 3)", () => {
+        const m = clean();
+        (m.settings as Record<string, unknown>)["home_dir"] = "valuesmug";
+        expectViolation(m, "control-byte", "home_dir");
+    });
+
     test("error message is bounded — many violations don't dump the manifest", () => {
         const m = clean();
         const settings = m.settings as Record<string, unknown>;

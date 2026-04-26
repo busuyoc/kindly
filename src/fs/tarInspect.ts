@@ -76,6 +76,7 @@ export type TarEntryType =
     | "longname"
     | "longlink"
     | "pax"
+    | "sparse"
     | "other";
 
 export interface TarEntry {
@@ -134,8 +135,21 @@ export function inspectTarGz(archivePath: string, maxUncompressedBytes: number):
         const type = classifyTypeflag(typeflag);
         if (type === "longname") {
             pendingLongName = readBytes(data, offset + 512, size).replace(/\0+$/, "");
-        } else if (type === "longlink" || type === "pax") {
-            // PAX/long-link extension headers describe the next entry;
+        } else if (type === "pax") {
+            // PAX extension headers describe the next entry with key=value
+            // records. GNU's new sparse format encodes the real expanded
+            // size in `GNU.sparse.realsize` here; the following file
+            // header reports only the stored (small) size, so the bomb
+            // sails past totalApparentBytes. Sniff and refuse — kindly
+            // never legitimately ships sparse files.
+            const paxBody = readBytes(data, offset + 512, size);
+            if (PAX_GNU_SPARSE_RE.test(paxBody)) {
+                throw new MalformedArchiveError(
+                    `archive contains GNU sparse extension (PAX GNU.sparse.*); kindly does not extract sparse files`,
+                );
+            }
+        } else if (type === "longlink") {
+            // long-link extension headers describe the next entry;
             // they don't themselves represent files in the archive.
         } else {
             entries.push({ path: name, type, size });
@@ -156,11 +170,19 @@ function classifyTypeflag(t: string): TarEntryType {
         case "5": return "dir";
         case "L": return "longname";
         case "K": return "longlink";
+        case "S": return "sparse";  // GNU old-style sparse
         case "x":
         case "g": return "pax";
         default: return "other";
     }
 }
+
+// GNU sparse new-format encodes the real (expanded) size in PAX
+// extension headers. A tiny stored entry can expand to GB on extract,
+// bypassing both gzip ISIZE and our totalApparentBytes sum (PAX itself
+// is just metadata; the next entry's "size" field reports the stored
+// size, not the realsize). Detect any GNU.sparse.* PAX key and refuse.
+const PAX_GNU_SPARSE_RE = /(?:^|\n)\d+\s+GNU\.sparse\./;
 
 function isAllZero(buf: Buffer): boolean {
     for (let i = 0; i < buf.length; i++) if (buf[i] !== 0) return false;

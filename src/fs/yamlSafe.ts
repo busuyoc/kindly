@@ -66,6 +66,16 @@ export function parseYamlSafe(src: string, opts: ParseYamlSafeOptions = {}): unk
 // classify.ts. We REJECT rather than silently NFC-fold so the publisher
 // fixes their pipeline — silent normalization would mask drift between
 // the bytes signed and the bytes verified (Q1/Q2 in the v0.12 plan).
+//
+// Lead 19 round 2 (2026-04-26): NFC-equivalent invisible codepoints
+// (ZWSP U+200B, ZWNJ U+200C, ZWJ U+200D, BOM U+FEFF, BiDi marks
+// U+202A-202E + U+2066-2069, soft hyphen U+00AD, etc.) are their own
+// NFC form — `"kosync​".normalize("NFC") === "kosync​"` —
+// so they pass the byte-equality check above but still defeat
+// `classify.ts` lookups (`"kosync​" !== "kosync"`). Reject any
+// Cf (format) or Cc (control) codepoint in keys to close that
+// remaining bypass surface. Same fail-closed posture as NFC.
+const INVISIBLE_OR_CONTROL_RE = /[\p{Cf}\p{Cc}]/u;
 function assertNfcKeys(value: unknown, pathHint: string, seen: WeakSet<object>): void {
     if (value === null || typeof value !== "object") return;
     // Cyclic YAML anchor-alias graphs (e.g. `root: &a [*a]`) produce a
@@ -89,6 +99,16 @@ function assertNfcKeys(value: unknown, pathHint: string, seen: WeakSet<object>):
                 [
                     { text: "Re-encode the key in NFC. classify lookups depend on NFC equality." },
                     { text: "Common cause: macOS filenames or copy-paste from sources that use NFD or insert ZWSP/ZWJ characters." },
+                ],
+            );
+        }
+        if (INVISIBLE_OR_CONTROL_RE.test(k)) {
+            throw new KindlyError(
+                ErrorCodes.YAML_INVISIBLE_KEY,
+                `YAML key at ${pathHint} contains an invisible or control codepoint`,
+                [
+                    { text: "Remove zero-width / BiDi / control characters from the key. classify lookups treat them as part of the name, defeating SECRET/SENSITIVE detection." },
+                    { text: "Common offenders: U+200B (ZWSP), U+200C/D (ZWNJ/ZWJ), U+202A-E (BiDi overrides), U+FEFF (BOM)." },
                 ],
             );
         }

@@ -390,7 +390,14 @@ function executeSetupImportLocked(
         opts: {
             expectHash: opts.expectHash,
             manifestBytes,
-            yamlSettings: manifest.settings ?? {},
+            // S960: feed the FLATTENED manifest (settings + lifted
+            // plugins_disabled) so CONTROL_BYTES_IN_VALUE sees control
+            // bytes in plugin names — `plugins_disabled` is classified
+            // sensitive-service, and the names land as keys under that
+            // path which the producer scans at descent. Passing only
+            // manifest.settings would let manifest.plugins.disabled
+            // smuggle ESC/OSC into KOReader's plugin manager UI.
+            yamlSettings: flattenManifestForApply(manifest) as Record<string, unknown>,
             shippedPluginsCount: shippedPlugins.length,
             shippedPatchesCount: shippedPatches.length,
             acceptPlugins: !!opts.acceptPlugins,

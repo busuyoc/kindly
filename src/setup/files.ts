@@ -14,7 +14,8 @@
 // isSafeRelativePath() on the manifest side.
 
 import {
-    mkdirSync, readdirSync, rmSync, writeFileSync,
+    closeSync, fsyncSync, mkdirSync, openSync, readdirSync, rmSync,
+    writeFileSync,
 } from "node:fs";
 import { dirname, join, posix } from "node:path";
 import { exists, readBytes } from "../fs/safeRead.ts";
@@ -192,7 +193,7 @@ export function installPluginFiles(
         }
         const abs = join(pluginsRoot, d.path);
         mkdirSync(dirname(abs), { recursive: true });
-        writeFileSync(abs, bytes);
+        writeFileDurable(abs, bytes);
     }
 }
 
@@ -216,8 +217,22 @@ export function installPatches(
         }
         const abs = join(patchesRoot, d.path);
         mkdirSync(dirname(abs), { recursive: true });
-        writeFileSync(abs, bytes);
+        writeFileDurable(abs, bytes);
     }
+}
+
+// Lead 18 (verified 2026-04-26 on Kindle FAT32 + fskit): plain
+// writeFileSync returns before bytes hit the FAT data clusters. A USB
+// yank between writeFileSync's return and the OS's flush leaves a
+// 0-byte file on disk — KOReader then loads an empty plugin/patch on
+// next boot. Force the bytes through with an fsync before returning,
+// matching safeWrite's discipline (src/fs/safeWrite.ts:99). fsync
+// errors propagate so the caller aborts mid-install rather than
+// claiming a successful import that didn't actually persist.
+function writeFileDurable(path: string, bytes: Buffer): void {
+    writeFileSync(path, bytes);
+    const fd = openSync(path, "r+");
+    try { fsyncSync(fd); } finally { closeSync(fd); }
 }
 
 // Compute the on-device paths a fat install would touch. Used by the

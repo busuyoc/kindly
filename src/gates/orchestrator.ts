@@ -34,10 +34,15 @@ export interface GateReport {
     blocked: boolean;
     /** IDs of gates that blocked. Empty if blocked === false. */
     blockingGates: string[];
+    /** S605: true iff any gate returned `kind: "warn"`. Non-blocking;
+     *  consumers map this to exit code 4. */
+    warned: boolean;
+    /** IDs of gates that warned. Empty if warned === false. */
+    warningGates: string[];
 }
 
-/** Called once per gate whose result is `bypass` or `block`. `pass`
- *  results do NOT trigger the logger (too noisy). The orchestrator
+/** Called once per gate whose result is `bypass`, `block`, or `warn`.
+ *  `pass` results do NOT trigger the logger (too noisy). The orchestrator
  *  calls this synchronously; consumers typically write to
  *  `.kindly/gate-events.jsonl` via `appendGateEvent`. */
 export type GateEventLogger = (fired: FiredGate) => void;
@@ -156,6 +161,7 @@ export function runGates(
 
     const fired: FiredGate[] = [];
     const blockingGates: string[] = [];
+    const warningGates: string[] = [];
 
     for (const gate of firing) {
         const raw = gate.check(ctx);
@@ -163,6 +169,7 @@ export function runGates(
         const entry: FiredGate = { id: gate.id, boundary, result: resolved };
         fired.push(entry);
         if (resolved.kind === "block") blockingGates.push(gate.id);
+        else if (resolved.kind === "warn") warningGates.push(gate.id);
         if (opts.logger && resolved.kind !== "pass") opts.logger(entry);
     }
 
@@ -170,6 +177,8 @@ export function runGates(
         fired,
         blocked: blockingGates.length > 0,
         blockingGates,
+        warned: warningGates.length > 0,
+        warningGates,
     };
 }
 

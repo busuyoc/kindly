@@ -60,9 +60,22 @@ export interface GateContext {
     producers: Record<string, unknown>;
 }
 
-/** Outcome of a single gate's check(). */
+/** Outcome of a single gate's check().
+ *
+ *  S605: `warn` is the third tier between `pass` and `block`. A warn-tier
+ *  gate inspects something the user should *know* without refusing the
+ *  operation — typically a heuristic with too many false positives to
+ *  block (e.g. "this string looks like a /mnt/us/ path"). Warns are
+ *  non-bypassable: there is no flag to suppress them; the message is the
+ *  whole UX. They surface to the user via `GateReport.warned` and bump
+ *  the CLI exit code to 4 (warning) without throwing.
+ *
+ *  Reshape trigger (per v0.13 backlog): ≥3 warn-tier gates ship → promote
+ *  to a full warn-tier sub-system (dedicated category, group rendering,
+ *  per-gate severity). Until then, warn is a bolt-on. */
 export type GateResult =
     | { kind: "pass" }
+    | { kind: "warn"; message: string; details?: unknown }
     | { kind: "block"; message: string; details?: unknown }
     | { kind: "bypass"; byFlag: string };
 

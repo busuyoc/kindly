@@ -26,7 +26,7 @@ import { createTarGz } from "../fs/archive.ts";
 import { type CliEnv, resolveMount } from "../cli/env.ts";
 import { hashBytes, shortId } from "../setup/canonical.ts";
 import { runPhase, type GateEventLogger } from "../gates/orchestrator.ts";
-import { appendGateEvent } from "../history/gateLog.ts";
+import { appendGateEvent, gateEventFromFiredGate } from "../history/gateLog.ts";
 import { MANIFEST_HASH_ASSERT } from "../gates/definitions/identity.ts";
 import {
     PLUGINS_REQUIRE_ACK,
@@ -342,22 +342,10 @@ function executeSetupImportLocked(
     const shippedPatches: readonly EmbeddedFile[] = manifest.patches ?? [];
 
     // Gate observability logger — emits a .kindly/gate-events.jsonl line
-    // for each bypass/block. Shared across all four phases.
+    // for each bypass/block/warn. Shared across all four phases.
     const gateLogger: GateEventLogger = (fired) => {
-        if (fired.result.kind === "bypass") {
-            appendGateEvent(env, {
-                gate_id: fired.id,
-                boundary: fired.boundary,
-                kind: "bypass",
-                bypass_flag: fired.result.byFlag,
-            });
-        } else if (fired.result.kind === "block") {
-            appendGateEvent(env, {
-                gate_id: fired.id,
-                boundary: fired.boundary,
-                kind: "block",
-            });
-        }
+        const event = gateEventFromFiredGate(fired);
+        if (event) appendGateEvent(env, event);
     };
 
     // Phase 1 — IDENTITY + SHAPE + CONSENT-FAT. Fail fast pre-mount.

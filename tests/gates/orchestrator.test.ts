@@ -172,6 +172,78 @@ describe("runGates — blocking + bypass", () => {
     });
 });
 
+describe("runGates — warn tier (S605)", () => {
+    const warnGate: GateDefinition = {
+        id: "WARNS",
+        category: "SHAPE",
+        appliesAt: ["import"],
+        requires: [],
+        firesIn: "always",
+        bypassFlags: ["--accept-sensitive"],
+        errorCode: "SENSITIVE_REQUIRES_ACK",
+        check: () => ({ kind: "warn", message: "looks fishy" }),
+    };
+    const blockGate: GateDefinition = {
+        id: "BLOCKS",
+        category: "CONSENT",
+        appliesAt: ["import"],
+        requires: [],
+        firesIn: "always",
+        bypassFlags: [],
+        errorCode: "SENSITIVE_REQUIRES_ACK",
+        check: () => ({ kind: "block", message: "nope" }),
+    };
+    const passGate: GateDefinition = {
+        id: "PASSES",
+        category: "SHAPE",
+        appliesAt: ["import"],
+        requires: [],
+        firesIn: "always",
+        bypassFlags: [],
+        errorCode: "YAML_NOT_FOUND",
+        check: () => ({ kind: "pass" }),
+    };
+
+    test("warn-only run: warned=true, blocked=false", () => {
+        const r = runGates("import", ctx(), {
+            registry: [warnGate], producers: {},
+        });
+        expect(r.blocked).toBe(false);
+        expect(r.warned).toBe(true);
+        expect(r.warningGates).toEqual(["WARNS"]);
+        expect(r.blockingGates).toEqual([]);
+        expect(r.fired[0].result.kind).toBe("warn");
+    });
+
+    test("pass + warn + block: both flags populated independently", () => {
+        const r = runGates("import", ctx(), {
+            registry: [passGate, warnGate, blockGate], producers: {},
+        });
+        expect(r.blocked).toBe(true);
+        expect(r.blockingGates).toEqual(["BLOCKS"]);
+        expect(r.warned).toBe(true);
+        expect(r.warningGates).toEqual(["WARNS"]);
+    });
+
+    test("logger fires for warn (same channel as block/bypass)", () => {
+        const seen: string[] = [];
+        runGates("import", ctx(), {
+            registry: [passGate, warnGate], producers: {},
+            logger: (f) => seen.push(`${f.id}:${f.result.kind}`),
+        });
+        expect(seen).toEqual(["WARNS:warn"]);
+    });
+
+    test("warn is non-bypassable: --accept-sensitive does not clear warn", () => {
+        const r = runGates("import", ctx({ acceptSensitive: true }), {
+            registry: [warnGate], producers: {},
+        });
+        expect(r.warned).toBe(true);
+        expect(r.warningGates).toEqual(["WARNS"]);
+        expect(r.fired[0].result.kind).toBe("warn");
+    });
+});
+
 describe("runGates — producer materialization", () => {
     let producerCalls = 0;
     const p: Producer<number> = () => {

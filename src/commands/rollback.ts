@@ -48,7 +48,7 @@ import { computeChanges } from "../schema/diff.ts";
 import { runPhase } from "../gates/orchestrator.ts";
 import { CODE_EXEC_ADJACENT_REQUIRES_ACK } from "../gates/definitions/dual.ts";
 import { MOUNT_FINGERPRINT_MATCHES } from "../gates/definitions/identity.ts";
-import { appendGateEvent } from "../history/gateLog.ts";
+import { appendGateEvent, gateEventFromFiredGate } from "../history/gateLog.ts";
 
 const FLAGS = {
     "dry-run": {
@@ -319,20 +319,8 @@ function runRollbackGates(
             forceMount: !!opts.forceMount,
         },
         logger: (fired) => {
-            if (fired.result.kind === "bypass") {
-                appendGateEvent(env, {
-                    gate_id: fired.id,
-                    boundary: fired.boundary,
-                    kind: "bypass",
-                    bypass_flag: fired.result.byFlag,
-                });
-            } else if (fired.result.kind === "block") {
-                appendGateEvent(env, {
-                    gate_id: fired.id,
-                    boundary: fired.boundary,
-                    kind: "block",
-                });
-            }
+            const event = gateEventFromFiredGate(fired);
+            if (event) appendGateEvent(env, event);
         },
     });
 }

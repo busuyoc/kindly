@@ -34,7 +34,7 @@ import { CODE_EXEC_ADJACENT_REQUIRES_ACK } from "../gates/definitions/dual.ts";
 import { CONTROL_BYTES_IN_VALUE } from "../gates/definitions/shape.ts";
 import { SENSITIVE_REQUIRES_ACK } from "../gates/definitions/consent.ts";
 import { DESTRUCTIVE_YAML_SHAPE } from "../gates/definitions/destruction.ts";
-import { appendGateEvent } from "../history/gateLog.ts";
+import { appendGateEvent, gateEventFromFiredGate } from "../history/gateLog.ts";
 
 const FLAGS = {
     "dry-run": {
@@ -337,20 +337,8 @@ function runRestoreGates(
             acceptDestructive: !!opts.acceptDestructive,
         },
         logger: (fired) => {
-            if (fired.result.kind === "bypass") {
-                appendGateEvent(env, {
-                    gate_id: fired.id,
-                    boundary: fired.boundary,
-                    kind: "bypass",
-                    bypass_flag: fired.result.byFlag,
-                });
-            } else if (fired.result.kind === "block") {
-                appendGateEvent(env, {
-                    gate_id: fired.id,
-                    boundary: fired.boundary,
-                    kind: "block",
-                });
-            }
+            const event = gateEventFromFiredGate(fired);
+            if (event) appendGateEvent(env, event);
         },
     });
 }

@@ -56,6 +56,16 @@ const FLAGS = {
             "with --repair, proceed even if an in-progress marker's " +
             "fingerprint differs from the currently-attached Kindle",
     },
+    "promote-tmp": {
+        type: "boolean",
+        default: false,
+        description:
+            "with --repair, opt in to promoting a hash-matching .tmp file " +
+            "to settings.reader.lua. Off by default — both the marker and " +
+            "the .tmp live in attacker-writable directories, so blind " +
+            "promotion is a privesc primitive. Prefer re-running apply " +
+            "(deterministic from the same YAML) over passing this flag.",
+    },
 } as const satisfies FlagSpecs;
 
 function severityMark(env: CliEnv, s: DoctorSeverity): string {
@@ -117,6 +127,7 @@ export async function runDoctor(argv: readonly string[], env: CliEnv): Promise<n
         const result = executeDoctorRepair({
             dryRun: flags["dry-run"],
             forceMount: flags["force-mount"],
+            promoteTmp: flags["promote-tmp"],
         }, env);
         if (env.jsonMode) emitJson(env, "doctor:repair", result);
         else renderDoctorRepair(result, env);
@@ -176,7 +187,8 @@ export const doctorHelp = `
 kindly doctor — check that kindly can read and trust the device's state.
 
 usage: kindly doctor [--mount <path>]
-       kindly doctor --repair [--dry-run] [--force-mount] [--mount <path>]
+       kindly doctor --repair [--dry-run] [--force-mount] [--promote-tmp]
+                              [--mount <path>]
 
 Read-only by default. Emits findings grouped by category (mount, settings,
 schema, catalog, plugins, disk, secrets) — see 90-w34-doctor-output-spec.md.
@@ -197,12 +209,18 @@ so you can rescue them to a password manager before a factory reset.
 
 --repair (mutating)
   Recover from a SIGKILL'd \`kindly apply\` / \`kindly setup import\`:
-    - if settings.reader.lua is missing but .old survives, promote a
-      hash-matching .tmp into place (or restore .old if no tmp matches);
+    - if settings.reader.lua is missing but .old survives, restore .old;
     - sweep orphan settings.reader.lua.tmp.<pid>.<rand> files in the
       koreader/ dir;
     - clear processed in-progress markers under .kindly/in-progress/.
   Refuses to act if any in-progress marker's mount fingerprint differs
   from the currently-attached Kindle (override with --force-mount).
   Pair with --dry-run to preview.
+
+  --promote-tmp opts in to a riskier recovery: if a hash-matching .tmp
+  is present, kindly promotes it to settings.reader.lua. The marker
+  and .tmp both live in attacker-writable directories, so a forged
+  pair would land arbitrary bytes onto the device. Off by default.
+  Prefer re-running \`kindly apply <yaml>\` — same YAML reproduces the
+  same intended bytes deterministically.
 `.trim();

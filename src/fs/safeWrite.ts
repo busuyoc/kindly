@@ -20,12 +20,14 @@
 // just the immediately previous one.
 
 import {
-    closeSync, copyFileSync, existsSync, fsyncSync, mkdirSync,
-    openSync, readFileSync, renameSync, statSync, unlinkSync, writeSync,
+    closeSync, copyFileSync, existsSync, fsyncSync, lstatSync, mkdirSync,
+    mkdtempSync, openSync, readFileSync, renameSync, statSync, unlinkSync,
+    writeSync,
 } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { dirname, basename, join } from "node:path";
-import { parseSettingsFile } from "../lua/reader.ts";
+import { LuaParseError, parseSettingsFile } from "../lua/reader.ts";
+import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { rotateBackups } from "./backupRotation.ts";
 
 export type SafeWriteOptions = {
@@ -78,10 +80,21 @@ export function safeWrite(
     // 1. Archive snapshot of the pre-write file (if any). Skipped when the
     //    caller has explicitly opted out via skipBackup; the .old sibling
     //    created below still exists so KOReader's own fallback path works.
+    //
+    // Round 3 disk-hygiene F1: the stamp directory was previously
+    // `<backupDir>/<isoTimestamp>` — fully predictable from clock. An
+    // attacker with write access to <backupDir> could pre-stage a
+    // symlink at every plausible stamp; mkdirSync({recursive:true})
+    // adopts an existing symlink-to-dir silently, then copyFileSync
+    // follows it and exfils plaintext settings (PIN/passwords) to the
+    // attacker's chosen path. mkdtempSync atomically creates a fresh
+    // dir with a 6-char random suffix — both unguessable AND unable to
+    // adopt a pre-existing entry. mkdirSync(backupDir) ensures the
+    // parent exists before mkdtempSync.
     if (existsSync(path) && !opts.skipBackup) {
         const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-        const archiveRoot = join(backupDir, stamp);
-        mkdirSync(archiveRoot, { recursive: true });
+        mkdirSync(backupDir, { recursive: true });
+        const archiveRoot = mkdtempSync(join(backupDir, stamp + "-"));
         backupPath = join(archiveRoot, basename(path));
         copyFileSync(path, backupPath);
     }
@@ -145,6 +158,23 @@ export function safeWrite(
                 unlinkSync(path);
                 renameSync(oldPath, path);
             } catch {}
+        }
+        // Round 3 rollback gate-parity F4 (Angle V S862 sibling): the
+        // raw LuaParseError carries a 40-byte snippet of bytes-on-disk
+        // (`JSON.stringify(src.slice(pos-20, pos+20))`). Those bytes are
+        // whatever we just wrote — a tampered snapshot or a YAML carrying
+        // a secret could position the parse error mid-string and leak
+        // up to ~27 plaintext bytes of a SECRET (PIN/password) past the
+        // sanitize layer (which only filters control bytes, not
+        // string content). Rethrow as a snippet-free KindlyError; the
+        // byte position is enough for diagnosis without leaking content.
+        if (verifyErr instanceof LuaParseError) {
+            throw new KindlyError(
+                ErrorCodes.LUA_PARSE_FAILED,
+                `post-write verify-reparse failed at byte ${verifyErr.pos} of ${path} ` +
+                `(snippet redacted to avoid leaking secrets in settings.reader.lua); ` +
+                `device rolled back to .old`,
+            );
         }
         throw verifyErr;
     }

@@ -60,6 +60,25 @@ export interface DoctorRepairOptions {
      *  fingerprint check. Use after a KOReader upgrade between crash
      *  and repair changed /koreader/git-rev. */
     forceMount?: boolean;
+    /** Round 3 doctor HIGH (forged-marker promotion):
+     *
+     *  An in-progress marker is just a JSON file under `.kindly/in-
+     *  progress/` and a tmp is a file under `koreader/`. Both
+     *  directories are writable by anyone with USB access to the
+     *  attached Kindle. A forged marker carrying an attacker-chosen
+     *  `intended_sha256` paired with a forged tmp at any path will
+     *  hash-match — at which point pre-fix doctor would promote the
+     *  attacker's bytes onto the device as the canonical
+     *  settings.reader.lua. One-flag RCE.
+     *
+     *  Default behaviour now restores `.old` in every interrupted
+     *  case. Tmp promotion (the auto-recovery path that preserves
+     *  the user's intended bytes) is opt-in via this flag. The
+     *  remediation message tells the user the safer alternative is
+     *  to re-run apply, which is reproducible from the same YAML.
+     *  Anyone who explicitly passes --promote-tmp has been advised
+     *  by the help text that they're trusting the on-disk marker. */
+    promoteTmp?: boolean;
 }
 
 export function executeDoctorRepair(
@@ -131,13 +150,13 @@ function executeDoctorRepairLocked(
         };
     }
 
-    // Pick a marker whose intended_sha256 matches a surviving .tmp file.
-    // First match wins — there's typically only one apply-class marker
-    // alive at a time. If the user crashed two distinct applies in a row
-    // and somehow has two matching markers, the older one's tmp gets
-    // promoted; the newer one is treated as a stray and swept (its
-    // settings_path was about to be overwritten anyway).
-    const promote = pickPromotableTmp(markers, tmps);
+    // Round 3 doctor HIGH: tmp promotion is now opt-in. Without
+    // --promote-tmp the recovery decision is "restore .old or
+    // nothing" — auto-promotion of attacker-controllable bytes is
+    // off by default. The user can still recover their intended
+    // bytes by re-running `kindly apply <yaml>` (deterministic
+    // from the YAML), which is a safer recovery path.
+    const promote = opts.promoteTmp ? pickPromotableTmp(markers, tmps) : null;
 
     if (opts.dryRun) {
         return {

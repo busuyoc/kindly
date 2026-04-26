@@ -134,7 +134,11 @@ describe("C10c: doctor --repair recovers step-4 state", () => {
         expect(r.sweptTmps).toEqual([]);
     });
 
-    test("matching marker + tmp: promotes .tmp → main", () => {
+    // Round 3 doctor HIGH closure: tmp promotion is opt-in. Default
+    // recovery (no --promote-tmp) restores .old; --promote-tmp is the
+    // explicit "yes I trust the on-disk marker" path. Both behaviors
+    // are tested so the gate stays meaningful.
+    test("matching marker + tmp WITH --promote-tmp: promotes .tmp → main", () => {
         induceStep4Interruption(fakeKindle);
         // Create a tmp that contains "intended" bytes, plus a marker
         // whose intended_sha256 matches them.
@@ -156,7 +160,7 @@ describe("C10c: doctor --repair recovers step-4 state", () => {
             intended_sha256: wantHash,
         }));
 
-        const r = executeDoctorRepair({}, env);
+        const r = executeDoctorRepair({ promoteTmp: true }, env);
         expect(r.settingsRecovery).toBe("promoted-tmp");
         expect(existsSync(settingsPath)).toBe(true);
         expect(existsSync(tmpPath)).toBe(false);
@@ -165,6 +169,35 @@ describe("C10c: doctor --repair recovers step-4 state", () => {
         expect(existsSync(oldPath)).toBe(true);
         // Promoted bytes equal what the marker said.
         expect(readFileSync(settingsPath, "utf8")).toBe(intended);
+        expect(r.clearedMarkers).toHaveLength(1);
+    });
+
+    test("matching marker + tmp WITHOUT --promote-tmp: restores .old, sweeps tmp", () => {
+        induceStep4Interruption(fakeKindle);
+        const intended = dumpSettingsFile(
+            { avoid_flashing_ui: true, font_size: 24 },
+            "./settings.reader.lua",
+        );
+        const tmpPath = settingsPath + ".tmp." + process.pid + ".deadbeef";
+        writeFileSync(tmpPath, intended);
+        const wantHash = createHash("sha256").update(intended).digest("hex");
+
+        const markerDir = join(workdir, ".kindly", "in-progress");
+        mkdirSync(markerDir, { recursive: true });
+        writeFileSync(join(markerDir, "apply-99999-x.json"), JSON.stringify({
+            cmd: "apply",
+            started_at: "2026-04-25T11:59:00Z",
+            pid: 99999,
+            settings_path: settingsPath,
+            intended_sha256: wantHash,
+        }));
+
+        // Default repair: even though the marker hash-matches, promotion
+        // requires explicit opt-in. Forged-marker RCE primitive denied.
+        const r = executeDoctorRepair({}, env);
+        expect(r.settingsRecovery).toBe("restored-old");
+        expect(r.sweptTmps).toContain(tmpPath);
+        expect(existsSync(tmpPath)).toBe(false);
         expect(r.clearedMarkers).toHaveLength(1);
     });
 

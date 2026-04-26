@@ -18,6 +18,7 @@ import { changes } from "./changes.ts";
 import { replaceWarnings } from "./replaceWarnings.ts";
 import { normalizedYaml } from "./normalizedYaml.ts";
 import { controlByteHits } from "./controlByteHits.ts";
+import { pathContentHits } from "./pathContentHits.ts";
 
 export const PRODUCERS: Readonly<Record<string, Producer<unknown>>> = {
     manifestIdentity,
@@ -31,4 +32,5 @@ export const PRODUCERS: Readonly<Record<string, Producer<unknown>>> = {
     replaceWarnings,
     normalizedYaml,
     controlByteHits,
+    pathContentHits,
 };

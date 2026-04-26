@@ -105,6 +105,16 @@ export interface DiffResult {
     filteredBy?: string;
 }
 
+/** S605: warn-tier gate output surfaced to renderers. Non-blocking
+ *  advisories the user should see (e.g. PATH_CONTENT_HEURISTIC,
+ *  SCHEMA_FINDINGS_WARN). Empty array when no warns fired. */
+export interface GateWarning {
+    /** Gate id (e.g. "PATH_CONTENT_HEURISTIC"). */
+    id: string;
+    /** Human-readable message from the gate's check(). */
+    message: string;
+}
+
 export interface ApplyResult {
     /** "no-op": device already matches YAML, nothing written.
      *  "dry-run": --dry-run passed, diff shown, nothing written.
@@ -122,6 +132,8 @@ export interface ApplyResult {
     oldPath: string | null;
     /** Bytes of the written content. 0 on no-op/dry-run. */
     bytesWritten: number;
+    /** S605/S602/S603: warn-tier gate firings (advisory; non-blocking). */
+    warnings: GateWarning[];
 }
 
 /** Four-level severity (90 §2). `fatal` = kindly cannot function; `error`
@@ -219,6 +231,8 @@ export interface RestoreResult {
     /** Pre-restore safety snapshot path, if one was created. Null when the
      *  user passed --no-safety-snapshot or the snapshot attempt failed. */
     safetySnapshotPath: string | null;
+    /** S605/S602: warn-tier gate firings (advisory; non-blocking). */
+    warnings: GateWarning[];
 }
 
 export interface SetupInspectResult {
@@ -423,6 +437,8 @@ export interface SetupImportResult {
      *  plugins or patches, or when --skip-plugins + --skip-patches leave
      *  nothing to scan. */
     scanReport: ScanReport | null;
+    /** S605/S602: warn-tier gate firings (advisory; non-blocking). */
+    warnings: GateWarning[];
 }
 
 export interface HistoryResult {

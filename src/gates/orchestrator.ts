@@ -182,6 +182,21 @@ export function runGates(
     };
 }
 
+/** Extract warn-tier firings from a report into the `{id, message}` shape
+ *  result types carry. Helper used by apply / restore / importSetup so
+ *  the projection doesn't drift between callers. */
+export function collectWarnings(
+    report: GateReport,
+): Array<{ id: string; message: string }> {
+    const out: Array<{ id: string; message: string }> = [];
+    for (const f of report.fired) {
+        if (f.result.kind === "warn") {
+            out.push({ id: f.id, message: f.result.message });
+        }
+    }
+    return out;
+}
+
 /**
  * Run a single phase: build a context from the provided inputs, run the
  * given registry subset, and throw if anything blocks. One-liner for

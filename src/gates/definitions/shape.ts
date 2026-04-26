@@ -5,6 +5,7 @@ import type { GateDefinition } from "../types.ts";
 import type { ValidationReport } from "../../schema/report.ts";
 import type { NormalizedYaml } from "../producers/normalizedYaml.ts";
 import type { ControlByteReport } from "../producers/controlByteHits.ts";
+import type { PathContentReport } from "../producers/pathContentHits.ts";
 import { formatValidationReport } from "../../schema/report.ts";
 
 /**
@@ -137,6 +138,89 @@ export const CONTROL_BYTES_IN_VALUE: GateDefinition = {
                 `YAML contains control bytes inside SECRET / SENSITIVE / code-exec ` +
                 `string value(s) (${report.hits.length} hit(s)):\n` +
                 lines.join("\n"),
+        };
+    },
+};
+
+/**
+ * PATH_CONTENT_HEURISTIC — S602. Warn-tier (S605) advisory on
+ * sensitive-fs / sensitive-code-exec path values whose content matches a
+ * suspicious pattern:
+ *
+ *   - traversal:    contains a `..` segment.
+ *   - out-of-tree:  absolute path NOT under `/mnt/us/`.
+ *
+ * Non-bypassable per the warn-tier contract — the message IS the UX.
+ * False-positive prone (developers running KOReader on macOS / Linux
+ * legitimately have non-/mnt/us paths) so warn-not-block is the right
+ * tier. CLI maps `report.warned` to exit code 4.
+ *
+ * Fires on import + apply + restore — the same scope as
+ * CONTROL_BYTES_IN_VALUE, since the same threat model applies at every
+ * boundary that can write user-supplied path values to settings.reader.lua.
+ *
+ * Why warn for absolute-out-of-tree (not block): the heuristic is
+ * imperfect. Block belongs to CONTROL_BYTES_IN_VALUE (no legitimate use)
+ * and to S89 (structurally wrong). Path content is suggestive, not
+ * conclusive — surface it and let the user decide.
+ */
+export const PATH_CONTENT_HEURISTIC: GateDefinition = {
+    id: "PATH_CONTENT_HEURISTIC",
+    category: "SHAPE",
+    appliesAt: ["import", "apply", "restore"],
+    requires: ["pathContentHits"],
+    firesIn: "always",
+    bypassFlags: [],
+    errorCode: "YAML_SHAPE_BLOCKED",  // unused — warn-only gate.
+    check: (ctx) => {
+        const report = ctx.producers.pathContentHits as PathContentReport;
+        if (report.hits.length === 0) return { kind: "pass" };
+        const lines = report.hits.map((h) =>
+            `  [${h.kind}] ${h.path} = ${JSON.stringify(h.value)}`,
+        );
+        return {
+            kind: "warn",
+            message:
+                `Path-typed value(s) look suspicious (${report.hits.length} hit(s)):\n` +
+                lines.join("\n") + "\n" +
+                `  - 'traversal' = path contains a '..' segment.\n` +
+                `  - 'out-of-tree' = absolute path not under /mnt/us/.\n` +
+                `Review the listed value(s); apply will continue (warn only).`,
+        };
+    },
+};
+
+/**
+ * SCHEMA_FINDINGS_WARN — S603. Apply-side warn-tier surfacing of
+ * `validateSettings` findings (unknown keys + type mismatches).
+ *
+ * Why a separate gate from SCHEMA_VIOLATION: SCHEMA_VIOLATION is the
+ * import-side strict-mode block (only fires under --strict and only for
+ * the unwaived class). On apply, kindly has no --strict surface and no
+ * `--allow-unknown-keys` waiver, but the same findings still matter —
+ * a typo in `kindly.yaml` silently writes an unknown key to device that
+ * KOReader will ignore. Warn-tier surfaces this without changing exit
+ * codes for legitimate plugin-scoped extensions.
+ *
+ * Non-bypassable per the warn-tier contract.
+ */
+export const SCHEMA_FINDINGS_WARN: GateDefinition = {
+    id: "SCHEMA_FINDINGS_WARN",
+    category: "SHAPE",
+    appliesAt: ["apply"],
+    requires: ["schemaFindings"],
+    firesIn: "always",
+    bypassFlags: [],
+    errorCode: "YAML_SHAPE_BLOCKED",  // unused — warn-only gate.
+    check: (ctx) => {
+        const report = ctx.producers.schemaFindings as ValidationReport | null;
+        if (!report) return { kind: "pass" };
+        if (report.unknownKeys.length === 0
+            && report.typeMismatches.length === 0) return { kind: "pass" };
+        return {
+            kind: "warn",
+            message:
+                `Schema findings on apply (warn only):\n${formatValidationReport(report)}`,
         };
     },
 };

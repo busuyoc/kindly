@@ -23,12 +23,19 @@ import { writeInProgressMarker, clearInProgressMarker } from "../history/inProgr
 import { computeMountFingerprint, isFingerprintEmpty } from "../device/fingerprint.ts";
 import { withLock } from "../fs/lockfile.ts";
 import { createHash } from "node:crypto";
-import { runPhase } from "../gates/orchestrator.ts";
-import { YAML_SHAPE_NORMAL, CONTROL_BYTES_IN_VALUE } from "../gates/definitions/shape.ts";
+import { runPhase, collectWarnings } from "../gates/orchestrator.ts";
+import {
+    YAML_SHAPE_NORMAL,
+    CONTROL_BYTES_IN_VALUE,
+    PATH_CONTENT_HEURISTIC,
+    SCHEMA_FINDINGS_WARN,
+} from "../gates/definitions/shape.ts";
 import { CODE_EXEC_ADJACENT_REQUIRES_ACK } from "../gates/definitions/dual.ts";
 import { SENSITIVE_REQUIRES_ACK } from "../gates/definitions/consent.ts";
 import { DESTRUCTIVE_YAML_SHAPE } from "../gates/definitions/destruction.ts";
 import { appendGateEvent, gateEventFromFiredGate } from "../history/gateLog.ts";
+import { validateSettings } from "../schema/report.ts";
+import { loadSchema } from "../schema/settings.ts";
 import type { GateDefinition } from "../gates/types.ts";
 
 export interface ApplyOptions {
@@ -99,7 +106,17 @@ function executeApplyLocked(opts: ApplyOptions, env: CliEnv): ApplyResult {
     // the YAML is touching.
     const changes = computeChanges(onDevice, fromYaml);
 
-    // Apply-side gate run. Five gates fire on every apply:
+    // S603: schema validation runs on apply too. Findings flow to
+    // SCHEMA_FINDINGS_WARN, which surfaces them as warn-tier (S605) so
+    // typos in `kindly.yaml` no longer pass silently. importSetup runs
+    // the same validator behind --strict; apply has no --strict surface,
+    // hence warn instead of block.
+    const schemaFindings = validateSettings(
+        fromYaml as Record<string, unknown>,
+        loadSchema(),
+    );
+
+    // Apply-side gate run. Seven gates fire on every apply:
     //
     //   YAML_SHAPE_NORMAL              — S89 fix: rejects null/[]-at-secret-
     //                                    parent shapes that would wipe
@@ -108,6 +125,14 @@ function executeApplyLocked(opts: ApplyOptions, env: CliEnv): ApplyResult {
     //                                    (incl. --dry-run); zero FP.
     //   CONTROL_BYTES_IN_VALUE         — Batch O fix: rejects ESC/CR/NUL
     //                                    in SENSITIVE/SECRET string values.
+    //   PATH_CONTENT_HEURISTIC         — S602 (warn): flags `..` traversal
+    //                                    or absolute-out-of-/mnt/us/ paths
+    //                                    in sensitive-fs/code-exec values.
+    //                                    Non-blocking advisory.
+    //   SCHEMA_FINDINGS_WARN           — S603 (warn): unknown keys + type
+    //                                    mismatches in YAML, surfaced on
+    //                                    apply (importSetup blocks under
+    //                                    --strict; apply has no --strict).
     //   CODE_EXEC_ADJACENT_REQUIRES_ACK — C1a: SSH_port / httpinspector_port
     //                                    / cover_image_path family.
     //                                    Bypass: --accept-code-exec.
@@ -129,12 +154,14 @@ function executeApplyLocked(opts: ApplyOptions, env: CliEnv): ApplyResult {
     const registry: GateDefinition[] = [
         YAML_SHAPE_NORMAL,
         CONTROL_BYTES_IN_VALUE,
+        PATH_CONTENT_HEURISTIC,
+        SCHEMA_FINDINGS_WARN,
         CODE_EXEC_ADJACENT_REQUIRES_ACK,
         SENSITIVE_REQUIRES_ACK,
         DESTRUCTIVE_YAML_SHAPE,
     ];
 
-    runPhase({
+    const gateReport = runPhase({
         boundary: "apply",
         registry,
         dryRun: opts.dryRun ?? false,
@@ -142,6 +169,7 @@ function executeApplyLocked(opts: ApplyOptions, env: CliEnv): ApplyResult {
         opts: {
             yamlSettings: fromYaml,
             changes,
+            schemaFindings,
             acceptCodeExec: !!opts.acceptCodeExec,
             acceptSensitive: !!opts.acceptSensitive,
             acceptKey: opts.acceptKey ?? new Set<string>(),
@@ -152,6 +180,7 @@ function executeApplyLocked(opts: ApplyOptions, env: CliEnv): ApplyResult {
             if (event) appendGateEvent(env, event);
         },
     });
+    const warnings = collectWarnings(gateReport);
 
     if (changes.length === 0) {
         return {
@@ -162,6 +191,7 @@ function executeApplyLocked(opts: ApplyOptions, env: CliEnv): ApplyResult {
             backupPath: null,
             oldPath: null,
             bytesWritten: 0,
+            warnings,
         };
     }
 
@@ -174,6 +204,7 @@ function executeApplyLocked(opts: ApplyOptions, env: CliEnv): ApplyResult {
             backupPath: null,
             oldPath: null,
             bytesWritten: 0,
+            warnings,
         };
     }
 
@@ -219,5 +250,6 @@ function executeApplyLocked(opts: ApplyOptions, env: CliEnv): ApplyResult {
         backupPath: res.backupPath,
         oldPath: res.oldPath,
         bytesWritten: res.bytesWritten,
+        warnings,
     };
 }

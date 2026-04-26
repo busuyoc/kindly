@@ -25,7 +25,7 @@ import { safeWrite } from "../fs/safeWrite.ts";
 import { createTarGz } from "../fs/archive.ts";
 import { type CliEnv, resolveMount } from "../cli/env.ts";
 import { hashBytes, shortId } from "../setup/canonical.ts";
-import { runPhase, type GateEventLogger } from "../gates/orchestrator.ts";
+import { runPhase, collectWarnings, type GateEventLogger } from "../gates/orchestrator.ts";
 import { appendGateEvent, gateEventFromFiredGate } from "../history/gateLog.ts";
 import { MANIFEST_HASH_ASSERT } from "../gates/definitions/identity.ts";
 import {
@@ -41,7 +41,12 @@ import {
     STRICT_SCANNER_FINDINGS,
 } from "../gates/definitions/integrity.ts";
 import { COMPAT_INCOMPATIBLE } from "../gates/definitions/compat.ts";
-import { SCHEMA_VIOLATION, YAML_SHAPE_NORMAL, CONTROL_BYTES_IN_VALUE } from "../gates/definitions/shape.ts";
+import {
+    SCHEMA_VIOLATION,
+    YAML_SHAPE_NORMAL,
+    CONTROL_BYTES_IN_VALUE,
+    PATH_CONTENT_HEURISTIC,
+} from "../gates/definitions/shape.ts";
 import { formatSensitiveChange as formatSensitiveChangeShared } from "../gates/sensitiveFormat.ts";
 import { parseManifest, SetupSchemaError, type EmbeddedFile, type SetupManifest } from "../setup/schema.ts";
 import { unpackSetup } from "../setup/unpack.ts";
@@ -59,7 +64,7 @@ import {
     findInertToggles, installPatches, installPluginFiles,
     listInstalledPluginFolders,
 } from "../setup/files.ts";
-import type { ScanReport, SetupImportResult } from "../types/results.ts";
+import type { GateWarning, ScanReport, SetupImportResult } from "../types/results.ts";
 import { scanShippedLuaFiles } from "../catalog/scanPipeline.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
@@ -348,6 +353,10 @@ function executeSetupImportLocked(
         if (event) appendGateEvent(env, event);
     };
 
+    // S605: warn-tier firings collected across every phase. Surfaced to
+    // the renderer + JSON envelope via SetupImportResult.warnings.
+    const warnings: GateWarning[] = [];
+
     // Phase 1 — IDENTITY + SHAPE + CONSENT-FAT. Fail fast pre-mount.
     //   MANIFEST_HASH_ASSERT     Step 5
     //   YAML_SHAPE_NORMAL (S89)  Step 11 — rejects SECRET-class keys or
@@ -355,13 +364,14 @@ function executeSetupImportLocked(
     //                            settings section before any merge can
     //                            silently destroy on-device secrets.
     //   PLUGINS/PATCHES_REQUIRE_ACK  Step 6
-    runPhase({
+    warnings.push(...collectWarnings(runPhase({
         logger: gateLogger,
         boundary: "import",
         registry: [
             MANIFEST_HASH_ASSERT,
             YAML_SHAPE_NORMAL,
             CONTROL_BYTES_IN_VALUE,
+            PATH_CONTENT_HEURISTIC,
             PLUGINS_REQUIRE_ACK,
             PATCHES_REQUIRE_ACK,
         ],
@@ -378,7 +388,7 @@ function executeSetupImportLocked(
             acceptPatches: !!opts.acceptPatches,
             skipPatches: !!opts.skipPatches,
         },
-    });
+    })));
 
     const mountEnv = opts.mount ? { ...env, mountOverride: opts.mount } : env;
     const mount = resolveMount(mountEnv);
@@ -426,14 +436,14 @@ function executeSetupImportLocked(
         : null;
 
     // Phase 2 — INTEGRITY (strict-mode plugin-hash + scanner gates).
-    runPhase({
+    warnings.push(...collectWarnings(runPhase({
         logger: gateLogger,
         boundary: "import",
         registry: [STRICT_PLUGIN_HASH_CHECK, STRICT_SCANNER_FINDINGS],
         dryRun: opts.dryRun ?? false,
         strictImports: opts.strictImports ?? false,
         opts: { pluginHashReport, scanReport },
-    });
+    })));
 
     // Compute compat + schema results inline — they populate both the gate
     // inputs (Phase 3 below) AND the SetupImportResult render fields.
@@ -446,7 +456,7 @@ function executeSetupImportLocked(
         : null;
 
     // Phase 3 — COMPAT + SHAPE (compat check + schema strictness).
-    runPhase({
+    warnings.push(...collectWarnings(runPhase({
         logger: gateLogger,
         boundary: "import",
         registry: [COMPAT_INCOMPATIBLE, SCHEMA_VIOLATION],
@@ -459,7 +469,7 @@ function executeSetupImportLocked(
             strict: !!opts.strict,
             allowUnknownKeys: !!opts.allowUnknownKeys,
         },
-    });
+    })));
 
     // Compat summary for the result envelope.
     let compatSummary: SetupImportResult["compat"] = null;
@@ -543,7 +553,7 @@ function executeSetupImportLocked(
 
     // Phase 4 — DESTRUCTION + CONSENT + DUAL. Block-order matches
     // pre-refactor: strict-replace → strict-sensitive → consumer-ack → dual.
-    runPhase({
+    warnings.push(...collectWarnings(runPhase({
         logger: gateLogger,
         boundary: "import",
         registry: [
@@ -563,7 +573,7 @@ function executeSetupImportLocked(
             acceptPlugins: !!opts.acceptPlugins,
             acceptCodeExec: !!opts.acceptCodeExec,
         },
-    });
+    })));
 
     const willInstallPlugins = !!opts.acceptPlugins && shippedPlugins.length > 0;
     const willInstallPatches = !!opts.acceptPatches && shippedPatches.length > 0;
@@ -601,6 +611,7 @@ function executeSetupImportLocked(
         shippedPluginCount: shippedPlugins.length,
         shippedPatchCount: shippedPatches.length,
         ...(schemaFindings ? { schemaFindings } : {}),
+        warnings,
     };
 
     if (!writeSettings && !willInstallPlugins && !willInstallPatches) {

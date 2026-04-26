@@ -28,10 +28,11 @@ import { withLock } from "../fs/lockfile.ts";
 import { computeMountFingerprint, isFingerprintEmpty } from "../device/fingerprint.ts";
 import { parseSettingsFile } from "../lua/reader.ts";
 import type { LuaValue } from "../lua/writer.ts";
+import type { GateWarning } from "../types/results.ts";
 import { computeChanges } from "../schema/diff.ts";
-import { runPhase } from "../gates/orchestrator.ts";
+import { runPhase, collectWarnings } from "../gates/orchestrator.ts";
 import { CODE_EXEC_ADJACENT_REQUIRES_ACK } from "../gates/definitions/dual.ts";
-import { CONTROL_BYTES_IN_VALUE } from "../gates/definitions/shape.ts";
+import { CONTROL_BYTES_IN_VALUE, PATH_CONTENT_HEURISTIC } from "../gates/definitions/shape.ts";
 import { SENSITIVE_REQUIRES_ACK } from "../gates/definitions/consent.ts";
 import { DESTRUCTIVE_YAML_SHAPE } from "../gates/definitions/destruction.ts";
 import { appendGateEvent, gateEventFromFiredGate } from "../history/gateLog.ts";
@@ -156,7 +157,7 @@ function executeRestoreLocked(opts: RestoreOptions, env: CliEnv): RestoreResult 
     // archive's settings.reader.lua sets (SSH_port, httpinspector_port,
     // cover_image_path) requires --accept-code-exec consent. Other gate
     // families (SENSITIVE, EXTRA_PLUGIN_PATHS) follow in C1c.
-    runRestoreGates(archivePath, entries, mount.settingsPath, opts, env);
+    const warnings = runRestoreGates(archivePath, entries, mount.settingsPath, opts, env);
 
     if (opts.dryRun) {
         return {
@@ -166,6 +167,7 @@ function executeRestoreLocked(opts: RestoreOptions, env: CliEnv): RestoreResult 
             entries,
             fileCount: 0,
             safetySnapshotPath: null,
+            warnings,
         };
     }
 
@@ -211,6 +213,7 @@ function executeRestoreLocked(opts: RestoreOptions, env: CliEnv): RestoreResult 
         entries,
         fileCount: res.fileCount,
         safetySnapshotPath,
+        warnings,
     };
 }
 
@@ -274,11 +277,11 @@ function runRestoreGates(
     deviceSettingsPath: string,
     opts: RestoreOptions,
     env: CliEnv,
-): void {
-    if (!entries.includes("settings.reader.lua")) return;
+): GateWarning[] {
+    if (!entries.includes("settings.reader.lua")) return [];
 
     const archiveSrc = extractFileToMemory(archivePath, "settings.reader.lua");
-    if (archiveSrc === null) return;
+    if (archiveSrc === null) return [];
 
     // If either side fails to parse, skip the gate. The reader is strict
     // about KOReader's exact dump format; archives produced by tooling
@@ -289,7 +292,7 @@ function runRestoreGates(
     try {
         fromArchive = parseSettingsFile(archiveSrc) as Record<string, LuaValue>;
     } catch {
-        return;
+        return [];
     }
 
     let onDevice: Record<string, LuaValue> = {};
@@ -318,11 +321,12 @@ function runRestoreGates(
         }
     }
 
-    runPhase({
+    const report = runPhase({
         boundary: "restore",
         registry: [
             CODE_EXEC_ADJACENT_REQUIRES_ACK,
             CONTROL_BYTES_IN_VALUE,
+            PATH_CONTENT_HEURISTIC,
             SENSITIVE_REQUIRES_ACK,
             DESTRUCTIVE_YAML_SHAPE,
         ],
@@ -341,6 +345,7 @@ function runRestoreGates(
             if (event) appendGateEvent(env, event);
         },
     });
+    return collectWarnings(report);
 }
 
 function isoStamp(d: Date): string {

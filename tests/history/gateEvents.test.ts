@@ -65,17 +65,19 @@ describe("gate events — apply", () => {
         writeFileSync(join(workdir, "kindly.yaml"), "kosync: null\n");
         await main(["apply"], env);
         const log = readGateLog(workdir);
-        expect(log.length).toBe(1);
-        expect(log[0].gate_id).toBe("YAML_SHAPE_NORMAL");
-        expect(log[0].boundary).toBe("apply");
-        expect(log[0].kind).toBe("block");
-        expect(typeof log[0].ts).toBe("string");
+        const blocks = log.filter((e) => e.kind === "block");
+        expect(blocks.length).toBe(1);
+        expect(blocks[0]!.gate_id).toBe("YAML_SHAPE_NORMAL");
+        expect(blocks[0]!.boundary).toBe("apply");
+        expect(typeof blocks[0]!.ts).toBe("string");
     });
 
     test("pass does NOT emit a log entry (noise reduction)", async () => {
-        writeFileSync(join(workdir, "kindly.yaml"), "refresh_rate: 5\n");
+        // Use a key the schema knows about (with a matching type) so neither
+        // SCHEMA_FINDINGS_WARN nor any other gate fires.
+        writeFileSync(join(workdir, "kindly.yaml"), "anti_alias_ui: false\n");
         await main(["apply"], env);
-        // The apply ran successfully (YAML_SHAPE_NORMAL passed);
+        // The apply ran successfully (every gate passed);
         // no gate-event file should exist (or it should be empty).
         const log = readGateLog(workdir);
         expect(log).toEqual([]);
@@ -104,8 +106,7 @@ describe("gate events — file format", () => {
         writeFileSync(join(workdir, "kindly.yaml"), "zlibrary_password: null\n");
         await main(["apply"], env);
         const log = readGateLog(workdir);
-        expect(log.length).toBe(2);
-        expect(log[0].gate_id).toBe("YAML_SHAPE_NORMAL");
-        expect(log[1].gate_id).toBe("YAML_SHAPE_NORMAL");
+        const blocks = log.filter((e) => e.gate_id === "YAML_SHAPE_NORMAL");
+        expect(blocks.length).toBe(2);
     });
 });

@@ -27,7 +27,12 @@ import {
     STRICT_SCANNER_FINDINGS,
 } from "./definitions/integrity.ts";
 import { COMPAT_INCOMPATIBLE } from "./definitions/compat.ts";
-import { SCHEMA_VIOLATION, YAML_SHAPE_NORMAL } from "./definitions/shape.ts";
+import {
+    SCHEMA_VIOLATION,
+    YAML_SHAPE_NORMAL,
+    PATH_CONTENT_HEURISTIC,
+    SCHEMA_FINDINGS_WARN,
+} from "./definitions/shape.ts";
 
 // Each gate definition lives in its own category file under ./definitions/.
 // The flat array below concatenates them in declaration order — which is
@@ -44,6 +49,8 @@ export const GATES: ReadonlyArray<GateDefinition> = [
     STRICT_SCANNER_FINDINGS,
     COMPAT_INCOMPATIBLE,
     SCHEMA_VIOLATION,
+    SCHEMA_FINDINGS_WARN,
+    PATH_CONTENT_HEURISTIC,
     STRICT_REPLACE_REMOVAL_CAP,
     STRICT_SENSITIVE_CHANGES,
     SENSITIVE_REQUIRES_ACK,

@@ -47,7 +47,19 @@ export function lockPath(cwd: string): string {
 }
 
 export function acquireLock(env: CliEnv, cmd: string): LockHandle {
-    const path = lockPath(env.cwd);
+    return acquireLockAt(env, lockPath(env.cwd), cmd);
+}
+
+/** Like acquireLock, but at an explicit lockfile path. Used by the
+ *  trust-roster mutators in setup.ts: the keyring lives at
+ *  `~/.kindly/trusted-keys.json` regardless of cwd, so two
+ *  `kindly setup trust add` calls from different working directories
+ *  share a destination but would not share a cwd-derived lock. The
+ *  per-keyring lockfile sits next to the roster at
+ *  `~/.kindly/keyring.lock` so the load→mutate→save sequence
+ *  serializes correctly across cwds. Same stale-lock + EEXIST handling
+ *  as acquireLock. */
+export function acquireLockAt(env: CliEnv, path: string, cmd: string): LockHandle {
     mkdirSync(dirname(path), { recursive: true });
 
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -106,6 +118,22 @@ export function releaseLock(handle: LockHandle): void {
 /** Run `fn` while holding the lock. Releases on success and on throw. */
 export function withLock<T>(env: CliEnv, cmd: string, fn: () => T): T {
     const handle = acquireLock(env, cmd);
+    try {
+        return fn();
+    } finally {
+        releaseLock(handle);
+    }
+}
+
+/** Run `fn` while holding a lock at an explicit path. Used by
+ *  `setup trust add/remove` against `~/.kindly/keyring.lock`. */
+export function withLockAt<T>(
+    env: CliEnv,
+    path: string,
+    cmd: string,
+    fn: () => T,
+): T {
+    const handle = acquireLockAt(env, path, cmd);
     try {
         return fn();
     } finally {

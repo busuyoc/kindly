@@ -72,11 +72,22 @@ describe("isSafeRelativePath", () => {
         expect(isSafeRelativePath("a/‍/b")).toBe(false);
     });
 
-    test("accepts segments where ZW chars decorate but don't mask `.`/`..`", () => {
-        // ZWSP after a real name → strips to `valid` → still a valid name.
-        expect(isSafeRelativePath("valid​")).toBe(true);
+    test("rejects ZW-decorated segments outright (round 3 filter-parity)", () => {
+        // Round 3 hardening: any Cf/Cc codepoint anywhere in a segment
+        // is rejected, not just the ones that collapse to `.`/`..`.
+        // Symmetric with v0.13.0 filterCheck and yamlSafe (Lead 19).
+        // ZWSP after a real name was previously accepted; now refused
+        // because plugin paths like `SSH<ZWSP>.koplugin` are typo-
+        // squatting / RLO-flip primitives even when they don't escape
+        // the extraction root.
+        expect(isSafeRelativePath("valid​")).toBe(false);
+        expect(isSafeRelativePath("a/SSH​.koplugin/main.lua")).toBe(false);
+    });
+
+    test("still accepts non-Cf/Cc Unicode (combining marks)", () => {
         // Combining accent on dotdot is a literal 3-character filename, not
-        // path-equivalent to parent reference. NFC keeps the combining mark.
+        // path-equivalent to parent reference. Mn (Mark, Nonspacing) is NOT
+        // in the round-3 reject set — only Cf+Cc are.
         expect(isSafeRelativePath("..́")).toBe(true);
     });
 });

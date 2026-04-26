@@ -2,6 +2,20 @@
 // Lives here (not under src/setup/) because fs/archive.ts — which sits
 // below setup/ in the layering — needs it for extraction safety.
 
+// Round 3 filter-parity MED: reject any Cf "format" or Cc "control"
+// codepoint anywhere in a segment. This is symmetric with the v0.13.0
+// filterCheck rule (src/setup/filterCheck.ts) and parseYamlSafe's
+// invisible-key rejection (src/fs/yamlSafe.ts, Lead 19). Without it,
+// signed `.kset` archives could ship plugin paths like
+// `SSH<U+200B>.koplugin/main.lua` past every textual check (NFC-equal
+// to itself, no `/`, not `.` or `..` after collapse) and the on-device
+// installer would create a directory whose name visually collides with
+// a real plugin or contains RLO bytes that flip later log lines.
+// Built via RegExp(string,...) so the source has no embedded raw
+// control bytes. \p{Cc} is U+0000-U+001F + U+007F-U+009F; \p{Cf} is
+// the entire Unicode "format" category.
+const SEGMENT_INVISIBLE_RE = new RegExp("[\\p{Cc}\\p{Cf}]", "u");
+
 // Reject any path that could escape the extraction root or be
 // interpreted as a non-relative path on any platform. Archives and
 // manifests come from strangers; "by shape, not by trust" is the rule.
@@ -14,6 +28,7 @@ export function isSafeRelativePath(p: string): boolean {
     if (/^[a-zA-Z]:/.test(p)) return false;          // Windows drive letter
     if (p.includes("\\")) return false;              // Windows separator
     for (const seg of p.split("/")) {
+        if (SEGMENT_INVISIBLE_RE.test(seg)) return false;
         // S965 (Angle X): compare against NFC-normalized segment so that
         // visually-identical bytes — ZWSP-suffixed `.`, NFD-decomposed
         // segments, BOM-prefixed `..` — cannot pass the strict-equality
@@ -21,7 +36,10 @@ export function isSafeRelativePath(p: string): boolean {
         // stripped before normalizing so a segment built from `.` plus
         // ZWSP collapses to `.` and is rejected. Without this, the
         // predicate's "by shape, not by trust" comment overstates the
-        // guarantee — see Lead 19 / S690 cousin findings.
+        // guarantee — see Lead 19 / S690 cousin findings. (The leading
+        // SEGMENT_INVISIBLE_RE check above now also rejects these
+        // outright, but the strip-then-collapse keeps the layered
+        // defence in place.)
         // U+200B-U+200D = ZWSP/ZWNJ/ZWJ; U+2060 = WJ; U+FEFF = BOM/ZWNBSP.
         const norm = seg.normalize("NFC").replace(/[​-‍⁠﻿]/g, "");
         if (norm === "" || norm === "." || norm === "..") return false;

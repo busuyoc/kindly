@@ -281,3 +281,65 @@ describe("findKey", () => {
     });
 });
 
+// ---- Round 3 hardening: load-time integrity ------------------------------
+
+describe("loadKeyring round-3 hardening", () => {
+    function writeRoster(content: unknown): void {
+        const path = keyringPath(env);
+        mkdirSync(join(home, ".kindly"), { recursive: true });
+        writeFileSync(path, JSON.stringify(content));
+    }
+
+    test("rejects oversize roster (> KEYRING_MAX_BYTES)", () => {
+        const path = keyringPath(env);
+        mkdirSync(join(home, ".kindly"), { recursive: true });
+        // 5 MiB blob — over the 4 MiB cap.
+        writeFileSync(path, "x".repeat(5 * 1024 * 1024));
+        try {
+            loadKeyring(env);
+            throw new Error("should have thrown");
+        } catch (e) {
+            expect(e).toBeInstanceOf(KeyringError);
+            expect((e as KeyringError).code).toBe("KEYRING_TOO_LARGE");
+        }
+    });
+
+    test("rejects key_id that does not match hash of public_key_b64", () => {
+        const { publicPem: pemA } = genEd25519Pem();
+        const { publicPem: pemB } = genEd25519Pem();
+        // Add key A, then swap in key B's pubkey under A's key_id.
+        const { file: a } = addKey(loadKeyring(env), { publicKeyPem: pemA, now });
+        const { added: b } = addKey({ kindly_trust: "v1", keys: [] }, { publicKeyPem: pemB, now });
+        const tampered = {
+            ...a,
+            keys: [
+                { ...a.keys[0]!, public_key_b64: b.public_key_b64 },
+            ],
+        };
+        writeRoster(tampered);
+        try {
+            loadKeyring(env);
+            throw new Error("should have thrown");
+        } catch (e) {
+            expect(e).toBeInstanceOf(KeyringError);
+            expect((e as KeyringError).code).toBe("KEYRING_CORRUPT");
+            expect((e as KeyringError).message).toContain("does not match the hash");
+        }
+    });
+
+    test("rejects duplicate key_id", () => {
+        const { publicPem } = genEd25519Pem();
+        const { file } = addKey(loadKeyring(env), { publicKeyPem: publicPem, now });
+        const dup = { ...file, keys: [file.keys[0]!, file.keys[0]!] };
+        writeRoster(dup);
+        try {
+            loadKeyring(env);
+            throw new Error("should have thrown");
+        } catch (e) {
+            expect(e).toBeInstanceOf(KeyringError);
+            expect((e as KeyringError).code).toBe("KEYRING_CORRUPT");
+            expect((e as KeyringError).message).toContain("duplicate key_id");
+        }
+    });
+});
+

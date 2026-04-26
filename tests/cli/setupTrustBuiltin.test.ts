@@ -337,6 +337,61 @@ describe("setup trust remove — built-in non-removability", () => {
         expect(out.value).toContain("removed key");
         expect(out.value).toContain("was labeled: local-only");
     });
+
+    // Round-3 trust-remove conflict (Angle 6): when a prefix matches BOTH
+    // a built-in key and a local key, the user is entitled to remove
+    // the local entry — but the prior implementation rejected with
+    // BUILTIN_KEY_NOT_REMOVABLE without disclosing the local match,
+    // leaving the user unable to recover. Surface the local match in
+    // the remediation so the user can pass the full local key_id.
+    test("cross-roster prefix collision discloses local match in remediation", async () => {
+        // Engineer a prefix that matches both rosters by using the
+        // "sha256:" header itself — every key_id starts with it, so
+        // the prefix overlaps any local + any built-in entry.
+        const builtinKeys = mkKeyPair();
+        installBuiltinPublisher(builtinKeys.keyId, builtinKeys.pubB64, "kindly-team");
+
+        const localKeys = mkKeyPair();
+        const pubPath = join(home, "local.pub");
+        writeFileSync(pubPath, localKeys.publicPem);
+        const { env: addEnv } = makeEnv(home, kindle.root);
+        await main(["setup", "trust", "add", pubPath, "--label", "victim"], addEnv);
+
+        const { env, err } = makeEnv(home, kindle.root);
+        const code = await main(["setup", "trust", "remove", "sha256:"], env);
+        expect(code).not.toBe(0);
+        // Original built-in rejection message still appears.
+        expect(err.value).toContain("matches built-in publisher key");
+        // NEW: local match must be disclosed so the user can act.
+        expect(err.value).toContain("Prefix also matches local key");
+        expect(err.value).toContain(localKeys.keyId);
+        expect(err.value).toContain("pass the full key_id");
+    });
+
+    test("--json mode includes local-collision remediation in the envelope", async () => {
+        const builtinKeys = mkKeyPair();
+        installBuiltinPublisher(builtinKeys.keyId, builtinKeys.pubB64, "kindly-team");
+
+        const localKeys = mkKeyPair();
+        const pubPath = join(home, "local.pub");
+        writeFileSync(pubPath, localKeys.publicPem);
+        const { env: addEnv } = makeEnv(home, kindle.root);
+        await main(["setup", "trust", "add", pubPath, "--label", "victim"], addEnv);
+
+        const { env, err } = makeEnv(home, kindle.root);
+        const code = await main([
+            "setup", "trust", "remove", "--json", "sha256:",
+        ], env);
+        expect(code).not.toBe(0);
+        const payload = JSON.parse(err.value);
+        expect(payload.error.code).toBe("BUILTIN_KEY_NOT_REMOVABLE");
+        const remediations = payload.error.remediation as Array<{ text: string }>;
+        const localHint = remediations.find((r) =>
+            r.text.includes("Prefix also matches local key"),
+        );
+        expect(localHint).toBeDefined();
+        expect(localHint!.text).toContain(localKeys.keyId);
+    });
 });
 
 describe("setup import — signed by built-in publisher", () => {

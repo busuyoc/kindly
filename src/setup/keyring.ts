@@ -25,7 +25,7 @@
 
 import {
     closeSync, existsSync, fsyncSync, mkdirSync, openSync,
-    readFileSync, renameSync, writeSync,
+    readFileSync, renameSync, statSync, writeSync,
 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -78,7 +78,18 @@ export type KeyringErrorCode =
     | "KEYRING_KEY_AMBIGUOUS"
     | "KEYRING_KEY_NOT_FOUND"
     | "KEYRING_DUP_KEY"
-    | "KEYRING_INVALID_KEY";
+    | "KEYRING_INVALID_KEY"
+    | "KEYRING_TOO_LARGE";
+
+/** Round 3 keyring MED: cap the on-disk roster before readFileSync.
+ *  Each entry is <300 bytes (key_id + b64 pubkey + label + iso ts). A
+ *  legitimate roster of even 10k keys fits in well under 4 MiB. The
+ *  cap closes a memory-amplification path: an attacker who can write
+ *  to ~/.kindly/trusted-keys.json can't force `setup trust list` (or
+ *  any signerTrust-producer call path) to allocate a multi-GiB buffer
+ *  before Zod rejects the contents. statSync is cheap; the early
+ *  check fails closed before the JSON parse cost. */
+const KEYRING_MAX_BYTES = 4 * 1024 * 1024;
 
 // ---- Path resolution ------------------------------------------------------
 
@@ -86,6 +97,15 @@ export type KeyringErrorCode =
 export function keyringPath(env: KeyringEnv): string {
     const home = env.homeOverride ?? homedir();
     return join(home, ".kindly", "trusted-keys.json");
+}
+
+/** Lockfile path that serializes load→mutate→save sequences against
+ *  the user's roster. Lives next to the roster (per-user, not per-
+ *  cwd) so two `kindly setup trust add` calls from different working
+ *  directories still serialize against the same destination file. */
+export function keyringLockPath(env: KeyringEnv): string {
+    const home = env.homeOverride ?? homedir();
+    return join(home, ".kindly", "keyring.lock");
 }
 
 // ---- Load / save ----------------------------------------------------------
@@ -99,8 +119,16 @@ export function loadKeyring(env: KeyringEnv): TrustedKeysFile {
     }
     let raw: string;
     try {
+        const st = statSync(path);
+        if (st.size > KEYRING_MAX_BYTES) {
+            throw new KeyringError(
+                `keyring at ${path} is ${st.size} bytes, exceeds ${KEYRING_MAX_BYTES} cap`,
+                "KEYRING_TOO_LARGE",
+            );
+        }
         raw = readFileSync(path, "utf8");
     } catch (e) {
+        if (e instanceof KeyringError) throw e;
         throw new KeyringError(
             `cannot read keyring at ${path}: ${(e as Error).message}`,
             "KEYRING_CORRUPT",
@@ -126,6 +154,57 @@ export function loadKeyring(env: KeyringEnv): TrustedKeysFile {
             "KEYRING_CORRUPT",
         );
     }
+
+    // Round 3 keyring MEDs (cluster):
+    //
+    //   (1) key_id <-> public_key_b64 cross-check. Zod validates each
+    //       field's shape independently; nothing prevents an attacker
+    //       (or a corrupt write) from pairing publisher A's pubkey
+    //       with publisher B's key_id. Without this check, lookups
+    //       happen by key_id while signature verification consumes
+    //       public_key_b64 — the bytes that belong to a different
+    //       publisher entirely. Bind them at load time so signerTrust
+    //       can't surface "trusted: alice" while verifying with bob's
+    //       key.
+    //
+    //   (2) duplicate key_id. addKey rejects dups going forward, but
+    //       a malformed roster (concurrent-write artifact, hand-edit,
+    //       merge by hand) could already contain duplicates today.
+    //       Last-write-wins lookup hides whichever entry was added
+    //       first; reject on load.
+    //
+    // Failing closed for both: any non-trivial corruption surfaces as
+    // KEYRING_CORRUPT and the user re-runs `setup trust list` to see
+    // their actual state.
+    const seen = new Map<string, number>();
+    for (let i = 0; i < result.data.keys.length; i++) {
+        const k = result.data.keys[i]!;
+        const prior = seen.get(k.key_id);
+        if (prior !== undefined) {
+            throw new KeyringError(
+                `keyring contains duplicate key_id at indexes ${prior} and ${i}: ${k.key_id}`,
+                "KEYRING_CORRUPT",
+            );
+        }
+        seen.set(k.key_id, i);
+
+        let derived: string;
+        try {
+            derived = keyIdFromPublicKey(Buffer.from(k.public_key_b64, "base64"));
+        } catch (e) {
+            throw new KeyringError(
+                `keyring entry ${i} has unverifiable public_key_b64: ${(e as Error).message}`,
+                "KEYRING_CORRUPT",
+            );
+        }
+        if (derived !== k.key_id) {
+            throw new KeyringError(
+                `keyring entry ${i} key_id ${k.key_id} does not match the hash of public_key_b64 (got ${derived})`,
+                "KEYRING_CORRUPT",
+            );
+        }
+    }
+
     return result.data;
 }
 

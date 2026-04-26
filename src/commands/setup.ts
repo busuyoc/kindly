@@ -786,9 +786,10 @@ async function runSetupTrustAdd(argv: readonly string[], env: CliEnv): Promise<n
     }
 
     const { readFileSync } = await import("node:fs");
-    const { loadKeyring, saveKeyring, addKey, rawEd25519PublicKey, KeyringError } = await import("../setup/keyring.ts");
+    const { loadKeyring, saveKeyring, addKey, rawEd25519PublicKey, KeyringError, keyringLockPath } = await import("../setup/keyring.ts");
     const { loadBuiltinKeyring, findBuiltinKey } = await import("../setup/builtinKeyring.ts");
     const { keyIdFromPublicKey } = await import("../setup/signing.ts");
+    const { withLockAt } = await import("../fs/lockfile.ts");
 
     const pubPath = resolve(env.cwd, fileArg);
     let pubPem: string;
@@ -833,17 +834,26 @@ async function runSetupTrustAdd(argv: readonly string[], env: CliEnv): Promise<n
         );
     }
 
-    const before = loadKeyring(env);
+    // Round 3 keyring HIGH: load→addKey→save without serialization
+    // races two concurrent `setup trust add` calls — both processes
+    // load the same prior file, compute their own delta, and the
+    // second saveKeyring atomic-renames over the first. The losing
+    // delta is silently dropped. withLockAt against the per-user
+    // keyring.lock (lives next to the roster, not under cwd) gives
+    // the load/mutate/save sequence its missing serial ordering.
     let added: { key_id: string; label?: string; added_at: string };
-    let updated;
+    let updated: Awaited<ReturnType<typeof loadKeyring>>;
     try {
-        const result = addKey(before, {
-            publicKeyPem: pubPem,
-            ...(flags.label !== undefined ? { label: flags.label } : {}),
-            now: env.now(),
-        });
-        updated = result.file;
-        added = result.added;
+        ({ added, updated } = withLockAt(env, keyringLockPath(env), "setup:trust-add", () => {
+            const before = loadKeyring(env);
+            const result = addKey(before, {
+                publicKeyPem: pubPem,
+                ...(flags.label !== undefined ? { label: flags.label } : {}),
+                now: env.now(),
+            });
+            saveKeyring(env, result.file);
+            return { added: result.added, updated: result.file };
+        }));
     } catch (e) {
         if (e instanceof KeyringError) {
             throw new KindlyError(
@@ -856,7 +866,6 @@ async function runSetupTrustAdd(argv: readonly string[], env: CliEnv): Promise<n
         }
         throw e;
     }
-    saveKeyring(env, updated);
 
     if (env.jsonMode) {
         emitJson(env, "setup trust add", {
@@ -884,33 +893,71 @@ async function runSetupTrustRemove(argv: readonly string[], env: CliEnv): Promis
     if (positional.length > 1) {
         throw new ArgError(`unexpected extra argument: ${positional[1]}`);
     }
-    const { loadKeyring, saveKeyring, removeKey, KeyringError } = await import("../setup/keyring.ts");
+    const { loadKeyring, saveKeyring, removeKey, KeyringError, keyringLockPath } = await import("../setup/keyring.ts");
     const { loadBuiltinKeyring } = await import("../setup/builtinKeyring.ts");
+    const { withLockAt } = await import("../fs/lockfile.ts");
 
     // Built-in registry is part of the install, not the user's roster
     // — `setup trust remove` cannot edit it. Reject with a remediation
     // that points at the actual mechanism (regenerate from source).
+    //
+    // Round-3 trust-remove conflict (Angle 6): when the prefix matches
+    // BOTH a built-in and a local key, the prior implementation rejected
+    // with BUILTIN_KEY_NOT_REMOVABLE without disclosing the local match.
+    // The user got stuck — they couldn't tell that a longer prefix
+    // would target their own key (which they're entitled to remove).
+    // Resolve by surfacing both sides of the collision in the error,
+    // pointing at the unambiguous full-id form.
     const builtin = loadBuiltinKeyring();
     const builtinMatches = builtin.publishers.filter(
         (p) => p.key_id.startsWith(prefix),
     );
     if (builtinMatches.length > 0) {
         const ids = builtinMatches.map((p) => p.key_id).join(", ");
+        // Peek at the local roster too so we can surface the cross-roster
+        // collision before failing closed. Use a separate read here
+        // (no mutation) — the actual remove path lower down still runs
+        // under the keyring lock.
+        let localCollision: string[] = [];
+        try {
+            const local = loadKeyring(env);
+            localCollision = local.keys
+                .filter((k) => k.key_id.startsWith(prefix))
+                .map((k) => k.key_id);
+        } catch {
+            // Roster read failure is its own incident; don't mask the
+            // built-in rejection with a roster-load error.
+        }
+        const remediation = [
+            { text: "Built-in keys are managed by kindly upgrades — not removable from the local roster." },
+            { text: "To remove a built-in entry, edit data/keyring/publishers.v1.json in the kindly source and rebuild the hash:", command: "bun run scripts/build-builtin-keyring.ts" },
+        ];
+        if (localCollision.length > 0) {
+            const localIds = localCollision.join(", ");
+            remediation.unshift({
+                text: `Prefix also matches local key${localCollision.length > 1 ? "s" : ""} ${localIds} — pass the full key_id (or a prefix that doesn't overlap with the built-in) to remove just the local entr${localCollision.length > 1 ? "ies" : "y"}.`,
+            });
+        }
         throw new KindlyError(
             ErrorCodes.BUILTIN_KEY_NOT_REMOVABLE,
             `prefix "${prefix}" matches built-in publisher key${builtinMatches.length > 1 ? "s" : ""}: ${ids}`,
-            [
-                { text: "Built-in keys are managed by kindly upgrades — not removable from the local roster." },
-                { text: "To remove a built-in entry, edit data/keyring/publishers.v1.json in the kindly source and rebuild the hash:", command: "bun run scripts/build-builtin-keyring.ts" },
-            ],
+            remediation,
         );
     }
 
-    const before = loadKeyring(env);
-    let updated;
-    let removed;
+    // Round 3 keyring HIGH: serialize the load→remove→save sequence
+    // (mirror of trust-add). Otherwise two concurrent removes — or a
+    // remove racing an add — both load the same prior state and the
+    // second writer drops the first writer's delta on the floor.
+    let updated: Awaited<ReturnType<typeof loadKeyring>>;
+    let removed: { key_id: string; label?: string };
     try {
-        ({ file: updated, removed } = removeKey(before, prefix));
+        ({ updated, removed } = withLockAt(env, keyringLockPath(env), "setup:trust-remove", () => {
+            const before = loadKeyring(env);
+            const result = removeKey(before, prefix);
+            saveKeyring(env, result.file);
+            return { updated: result.file, removed: result.removed };
+        }));
     } catch (e) {
         if (e instanceof KeyringError) {
             throw new KindlyError(
@@ -923,7 +970,6 @@ async function runSetupTrustRemove(argv: readonly string[], env: CliEnv): Promis
         }
         throw e;
     }
-    saveKeyring(env, updated);
 
     if (env.jsonMode) {
         emitJson(env, "setup trust remove", {

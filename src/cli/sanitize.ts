@@ -30,6 +30,15 @@
 //     `\x1b\`, bare `\x1b`, etc.).
 //   - Strip lone `\r` (but preserve `\r\n` as a pair).
 //   - Strip other C0 control bytes: 0x00-0x08, 0x0B-0x0C, 0x0E-0x1F, 0x7F.
+//   - Strip C1 control bytes 0x80-0x9F. U+009B is the 8-bit CSI introducer
+//     and U+009D is the 8-bit OSC introducer; xterm with `decode8bit` (and
+//     some legacy emulators in Latin-1 mode) interpret them as the start of
+//     control sequences with the same effects as ESC[ / ESC]. Parity with
+//     filterCheck.ts (sign/verify time): manifest strings must already pass
+//     the same C1+Cf rejection, but render-time sanitize is the last line
+//     of defense for any string that bypasses the sign-time gate (KindlyError
+//     wrapping a system error message, locally-edited trust roster labels,
+//     anything from a future code path that lacks parity).
 //   - Strip bidi controls (U+202A-U+202E override/embedding, U+2066-U+2069
 //     isolates) — arbitrary visual reordering is an S383-class info-leak
 //     channel and can mask the real key being displayed.
@@ -86,10 +95,11 @@ function isStrippableUnicode(ch: number): boolean {
 }
 
 // Hot-path detection regex. Matches if anything in the string needs
-// inspection — C0 controls, ESC/CR, bidi, invisibles, LS/PS, BOM.
-// Built via RegExp() so the \uXXXX escapes stay ASCII-readable in source.
+// inspection — C0 controls, ESC/CR, C1 controls, bidi, invisibles,
+// LS/PS, BOM. Built via RegExp() so the \uXXXX escapes stay
+// ASCII-readable in source.
 const HOT_PATH_RE = new RegExp(
-    "[\\x00-\\x08\\x0B-\\x0C\\x0E-\\x1F\\x7F\\r\\x1B" +
+    "[\\x00-\\x08\\x0B-\\x0C\\x0E-\\x1F\\x7F-\\x9F\\r\\x1B" +
     "\\u200B-\\u200D\\u2028\\u2029\\u202A-\\u202E" +
     "\\u2060-\\u2064\\u2066-\\u2069\\uFEFF]"
 );
@@ -215,8 +225,14 @@ export function sanitizeForTerminal(s: string): string {
             continue;
         }
 
-        // Other C0 controls + DEL.
-        if (ch <= 0x1f || ch === 0x7f) {
+        // Other C0 controls + DEL + C1 controls (0x80-0x9F). Parity with
+        // filterCheck.ts FORBIDDEN_RE: U+009B / U+009D are 8-bit CSI/OSC
+        // introducers on terminals that decode 8-bit (xterm `decode8bit`,
+        // legacy Latin-1 emulators) — leaving them through means an
+        // attacker who lands a C1 byte in any string the renderer emits
+        // gets the same effect as ESC[ / ESC] would, which the ESC branch
+        // above already strips.
+        if (ch <= 0x1f || (ch >= 0x7f && ch <= 0x9f)) {
             i += 1;
             continue;
         }

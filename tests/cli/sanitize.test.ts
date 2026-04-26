@@ -49,6 +49,30 @@ describe("sanitizeForTerminal", () => {
         expect(sanitizeForTerminal("bell\x07rung")).toBe("bellrung");
     });
 
+    test("strips C1 controls (0x80-0x9F) including 8-bit CSI/OSC", () => {
+        // U+009B is 8-bit CSI introducer; xterm with decode8bit interprets
+        // ` 2 J` as clear-screen, equivalent to ESC[2J. Strip the
+        // C1 byte so a downstream `2J` is rendered as harmless text.
+        expect(sanitizeForTerminal("hi2Jthere")).toBe("hi2Jthere");
+        // U+009D is 8-bit OSC introducer; pair with BEL terminator the way
+        // filterCheck.ts treats it: a forbidden control byte. The trailing
+        // BEL is also a C0 control and gets stripped on the same pass.
+        expect(sanitizeForTerminal("hi0;evilthere")).toBe("hi0;evilthere");
+        // Every C1 codepoint should drop. Spot-check the boundaries plus
+        // U+0085 NEL (treated as line break by some terminals).
+        for (const cp of [0x80, 0x85, 0x9b, 0x9d, 0x9f]) {
+            const s = "a" + String.fromCharCode(cp) + "b";
+            expect(sanitizeForTerminal(s)).toBe("ab");
+        }
+    });
+
+    test("hot-path regex triggers when only a C1 byte is present", () => {
+        // Without the regex including 0x80-0x9F, the early return at the
+        // top of sanitizeForTerminal would skip the strip loop and let
+        // the C1 byte through unchanged.
+        expect(sanitizeForTerminal("cleanclean")).toBe("cleanclean");
+    });
+
     test("happy path: printable + tab + newline + emoji", () => {
         const s = "plain text\twith émojis 🦊\nnext line";
         expect(sanitizeForTerminal(s)).toBe(s);

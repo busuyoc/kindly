@@ -190,6 +190,37 @@ describe("history reader — S1101 schema validation", () => {
             expect(r.malformed).toBe(0);
             expect(r.total).toBe(3);
         });
+
+        // Round-3 follow-up (live probe 2026-04-26): a forged ts with the
+        // right *digit count* but impossible wall-clock values
+        // ("19:99:99.999Z") was accepted by the original digit-count-only
+        // regex. Defense-in-depth held downstream (monthKey re-validates
+        // the slice; renderer sanitizes; lex-compare is consistent), but
+        // the entry rendering as a "valid" row was misleading. Tightened
+        // to enforce semantic bounds.
+        test("ts with impossible hour/min/sec values is rejected", () => {
+            writeHistory([
+                { ts: "2026-04-26T19:99:99.999Z", cmd: "apply", kindly_version: "0.13.0", index: 1, summary: {} },
+                { ts: "2026-04-26T24:00:00.000Z", cmd: "apply", kindly_version: "0.13.0", index: 2, summary: {} },
+                { ts: "2026-04-26T12:60:00.000Z", cmd: "apply", kindly_version: "0.13.0", index: 3, summary: {} },
+                { ts: "2026-04-26T12:00:60.000Z", cmd: "apply", kindly_version: "0.13.0", index: 4, summary: {} },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(4);
+            expect(r.total).toBe(0);
+        });
+
+        test("ts with impossible month/day values is rejected", () => {
+            writeHistory([
+                { ts: "2026-13-01T12:00:00.000Z", cmd: "apply", kindly_version: "0.13.0", index: 1, summary: {} },
+                { ts: "2026-00-01T12:00:00.000Z", cmd: "apply", kindly_version: "0.13.0", index: 2, summary: {} },
+                { ts: "2026-04-32T12:00:00.000Z", cmd: "apply", kindly_version: "0.13.0", index: 3, summary: {} },
+                { ts: "2026-04-00T12:00:00.000Z", cmd: "apply", kindly_version: "0.13.0", index: 4, summary: {} },
+            ]);
+            const r = readHistoryFile({ cwd: workdir });
+            expect(r.malformed).toBe(4);
+            expect(r.total).toBe(0);
+        });
     });
 
     // Round-3 history-rendering F4: read-time length caps on entry/summary

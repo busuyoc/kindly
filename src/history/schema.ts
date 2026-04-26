@@ -94,7 +94,16 @@ export const historySummarySchema = z.object({
 // writer emits — enforce that shape at read time. Forged entries with
 // malformed ts now fall into the malformed bucket alongside other
 // schema violations.
-const ISO_TS_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+//
+// Round 3 follow-up (live probe 2026-04-26): the original regex only
+// validated digit count, so a forged `"2026-04-26T19:99:99.999Z"`
+// passed schema and rendered as a valid row. Tighten to enforce
+// semantic value bounds (month 01-12, day 01-31, hour 00-23,
+// minute/second 00-59) — exactly the shape `Date#toISOString()`
+// emits. JS Date never emits invalid wall-clock values; legitimate
+// writers always pass, only forged ones fail.
+const ISO_TS_REGEX =
+    /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T([01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}Z$/;
 
 export const historyEntrySchema = z.object({
     ts: z.string().regex(ISO_TS_REGEX, "ts must be ISO-8601 (YYYY-MM-DDTHH:MM:SS.sssZ)"),

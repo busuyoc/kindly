@@ -150,13 +150,15 @@ describe("W39 trust roster — end-to-end lifecycle", () => {
             expect(code).toBe(0);
             const payload = JSON.parse(out.value);
             expect(payload.status).toBe("ok");
-            expect(payload.data.keys).toHaveLength(1);
-            expect(payload.data.keys[0].label).toBe("publisher-alice");
-            expect(payload.data.keys[0].key_id).toMatch(/^sha256:[a-f0-9]{64}$/);
+            expect(payload.data.local).toHaveLength(1);
+            expect(payload.data.local[0].label).toBe("publisher-alice");
+            expect(payload.data.local[0].key_id).toMatch(/^sha256:[a-f0-9]{64}$/);
+            // v0.13 built-in keyring is curated empty.
+            expect(payload.data.builtin).toEqual([]);
         }
 
         // 5. Re-running `setup verify` now reports trusted with the
-        // label we just chose.
+        // label we just chose, and trust_source: "local".
         let signerKeyId: string;
         {
             const { env, out } = makeEnv(home, kindle.root);
@@ -165,6 +167,7 @@ describe("W39 trust roster — end-to-end lifecycle", () => {
             const payload = JSON.parse(out.value);
             expect(payload.data.trusted).toBe(true);
             expect(payload.data.signer_label).toBe("publisher-alice");
+            expect(payload.data.trust_source).toBe("local");
             signerKeyId = payload.data.signer_key_id;
         }
 

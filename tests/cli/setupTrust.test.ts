@@ -56,12 +56,14 @@ describe("setup trust list", () => {
         expect(existsSync(keyringPath(env))).toBe(false);
     });
 
-    test("--json on empty roster → keys: [] envelope", async () => {
+    test("--json on empty roster → builtin/local arrays", async () => {
         const { env, out } = makeEnv(home);
         await main(["setup", "trust", "list", "--json"], env);
         const payload = JSON.parse(out.value);
         expect(payload.status).toBe("ok");
-        expect(payload.data.keys).toEqual([]);
+        // v0.13 ships an empty built-in keyring; curation lands in v1.0.
+        expect(payload.data.builtin).toEqual([]);
+        expect(payload.data.local).toEqual([]);
     });
 });
 
@@ -135,19 +137,19 @@ describe("setup trust add", () => {
 // ---- list (populated) ------------------------------------------------------
 
 describe("setup trust list — populated", () => {
-    test("after add → list shows the key block", async () => {
+    test("after add → list shows the key block under local section", async () => {
         const { env: e1 } = makeEnv(home);
         await main(["setup", "trust", "add", pubPath, "--label", "alice"], e1);
 
         const { env, out } = makeEnv(home);
         await main(["setup", "trust", "list"], env);
-        expect(out.value).toContain("trusted keys (1)");
+        expect(out.value).toContain("local — 1");
         expect(out.value).toContain("alice");
         expect(out.value).toMatch(/key_id:\s+sha256:[a-f0-9]{64}/);
         expect(out.value).toContain("added_at:");
     });
 
-    test("after two adds → list shows both", async () => {
+    test("after two adds → list shows both under local", async () => {
         const pubPath2 = join(home, "bob.pub");
         writeFileSync(pubPath2, genEd25519Pem());
 
@@ -157,7 +159,7 @@ describe("setup trust list — populated", () => {
 
         const { env, out } = makeEnv(home);
         await main(["setup", "trust", "list"], env);
-        expect(out.value).toContain("trusted keys (2)");
+        expect(out.value).toContain("local — 2");
         expect(out.value).toContain("alice");
         expect(out.value).toContain("bob");
     });

@@ -608,18 +608,25 @@ async function runSetupVerify(argv: readonly string[], env: CliEnv): Promise<num
     const archivePath = resolve(env.cwd, fileArg);
     const { verifySetupArchive, SigningError } = await import("../setup/signing.ts");
     const { loadKeyring, findKey, KeyringError } = await import("../setup/keyring.ts");
+    const { loadBuiltinKeyring, findBuiltinKey } = await import("../setup/builtinKeyring.ts");
 
     try {
         const result = verifySetupArchive(archivePath);
 
-        // Step 4 — diagnostic-only trust roster lookup. The crypto check
-        // above proves "the holder of <signer_key_id> signed this." Whether
-        // the user trusts that key is a separate question, answered by
-        // their local roster. We don't gate the verify command on roster
-        // membership (gating happens in `setup import`, step 5) — verify
-        // is a probe, and a probe should always tell the user what it found.
+        // Step 4 — diagnostic-only trust lookup. The crypto check above
+        // proves "the holder of <signer_key_id> signed this." Whether the
+        // user trusts that key is a separate question, answered first by
+        // the built-in publisher registry and then by the user's local
+        // roster. We don't gate the verify command on trust membership
+        // (gating happens in `setup import`, step 5) — verify is a probe,
+        // and a probe should always tell the user what it found.
+        //
+        // Mirrors signerTrust producer's precedence: local entry wins
+        // when the same key_id sits in both — preserves audit clarity.
+        const builtin = loadBuiltinKeyring();
         let trusted = false;
         let trustedLabel: string | undefined;
+        let trustSource: "local" | "builtin" | undefined;
         let rosterError: string | undefined;
         try {
             const roster = loadKeyring(env);
@@ -627,15 +634,26 @@ async function runSetupVerify(argv: readonly string[], env: CliEnv): Promise<num
             if (entry !== null) {
                 trusted = true;
                 trustedLabel = entry.label;
+                trustSource = "local";
             }
         } catch (e) {
             if (e instanceof KeyringError) {
                 // Don't fail verify when the roster file is broken. The
-                // crypto answer is still useful; flag the roster as needing
-                // attention so the user knows trust state is unknown.
+                // crypto answer is still useful; flag the roster as
+                // needing attention. Built-in lookup still runs below so
+                // a user with a corrupt local roster can still see that
+                // a kindly-curated publisher signed the archive.
                 rosterError = e.message;
             } else {
                 throw e;
+            }
+        }
+        if (!trusted) {
+            const bEntry = findBuiltinKey(builtin, result.signerKeyId);
+            if (bEntry !== null) {
+                trusted = true;
+                trustedLabel = `kindly-builtin: ${bEntry.label}`;
+                trustSource = "builtin";
             }
         }
 
@@ -648,6 +666,7 @@ async function runSetupVerify(argv: readonly string[], env: CliEnv): Promise<num
                 filter_version: result.sidecar.filter_version,
                 trusted,
                 ...(trustedLabel !== undefined ? { signer_label: trustedLabel } : {}),
+                ...(trustSource !== undefined ? { trust_source: trustSource } : {}),
                 ...(rosterError !== undefined ? { roster_error: rosterError } : {}),
             });
             return 0;
@@ -656,13 +675,17 @@ async function runSetupVerify(argv: readonly string[], env: CliEnv): Promise<num
         info(env, dim(env, `  manifest_hash:  ${result.derivedManifestHash}`));
         info(env, dim(env, `  signer_key_id:  ${result.signerKeyId}`));
         info(env, dim(env, `  filter_version: ${result.sidecar.filter_version}`));
-        if (rosterError !== undefined) {
+        if (rosterError !== undefined && !trusted) {
             warn(env, `trust roster unreadable — ${rosterError}`);
             stderrLine(env, dim(env, "  fix the roster (or move it aside) to see trust status here."));
         } else if (trusted) {
-            info(env, paint(env, "green", "  trusted ✓") + (trustedLabel ? dim(env, `  (label: ${trustedLabel})`) : ""));
+            const sourceTag = trustSource === "builtin" ? " (built-in)" : "";
+            info(env, paint(env, "green", `  trusted ✓${sourceTag}`) + (trustedLabel ? dim(env, `  (label: ${trustedLabel})`) : ""));
+            if (rosterError !== undefined) {
+                warn(env, `note: local trust roster is unreadable — ${rosterError}`);
+            }
         } else {
-            info(env, paint(env, "yellow", "  untrusted ✗") + dim(env, "  (signer not in your local roster)"));
+            info(env, paint(env, "yellow", "  untrusted ✗") + dim(env, "  (signer not in built-in registry or local roster)"));
             info(env, dim(env, `  add with: kindly setup trust add <pubkey.pem> --label <name>`));
         }
         return 0;
@@ -693,11 +716,20 @@ async function runSetupTrustList(argv: readonly string[], env: CliEnv): Promise<
         throw new ArgError(`unexpected argument: ${positional[0]}`);
     }
     const { loadKeyring } = await import("../setup/keyring.ts");
+    const { loadBuiltinKeyring } = await import("../setup/builtinKeyring.ts");
     const file = loadKeyring(env);
+    const builtin = loadBuiltinKeyring();
 
     if (env.jsonMode) {
         emitJson(env, "setup trust list", {
-            keys: file.keys.map((k) => ({
+            builtin: builtin.publishers.map((p) => ({
+                key_id: p.key_id,
+                label: p.label,
+                ...(p.description !== undefined ? { description: p.description } : {}),
+                ...(p.since !== undefined ? { since: p.since } : {}),
+                ...(p.references !== undefined ? { references: p.references } : {}),
+            })),
+            local: file.keys.map((k) => ({
                 key_id: k.key_id,
                 ...(k.label !== undefined ? { label: k.label } : {}),
                 added_at: k.added_at,
@@ -706,19 +738,39 @@ async function runSetupTrustList(argv: readonly string[], env: CliEnv): Promise<
         return 0;
     }
 
-    if (file.keys.length === 0) {
+    if (file.keys.length === 0 && builtin.publishers.length === 0) {
         info(env, dim(env, "no trusted keys yet."));
         info(env, dim(env, "  add one with: kindly setup trust add <pubkey.pem> [--label <name>]"));
         return 0;
     }
 
-    heading(env, `trusted keys (${file.keys.length})`);
-    env.stdout.write("\n");
-    for (const k of file.keys) {
-        env.stdout.write(`  ${k.label ?? dim(env, "(no label)")}\n`);
-        env.stdout.write(`    key_id:    ${k.key_id}\n`);
-        env.stdout.write(`    added_at:  ${k.added_at}\n`);
+    if (builtin.publishers.length > 0) {
+        heading(env, `built-in (kindly-curated) — ${builtin.publishers.length}`);
         env.stdout.write("\n");
+        for (const p of builtin.publishers) {
+            env.stdout.write(`  ${p.label}\n`);
+            env.stdout.write(`    key_id:    ${p.key_id}\n`);
+            if (p.description !== undefined) {
+                env.stdout.write(`    purpose:   ${p.description}\n`);
+            }
+            if (p.since !== undefined) {
+                env.stdout.write(`    since:     ${p.since}\n`);
+            }
+            env.stdout.write("\n");
+        }
+    }
+
+    heading(env, `local — ${file.keys.length}`);
+    env.stdout.write("\n");
+    if (file.keys.length === 0) {
+        env.stdout.write(dim(env, "  (none — add with: kindly setup trust add <pubkey.pem>)") + "\n\n");
+    } else {
+        for (const k of file.keys) {
+            env.stdout.write(`  ${k.label ?? dim(env, "(no label)")}\n`);
+            env.stdout.write(`    key_id:    ${k.key_id}\n`);
+            env.stdout.write(`    added_at:  ${k.added_at}\n`);
+            env.stdout.write("\n");
+        }
     }
     return 0;
 }
@@ -735,6 +787,9 @@ async function runSetupTrustAdd(argv: readonly string[], env: CliEnv): Promise<n
 
     const { readFileSync } = await import("node:fs");
     const { loadKeyring, saveKeyring, addKey, KeyringError } = await import("../setup/keyring.ts");
+    const { loadBuiltinKeyring, findBuiltinKey } = await import("../setup/builtinKeyring.ts");
+    const { keyIdFromPublicKey } = await import("../setup/signing.ts");
+    const { createPublicKey } = await import("node:crypto");
 
     const pubPath = resolve(env.cwd, fileArg);
     let pubPem: string;
@@ -745,6 +800,50 @@ async function runSetupTrustAdd(argv: readonly string[], env: CliEnv): Promise<n
             ErrorCodes.YAML_NOT_FOUND,
             `cannot read public key at ${pubPath}: ${(e as Error).message}`,
             [{ text: "Verify the path and try again." }],
+        );
+    }
+
+    // Pre-derive the key_id so we can reject duplication against the
+    // built-in registry BEFORE mutating the local roster — same shape
+    // of "no half-mutated state" guarantee that Batch J's diff/history
+    // composition relies on. Mirrors keyring.ts:rawEd25519PublicKey
+    // verbatim so the error shape on a malformed PEM matches addKey().
+    let candidateKeyId: string;
+    try {
+        const k = createPublicKey(pubPem);
+        if (k.asymmetricKeyType !== "ed25519") {
+            throw new KindlyError(
+                ErrorCodes.SETUP_SIGNATURE_INVALID,
+                `expected Ed25519 public key, got ${k.asymmetricKeyType ?? "unknown"}`,
+                [{ text: "Provide a valid Ed25519 public key in PEM (SPKI) format." }],
+            );
+        }
+        const der = k.export({ format: "der", type: "spki" });
+        if (der.length !== 44) {
+            throw new KindlyError(
+                ErrorCodes.SETUP_SIGNATURE_INVALID,
+                `unexpected SPKI length for Ed25519: ${der.length}`,
+                [{ text: "Provide a valid Ed25519 public key in PEM (SPKI) format." }],
+            );
+        }
+        candidateKeyId = keyIdFromPublicKey(Buffer.from(der.subarray(12)));
+    } catch (e) {
+        if (e instanceof KindlyError) throw e;
+        throw new KindlyError(
+            ErrorCodes.SETUP_SIGNATURE_INVALID,
+            `invalid public key PEM: ${(e as Error).message}`,
+            [{ text: "Provide a valid Ed25519 public key in PEM (SPKI) format." }],
+        );
+    }
+
+    const builtin = loadBuiltinKeyring();
+    if (findBuiltinKey(builtin, candidateKeyId) !== null) {
+        throw new KindlyError(
+            ErrorCodes.BUILTIN_KEY_ALREADY_TRUSTED,
+            `key ${candidateKeyId} is already trusted via the built-in registry; no local entry needed`,
+            [
+                { text: "Run `kindly setup trust list` to see built-in publishers." },
+            ],
         );
     }
 
@@ -800,6 +899,27 @@ async function runSetupTrustRemove(argv: readonly string[], env: CliEnv): Promis
         throw new ArgError(`unexpected extra argument: ${positional[1]}`);
     }
     const { loadKeyring, saveKeyring, removeKey, KeyringError } = await import("../setup/keyring.ts");
+    const { loadBuiltinKeyring } = await import("../setup/builtinKeyring.ts");
+
+    // Built-in registry is part of the install, not the user's roster
+    // — `setup trust remove` cannot edit it. Reject with a remediation
+    // that points at the actual mechanism (regenerate from source).
+    const builtin = loadBuiltinKeyring();
+    const builtinMatches = builtin.publishers.filter(
+        (p) => p.key_id.startsWith(prefix),
+    );
+    if (builtinMatches.length > 0) {
+        const ids = builtinMatches.map((p) => p.key_id).join(", ");
+        throw new KindlyError(
+            ErrorCodes.BUILTIN_KEY_NOT_REMOVABLE,
+            `prefix "${prefix}" matches built-in publisher key${builtinMatches.length > 1 ? "s" : ""}: ${ids}`,
+            [
+                { text: "Built-in keys are managed by kindly upgrades — not removable from the local roster." },
+                { text: "To remove a built-in entry, edit data/keyring/publishers.v1.json in the kindly source and rebuild the hash:", command: "bun run scripts/build-builtin-keyring.ts" },
+            ],
+        );
+    }
+
     const before = loadKeyring(env);
     let updated;
     let removed;

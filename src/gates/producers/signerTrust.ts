@@ -24,15 +24,24 @@ import { existsSync } from "node:fs";
 
 import { ErrorCodes, KindlyError } from "../../types/errors.ts";
 import { findKey, KeyringError, loadKeyring } from "../../setup/keyring.ts";
+import { findBuiltinKey, loadBuiltinKeyring } from "../../setup/builtinKeyring.ts";
 import { SigningError, verifySetupArchive } from "../../setup/signing.ts";
 import type { GateContext, Producer } from "../types.ts";
 
+// trustSource is a pure side-channel for `setup verify --json` and the
+// grouped `setup trust list` output — the gate decision (trusted vs
+// untrusted vs error) is unchanged across sources, so identity.ts:
+// SIGNER_TRUSTED needs no edit. Local wins when the same key_id is in
+// both rosters: a user who explicitly typed `setup trust add` for a key
+// that later landed in the built-in registry should still see "local"
+// — preserves audit clarity and keeps `setup trust remove` meaningful.
 export type SignerTrust =
     | { kind: "unsigned" }
     | {
         kind: "signed";
         signerKeyId: string;
         rosterStatus: "trusted" | "untrusted" | "roster-error";
+        trustSource?: "local" | "builtin";
         label?: string;
         rosterError?: string;
     };
@@ -77,36 +86,71 @@ export const signerTrust: Producer<SignerTrust> = (ctx: GateContext) => {
         throw e;
     }
 
-    // Roster lookup. A corrupt roster file means we cannot answer the
-    // trust question — record that as a distinct status so the gate can
-    // fail closed (rather than silently treating it as "untrusted" or
-    // "trusted").
+    // Built-in keyring (curated, committed-in-source). Loaded first
+    // because a hash mismatch / size violation here is a "your install
+    // is tampered" hard fail that should propagate as a KindlyError
+    // before we even consult the local roster — the user can't sidestep
+    // a tampered install via their personal trust list.
+    const builtinKeyring = loadBuiltinKeyring();
+
+    // Local roster lookup. A corrupt roster file means we cannot answer
+    // the trust question — record that as a distinct status so the gate
+    // can fail closed (rather than silently treating it as "untrusted"
+    // or "trusted"). Built-in lookup still happens after, so a user
+    // whose ~/.kindly/trusted-keys.json is broken can STILL import a
+    // Setup signed by a built-in publisher — the local-roster error
+    // doesn't poison built-in trust.
     const homeOverride = ctx.opts.homeOverride as string | undefined;
+    let localEntry: ReturnType<typeof findKey> = null;
+    let rosterError: string | null = null;
     try {
         const roster = loadKeyring({ homeOverride });
-        const entry = findKey(roster, verified.signerKeyId);
-        if (entry !== null) {
-            return {
-                kind: "signed",
-                signerKeyId: verified.signerKeyId,
-                rosterStatus: "trusted",
-                ...(entry.label !== undefined ? { label: entry.label } : {}),
-            };
+        localEntry = findKey(roster, verified.signerKeyId);
+    } catch (e) {
+        if (e instanceof KeyringError) {
+            rosterError = e.message;
+        } else {
+            throw e;
         }
+    }
+
+    if (localEntry !== null) {
         return {
             kind: "signed",
             signerKeyId: verified.signerKeyId,
-            rosterStatus: "untrusted",
+            rosterStatus: "trusted",
+            trustSource: "local",
+            ...(localEntry.label !== undefined ? { label: localEntry.label } : {}),
         };
-    } catch (e) {
-        if (e instanceof KeyringError) {
-            return {
-                kind: "signed",
-                signerKeyId: verified.signerKeyId,
-                rosterStatus: "roster-error",
-                rosterError: e.message,
-            };
-        }
-        throw e;
     }
+
+    const builtinEntry = findBuiltinKey(builtinKeyring, verified.signerKeyId);
+    if (builtinEntry !== null) {
+        // Decorate the label so `setup verify` output makes the source
+        // visible to the user without them needing to read the JSON
+        // envelope. "kindly-builtin: alice" vs raw "alice" tells them
+        // "this trust came from kindly itself, not from a key I added."
+        return {
+            kind: "signed",
+            signerKeyId: verified.signerKeyId,
+            rosterStatus: "trusted",
+            trustSource: "builtin",
+            label: `kindly-builtin: ${builtinEntry.label}`,
+        };
+    }
+
+    if (rosterError !== null) {
+        return {
+            kind: "signed",
+            signerKeyId: verified.signerKeyId,
+            rosterStatus: "roster-error",
+            rosterError,
+        };
+    }
+
+    return {
+        kind: "signed",
+        signerKeyId: verified.signerKeyId,
+        rosterStatus: "untrusted",
+    };
 };

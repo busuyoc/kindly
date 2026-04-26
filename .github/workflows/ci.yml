@@ -1,0 +1,64 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+
+      - run: bun install --frozen-lockfile
+      - run: bun test
+
+      # W46 §2-Layer-4: emit a canonical manifest hash from a deterministic
+      # fixture. The reproducibility job below downloads both artifacts and
+      # asserts equality — the in-process tests in tests/setup/pack.test.ts
+      # exercise NFC/NFD within one runner; this is the cross-platform half.
+      - name: W46 — emit canonical manifest hash
+        run: bun run scripts/w46-emit-hash.ts > w46-hash.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: w46-hash-${{ matrix.os }}
+          path: w46-hash.txt
+          if-no-files-found: error
+
+  reproducibility:
+    name: W46 cross-platform reproducibility
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: w46-hash-macos-latest
+          path: macos
+      - uses: actions/download-artifact@v4
+        with:
+          name: w46-hash-ubuntu-latest
+          path: linux
+      - name: Compare canonical manifest hashes
+        run: |
+          set -eu
+          macos_hash=$(cat macos/w46-hash.txt)
+          linux_hash=$(cat linux/w46-hash.txt)
+          echo "macOS:  $macos_hash"
+          echo "Linux:  $linux_hash"
+          if [ "$macos_hash" != "$linux_hash" ]; then
+            echo "::error::canonical manifest hash differs across platforms"
+            echo "Q3 (canonical-hash-identical rebuild) violated."
+            exit 1
+          fi
+          echo "OK — canonical-hash-identical contract holds across macOS/Linux."

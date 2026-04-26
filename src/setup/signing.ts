@@ -18,8 +18,6 @@
 //   - Key distribution (TOFU vs publisher registry). Sidecar embeds the
 //     full public key so verify() is self-contained crypto-wise — trust
 //     decisions live above this module.
-//   - Q2a generation window: today only the exact KINDLY_FILTER_VERSION
-//     is accepted. v0.13 needs N=2 logic before older sigs verify.
 //
 // Sidecar format (JSON, written next to <archive>.kset as <archive>.kset.sig):
 //   {
@@ -46,16 +44,34 @@ import { unpackSetup } from "./unpack.ts";
 import { manifestHash as computeManifestHash } from "./canonical.ts";
 import { assertManifestFilterInvariant, FilterInvariantError } from "./filterCheck.ts";
 
-/** The filter version this build of kindly speaks. Bound into every
- *  signature so v0.13's tightened filter doesn't silently re-validate
- *  v0.12 packages under different rules.
+/** The filter version this build of kindly signs under. Bound into every
+ *  signature so a future tightened filter doesn't silently re-validate
+ *  older packages under different rules.
  *
- *  Q2a: bumps when the filter's behavior changes in any
- *  observable way (new control-byte rejection, different NFC handling,
- *  added classify entries that affect filter_invariant). N=2 generation
- *  window: a verifier on v0.13 accepts filter_version "v0.13.0" and
- *  "v0.12.0"; rejects older. */
+ *  Bumps when filterCheck.ts changes behavior observably: new control-byte
+ *  rejections, different NFC handling, anything that flips a previously-
+ *  passing manifest to failing or vice versa. Pure classify changes
+ *  (e.g. S960 plugins_disabled) do NOT bump — filterCheck walks every
+ *  string uniformly and is independent of classify. */
 export const KINDLY_FILTER_VERSION = "v0.12.0";
+
+/** Q2a generation window. Verifier accepts any sidecar whose
+ *  filter_version is in this list. The build's `KINDLY_FILTER_VERSION`
+ *  (current) is always element 0; the previous generation, if any, is
+ *  element 1.
+ *
+ *  Bump procedure when filterCheck.ts changes behavior:
+ *    1. Bump KINDLY_FILTER_VERSION to the new tag (e.g. "v0.14.0").
+ *    2. Prepend it here; drop the tail if length would exceed 2.
+ *  Concretely: ["v0.14.0", "v0.13.0"] keeps the previous generation as
+ *  a one-release grace window for honest publishers. Three or more
+ *  generations are explicitly out of scope — old filter bugs expire on
+ *  a schedule (see docs/security/99-v0.12-implementation-plan.md §Q2a).
+ *
+ *  Today (v0.12.0 → v0.13.x): only one filter generation has ever
+ *  shipped, so the list has one element. The membership-check shape is
+ *  in place for the eventual second entry. */
+export const ACCEPTED_FILTER_VERSIONS = ["v0.12.0"] as const;
 
 /** Domain-separation prefix in the signing input. Prevents an Ed25519
  *  key reused for kindly from also producing valid signatures under
@@ -87,6 +103,34 @@ export type SigningErrorCode =
     | "UNSUPPORTED_FILTER_VERSION"
     | "UNSUPPORTED_FORMAT"
     | "FILTER_NOT_INVARIANT";
+
+/** True iff `v` is in the N=2 generation window. Pure membership check;
+ *  no version comparison. */
+export function isAcceptedFilterVersion(v: string): boolean {
+    return (ACCEPTED_FILTER_VERSIONS as readonly string[]).includes(v);
+}
+
+/** Numeric `vX.Y.Z` comparator: returns negative / 0 / positive like
+ *  `Array.sort`. Used solely to pick the right error-message hint
+ *  (older-than-window vs. newer-than-build). Unparseable versions sort
+ *  as "older" — a malformed filter_version is already a publisher bug,
+ *  and the older hint ("re-sign with current tools") is the right next
+ *  step regardless. */
+export function compareFilterVersions(a: string, b: string): number {
+    const pa = parseFilterVersion(a);
+    const pb = parseFilterVersion(b);
+    for (let i = 0; i < 3; i++) {
+        const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+        if (d !== 0) return d;
+    }
+    return 0;
+}
+
+function parseFilterVersion(v: string): [number, number, number] {
+    const m = /^v(\d+)\.(\d+)\.(\d+)$/.exec(v);
+    if (!m) return [0, 0, 0];
+    return [Number(m[1]), Number(m[2]), Number(m[3])];
+}
 
 /** Bytes that get fed to Ed25519. Must match exactly between sign and
  *  verify. UTF-8 encoded, newline-terminated, length-implicit-via-prefix
@@ -237,12 +281,20 @@ export function verifySetupArchive(archivePath: string): VerifyResult {
         );
     }
 
-    // Q2a generation window: today the only accepted filter_version is
-    // KINDLY_FILTER_VERSION. When v0.13 lands, accept N=2 generations.
-    if (sidecar.filter_version !== KINDLY_FILTER_VERSION) {
+    // Q2a generation window. Membership check against ACCEPTED_FILTER_VERSIONS
+    // (current + at most one previous, see definition). The error message
+    // distinguishes older-than-window (publisher should re-sign with current
+    // tools) from newer-than-build (user should upgrade kindly) — same
+    // error code, different remediation.
+    if (!isAcceptedFilterVersion(sidecar.filter_version)) {
+        const accepted = ACCEPTED_FILTER_VERSIONS.join(", ");
+        const newer = compareFilterVersions(sidecar.filter_version, KINDLY_FILTER_VERSION) > 0;
+        const hint = newer
+            ? "upgrade kindly — this build is older than the signature's filter generation."
+            : "ask the publisher to re-sign with current kindly tooling — this filter generation has expired.";
         throw new SigningError(
             `signature was made under filter_version=${sidecar.filter_version}, ` +
-            `this build only verifies ${KINDLY_FILTER_VERSION}`,
+            `this build accepts ${accepted}; ${hint}`,
             "UNSUPPORTED_FILTER_VERSION",
         );
     }

@@ -25,7 +25,9 @@ import { hashBytes } from "../../src/setup/canonical.ts";
 import { parseManifest, type SetupManifest } from "../../src/setup/schema.ts";
 import {
     signSetupArchive, verifySetupArchive, SigningError,
-    KINDLY_FILTER_VERSION, buildSigningInput, keyIdFromPublicKey,
+    KINDLY_FILTER_VERSION, ACCEPTED_FILTER_VERSIONS,
+    buildSigningInput, keyIdFromPublicKey,
+    isAcceptedFilterVersion, compareFilterVersions,
     type SidecarSignature,
 } from "../../src/setup/signing.ts";
 
@@ -234,6 +236,34 @@ describe("signing primitive — failure modes", () => {
         }
     });
 
+    test("error message hints at upgrade for newer-than-build filter_version", () => {
+        const { archivePath } = packedArchive();
+        const keys = mkKeyPair();
+        signSetupArchive({ archivePath, ...keys, filterVersion: "v9.9.9" });
+        try {
+            verifySetupArchive(archivePath);
+            throw new Error("expected throw");
+        } catch (e) {
+            expect(e).toBeInstanceOf(SigningError);
+            expect((e as SigningError).message).toContain("upgrade kindly");
+        }
+    });
+
+    test("error message hints at re-sign for older-than-window filter_version", () => {
+        const { archivePath } = packedArchive();
+        const keys = mkKeyPair();
+        // Sign at v0.1.0 — older than every accepted generation.
+        signSetupArchive({ archivePath, ...keys, filterVersion: "v0.1.0" });
+        try {
+            verifySetupArchive(archivePath);
+            throw new Error("expected throw");
+        } catch (e) {
+            expect(e).toBeInstanceOf(SigningError);
+            expect((e as SigningError).message).toContain("re-sign");
+            expect((e as SigningError).message).toContain("expired");
+        }
+    });
+
     test("cross-file signature substitution → MANIFEST_HASH_MISMATCH", () => {
         // Sign archive A. Build a different archive B (different
         // contents → different manifest hash). Drop A's sidecar next to
@@ -287,6 +317,41 @@ describe("signing primitive — failure modes", () => {
             expect(e).toBeInstanceOf(SigningError);
             expect((e as SigningError).code).toBe("INVALID_SIDECAR");
         }
+    });
+});
+
+describe("Q2a — N=2 generation window", () => {
+    test("ACCEPTED_FILTER_VERSIONS contains the current version", () => {
+        expect(ACCEPTED_FILTER_VERSIONS).toContain(KINDLY_FILTER_VERSION);
+    });
+
+    test("ACCEPTED_FILTER_VERSIONS holds at most 2 generations", () => {
+        // The bump procedure caps the window at 2: current + previous.
+        expect(ACCEPTED_FILTER_VERSIONS.length).toBeLessThanOrEqual(2);
+    });
+
+    test("isAcceptedFilterVersion membership", () => {
+        for (const v of ACCEPTED_FILTER_VERSIONS) {
+            expect(isAcceptedFilterVersion(v)).toBe(true);
+        }
+        expect(isAcceptedFilterVersion("v9.9.9")).toBe(false);
+        expect(isAcceptedFilterVersion("v0.1.0")).toBe(false);
+        expect(isAcceptedFilterVersion("")).toBe(false);
+    });
+
+    test("compareFilterVersions: numeric, not lexicographic", () => {
+        // The bug we're avoiding: lex compare of "v0.9.0" vs "v0.12.0"
+        // would say "v0.9.0" is greater because '9' > '1'. Numeric is right.
+        expect(compareFilterVersions("v0.9.0", "v0.12.0")).toBeLessThan(0);
+        expect(compareFilterVersions("v0.12.0", "v0.9.0")).toBeGreaterThan(0);
+        expect(compareFilterVersions("v0.12.0", "v0.12.0")).toBe(0);
+        expect(compareFilterVersions("v1.0.0", "v0.99.99")).toBeGreaterThan(0);
+        expect(compareFilterVersions("v0.12.0", "v0.13.0")).toBeLessThan(0);
+    });
+
+    test("compareFilterVersions: malformed sorts as older", () => {
+        // Malformed → [0,0,0]; v0.12.0 is greater. Documented behavior.
+        expect(compareFilterVersions("garbage", KINDLY_FILTER_VERSION)).toBeLessThan(0);
     });
 });
 

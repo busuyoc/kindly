@@ -111,7 +111,10 @@ describe("replace mode — top-level wipe of USER keys", () => {
         writeManifestFile(manifestPath, makeReplaceManifest({
             settings: { refresh_rate: 2, screen_warmth: 60 },
         }));
-        const code = await main(["setup", "import", manifestPath], env);
+        const code = await main(
+            ["setup", "import", manifestPath, "--accept-sensitive"],
+            env,
+        );
         expect(code).toBe(4);
 
         const after = onDevice(kindle.settingsPath);
@@ -127,7 +130,10 @@ describe("replace mode — top-level wipe of USER keys", () => {
         writeManifestFile(manifestPath, makeReplaceManifest({
             settings: { refresh_rate: 2 },
         }));
-        const code = await main(["setup", "import", manifestPath], env);
+        const code = await main(
+            ["setup", "import", manifestPath, "--accept-sensitive"],
+            env,
+        );
         expect(code).toBe(4);
 
         const after = onDevice(kindle.settingsPath);
@@ -139,7 +145,7 @@ describe("replace mode — top-level wipe of USER keys", () => {
         writeManifestFile(manifestPath, makeReplaceManifest({
             settings: { refresh_rate: 2 },
         }));
-        await main(["setup", "import", manifestPath], env);
+        await main(["setup", "import", manifestPath, "--accept-sensitive"], env);
 
         const after = onDevice(kindle.settingsPath);
         expect(after.lastfile).toBe("/mnt/us/documents/book.epub");
@@ -154,7 +160,7 @@ describe("replace mode — nested maps", () => {
                 kosync: { auto_sync: true },
             },
         }));
-        await main(["setup", "import", manifestPath], env);
+        await main(["setup", "import", manifestPath, "--accept-sensitive"], env);
 
         const after = onDevice(kindle.settingsPath);
         const k = after.kosync as Record<string, unknown>;
@@ -174,7 +180,7 @@ describe("replace mode — nested maps", () => {
         writeManifestFile(manifestPath, makeReplaceManifest({
             settings: { refresh_rate: 2 },
         }));
-        await main(["setup", "import", manifestPath], env);
+        await main(["setup", "import", manifestPath, "--accept-sensitive"], env);
         const after = onDevice(kindle.settingsPath);
         expect(after.kosync).toBeUndefined();
     });
@@ -183,7 +189,7 @@ describe("replace mode — nested maps", () => {
         writeManifestFile(manifestPath, makeReplaceManifest({
             plugins: { disabled: ["SSH"] },
         }));
-        await main(["setup", "import", manifestPath], env);
+        await main(["setup", "import", manifestPath, "--accept-sensitive"], env);
 
         const after = onDevice(kindle.settingsPath);
         const pd = after.plugins_disabled as Record<string, unknown>;
@@ -197,7 +203,7 @@ describe("replace mode — nested maps", () => {
         writeManifestFile(manifestPath, makeReplaceManifest({
             settings: { refresh_rate: 2 },
         }));
-        await main(["setup", "import", manifestPath], env);
+        await main(["setup", "import", manifestPath, "--accept-sensitive"], env);
         expect((onDevice(kindle.settingsPath) as Record<string, unknown>).plugins_disabled).toBeUndefined();
     });
 });
@@ -231,7 +237,10 @@ describe("replace mode — secret denylist still applies", () => {
                 zlibrary_password: "hostile-new-password",
             },
         }));
-        const code = await main(["setup", "import", manifestPath], env);
+        const code = await main(
+            ["setup", "import", manifestPath, "--accept-sensitive"],
+            env,
+        );
         expect(code).toBe(4);
 
         const after = onDevice(kindle.settingsPath);
@@ -285,13 +294,19 @@ describe("replace mode — idempotence", () => {
         writeManifestFile(manifestPath, makeReplaceManifest({
             settings: { refresh_rate: 2, screen_warmth: 60 },
         }));
-        expect(await main(["setup", "import", manifestPath], env)).toBe(4);
+        expect(await main(
+            ["setup", "import", manifestPath, "--accept-sensitive"],
+            env,
+        )).toBe(4);
         const afterFirst = readFileSync(kindle.settingsPath, "utf8");
 
         const out2 = new StringWriter();
         const err2 = new StringWriter();
         const env2 = { ...env, stdout: out2, stderr: err2 };
-        expect(await main(["setup", "import", manifestPath], env2)).toBe(4);
+        expect(await main(
+            ["setup", "import", manifestPath, "--accept-sensitive"],
+            env2,
+        )).toBe(4);
         expect(out2.value).toContain("no changes needed");
         expect(readFileSync(kindle.settingsPath, "utf8")).toBe(afterFirst);
     });
@@ -303,8 +318,12 @@ describe("replace mode — empty manifest", () => {
         // allowed. The diff preview shows all the removals; the user
         // consents by not passing --dry-run.
         writeManifestFile(manifestPath, makeReplaceManifest({}));
-        const code = await main(["setup", "import", manifestPath], env);
-        expect(code).toBe(0);
+        const code = await main(
+            ["setup", "import", manifestPath, "--accept-sensitive"],
+            env,
+        );
+        // plugins_disabled removal is a sensitive change (S960) — exit 4.
+        expect(code).toBe(4);
 
         const after = onDevice(kindle.settingsPath);
         // All USER gone.

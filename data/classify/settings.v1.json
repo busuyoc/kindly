@@ -66,6 +66,7 @@
     "ota_server":                   {"change": "sensitive-network"},
     "pinpadlock_message":           {"exfil": "secret"},
     "pinpadlock_pin_code":          {"exfil": "secret"},
+    "plugins_disabled":             {"change": "sensitive-service"},
     "quickstart_shown_version":     {"hygiene": "ephemeral"},
     "quote_deck_pos":               {"hygiene": "ephemeral"},
     "screensaver_dir":              {"change": "sensitive-fs"},

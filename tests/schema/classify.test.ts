@@ -37,9 +37,9 @@ describe("classifyKey", () => {
     });
 
     test("user settings fall through", () => {
-        expect(classifyKey("plugins_disabled")).toBe("USER");
         expect(classifyKey("cre_header_clock")).toBe("USER");
         expect(classifyKey("footer")).toBe("USER");
+        expect(classifyKey("show_battery")).toBe("USER");
     });
 });
 
@@ -236,7 +236,11 @@ describe("nested path helpers over axes", () => {
         expect(isSensitiveKeyName("extra_plugin_paths")).toBe(true);
         expect(isSensitiveKeyName("SSH_port")).toBe(true);
         expect(isSensitiveKeyName("kosync.custom_server")).toBe(true);
-        expect(isSensitiveKeyName("plugins_disabled")).toBe(false);
+        // plugins_disabled is sensitive-service since S960 (2026-04-26):
+        // its keys carry plugin names from imported manifests, which
+        // attacker-author can shape with control bytes / OSC payloads.
+        expect(isSensitiveKeyName("plugins_disabled")).toBe(true);
+        expect(isSensitiveKeyName("footer")).toBe(false);
     });
 });
 

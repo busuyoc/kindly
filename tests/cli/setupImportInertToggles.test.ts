@@ -75,8 +75,13 @@ describe("setup import — inert plugin toggles", () => {
         const p = join(workdir, "m.kset.yaml");
         writeManifest(p, ["calendar"]);
 
-        const code = await main(["setup", "import", p, "--dry-run"], env);
-        expect(code).toBe(0);
+        // plugins_disabled is sensitive-service (S960), so import emits a
+        // SENSITIVE warning even in dry-run — exit 4 rather than 0.
+        const code = await main(
+            ["setup", "import", p, "--dry-run", "--accept-sensitive"],
+            env,
+        );
+        expect(code).toBe(4);
         expect(err.value).toMatch(/toggle.*inert/i);
         expect(err.value).toContain("calendar");
         expect(err.value).toContain("calendar.koplugin");
@@ -88,8 +93,11 @@ describe("setup import — inert plugin toggles", () => {
         const p = join(workdir, "m.kset.yaml");
         writeManifest(p, ["SSH", "calendar"]);
 
-        const code = await main(["setup", "import", p, "--dry-run"], env);
-        expect(code).toBe(0);
+        const code = await main(
+            ["setup", "import", p, "--dry-run", "--accept-sensitive"],
+            env,
+        );
+        expect(code).toBe(4);
         expect(err.value).not.toMatch(/inert/i);
     });
 
@@ -99,8 +107,11 @@ describe("setup import — inert plugin toggles", () => {
         const p = join(workdir, "m.kset.yaml");
         writeManifest(p, ["SSH", "calendar", "hello"]);
 
-        const code = await main(["setup", "import", p, "--dry-run"], env);
-        expect(code).toBe(0);
+        const code = await main(
+            ["setup", "import", p, "--dry-run", "--accept-sensitive"],
+            env,
+        );
+        expect(code).toBe(4);
         expect(err.value).toContain("calendar");
         expect(err.value).toContain("hello");
         // SSH is installed — should not be flagged.

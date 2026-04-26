@@ -115,6 +115,53 @@ describe("controlByteHits — shape robustness", () => {
     });
 });
 
+describe("controlByteHits — S960 key-byte inspection at classified parents", () => {
+    test("flags ESC byte in plugins_disabled key (manifest plugins.disabled flatten)", () => {
+        // Manifest `plugins: { disabled: ["evil\x1bname"] }` flattens to
+        // `plugins_disabled = { "evil\x1bname": true }`. The plugin name
+        // is in the KEY of the dict, not the value (value is `true`).
+        const r = controlByteHits(ctxWith({
+            plugins_disabled: { "evil\x1bname": true },
+        }));
+        expect(r.hits.length).toBe(1);
+        expect(r.hits[0]!.path).toBe("plugins_disabled.evil\x1bname");
+        expect(r.hits[0]!.class).toBe("sensitive");
+        expect(r.hits[0]!.bytes).toEqual(["0x1B"]);
+    });
+
+    test("flags multiple control bytes across multiple keys at classified parent", () => {
+        const r = controlByteHits(ctxWith({
+            plugins_disabled: {
+                "ok": true,
+                "bad\x07name": true,
+                "another\rname": true,
+            },
+        }));
+        expect(r.hits.length).toBe(2);
+        expect(r.hits.map((h) => h.bytes)).toEqual([
+            ["0x07"],
+            ["0x0D"],
+        ]);
+    });
+
+    test("does not flag clean keys at classified parent (no FP)", () => {
+        const r = controlByteHits(ctxWith({
+            plugins_disabled: { SSH: true, kosync: true, calibre: true },
+        }));
+        expect(r.hits).toEqual([]);
+    });
+
+    test("does not flag keys at unclassified parent (top-level user objects)", () => {
+        // `cre_header_chunk_marks` is USER-class. Even an ESC in its keys
+        // is not gated — no on-device renderer reads CRE chunk-mark dict
+        // keys as text.
+        const r = controlByteHits(ctxWith({
+            cre_header_chunk_marks: { "x\x1by": 1 },
+        }));
+        expect(r.hits).toEqual([]);
+    });
+});
+
 describe("CONTROL_BYTES_IN_VALUE gate", () => {
     test("passes when producer yields no hits", () => {
         const ctx: GateContext = {

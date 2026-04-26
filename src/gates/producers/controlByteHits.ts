@@ -42,6 +42,12 @@
 // `extra_plugin_paths`). We walk arbitrarily deep — classify by joining
 // keys with `.`, treating array indices as path leaves so per-element
 // strings inherit the parent's classification.
+//
+// Key-byte inspection (S960): when descending INTO an object whose own
+// path is classified, each entry KEY is also user-controlled data —
+// `plugins_disabled.<plugin_name>` carries the plugin name in the key,
+// not the value (which is just `true`). We scan keys for forbidden
+// bytes against the parent's classification at descent time.
 
 import {
     exfilClass, changeClass, isCodeExecAdjacent,
@@ -123,8 +129,18 @@ function walk(
         return;
     }
     if (value !== null && typeof value === "object") {
+        // S960: if the parent path is classified, each entry KEY is
+        // user-controlled data at the parent's classification level. Scan
+        // key bytes against the parent before recursing into the value.
+        const parentClass = classifyForBytes(classifyPath);
         for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
             const next = path === "" ? k : `${path}.${k}`;
+            if (parentClass !== null) {
+                const keyBytes = findForbiddenBytes(k);
+                if (keyBytes.length > 0) {
+                    hits.push({ path: next, class: parentClass, bytes: keyBytes });
+                }
+            }
             walk(v, next, next, hits);
         }
         return;

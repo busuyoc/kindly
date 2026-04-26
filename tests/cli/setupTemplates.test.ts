@@ -357,9 +357,13 @@ describe("setup export — --template", () => {
         ], env);
         expect(exportCode).toBe(0);
 
-        // 2. Import onto the fake Kindle.
-        const importCode = await main(["setup", "import", ksetPath], env);
-        expect(importCode).toBe(0);
+        // 2. Import onto the fake Kindle. The distraction-free template
+        // sets plugins_disabled (sensitive-service per S960) — accept it.
+        const importCode = await main(
+            ["setup", "import", ksetPath, "--accept-sensitive"],
+            env,
+        );
+        expect(importCode).toBe(4);
 
         // 3. The device's settings now carry the template's keys.
         const after = readFileSync(kindle.settingsPath, "utf8");

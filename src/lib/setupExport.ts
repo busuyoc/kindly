@@ -25,6 +25,7 @@ import { getTemplate, listTemplates, type Template } from "../setup/templates.ts
 import type { SetupExportResult } from "../types/results.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
+import { computeMountFingerprint, isFingerprintEmpty } from "../device/fingerprint.ts";
 
 export interface SetupExportOptions {
     name: string;
@@ -208,10 +209,11 @@ export function executeSetupExport(
             writeFileSync(outPath, canonical);
             bytesWritten = Buffer.byteLength(canonical);
         }
+        const fp = mount ? computeMountFingerprint(mount) : null;
         appendHistoryEntry(env, "setup:export", {
             output_path: outPath,
             setup_id: id,
-        });
+        }, fp && !isFingerprintEmpty(fp) ? { mount: fp } : undefined);
     } else if (!isFat) {
         // Dry-run byte count is still informative for lean exports.
         bytesWritten = Buffer.byteLength(canonicalizeManifest(manifest));

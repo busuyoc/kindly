@@ -112,9 +112,17 @@ export const STRICT_SENSITIVE_CHANGES: GateDefinition = {
 };
 
 /**
- * SENSITIVE_REQUIRES_ACK — Setup changes include SENSITIVE-class keys
+ * SENSITIVE_REQUIRES_ACK — a mutation introduces SENSITIVE-class keys
  * (network endpoints, SSH, code-exec, filesystem redirects, service
  * autostart, debug).
+ *
+ * Fires on every boundary that takes externally-authored bytes and
+ * lands them on device: setup import, plain apply, and restore. Lead 7
+ * (S600/S601) closure: previously hidden behind --untrusted-yaml at
+ * apply / unguarded at restore — now always-on. The user's own kindly
+ * pull → kindly apply round-trip yields zero hits (no diff means no
+ * sensitive change), so the gate is invisible to the legitimate
+ * trusted-author flow.
  *
  * Bypass is more nuanced than the PLUGINS/PATCHES gates:
  *   --accept-sensitive       → blanket ack; all hits pass
@@ -131,15 +139,17 @@ export const STRICT_SENSITIVE_CHANGES: GateDefinition = {
 export const SENSITIVE_REQUIRES_ACK: GateDefinition = {
     id: "SENSITIVE_REQUIRES_ACK",
     category: "CONSENT",
-    appliesAt: ["import", "apply"],  // apply side: behind --untrusted-yaml (C1c)
+    appliesAt: ["import", "apply", "restore"],
     requires: ["sensitiveHits"],
     firesIn: "non-dry-run",
     bypassFlags: ["--accept-sensitive"],
     errorCode: "SENSITIVE_REQUIRES_ACK",
     remediation: [
-        { text: "Review with: kindly setup inspect <file>" },
-        { text: "Accept all changes.", command: "kindly setup import <file> --accept-sensitive" },
-        { text: "Accept specific keys.", command: "kindly setup import <file> --accept-key=<key,key,...>" },
+        // Boundary-neutral: this gate fires at import, apply, and restore.
+        // The --accept flags are spelled the same at every boundary, so we
+        // keep the remediation generic instead of hardcoding `setup import`.
+        { text: "Review the affected keys before accepting (kindly diff, or kindly setup inspect <file> for an import)." },
+        { text: "Pass --accept-sensitive to ack all changes, or --accept-key=<key,key,...> to ack specific keys." },
     ],
     check: (ctx) => {
         const hits = ctx.producers.sensitiveHits as string[];

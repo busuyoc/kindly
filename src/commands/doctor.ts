@@ -22,10 +22,13 @@
 
 import { parseArgs, type FlagSpecs } from "../cli/args.ts";
 import type { CliEnv } from "../cli/env.ts";
-import { dim, info, paint } from "../cli/log.ts";
-import type { DoctorResult, DoctorCheck, DoctorSeverity } from "../types/results.ts";
+import { dim, info, ok, paint, warn } from "../cli/log.ts";
+import type {
+    DoctorResult, DoctorCheck, DoctorSeverity, DoctorRepairResult,
+} from "../types/results.ts";
 import { emitJson } from "../cli/json.ts";
 import { executeDoctor } from "../lib/doctor.ts";
+import { executeDoctorRepair } from "../lib/doctorRepair.ts";
 
 export { executeDoctor };
 
@@ -33,6 +36,25 @@ const FLAGS = {
     mount: {
         type: "string",
         description: "path to a mounted Kindle (auto-detected by default)",
+    },
+    repair: {
+        type: "boolean",
+        default: false,
+        description:
+            "recover from an interrupted apply (.old survives, main absent) " +
+            "and sweep orphan settings.reader.lua.tmp.* files. Mutating.",
+    },
+    "dry-run": {
+        type: "boolean",
+        default: false,
+        description: "with --repair, report what would change without writing",
+    },
+    "force-mount": {
+        type: "boolean",
+        default: false,
+        description:
+            "with --repair, proceed even if an in-progress marker's " +
+            "fingerprint differs from the currently-attached Kindle",
     },
 } as const satisfies FlagSpecs;
 
@@ -91,6 +113,16 @@ export async function runDoctor(argv: readonly string[], env: CliEnv): Promise<n
     const { flags } = parseArgs(argv, FLAGS);
     if (flags.mount) env = { ...env, mountOverride: flags.mount };
 
+    if (flags.repair) {
+        const result = executeDoctorRepair({
+            dryRun: flags["dry-run"],
+            forceMount: flags["force-mount"],
+        }, env);
+        if (env.jsonMode) emitJson(env, "doctor:repair", result);
+        else renderDoctorRepair(result, env);
+        return 0;
+    }
+
     const result = executeDoctor(env);
     if (env.jsonMode) emitJson(env, "doctor", result);
     else renderDoctor(result, env);
@@ -99,13 +131,55 @@ export async function runDoctor(argv: readonly string[], env: CliEnv): Promise<n
     return hasWarnings ? 4 : 0;
 }
 
+export function renderDoctorRepair(result: DoctorRepairResult, env: CliEnv): void {
+    if (result.mode === "no-op") {
+        info(env, "doctor --repair: nothing to recover.");
+        return;
+    }
+
+    const verb = result.mode === "dry-run" ? "would " : "";
+
+    switch (result.settingsRecovery) {
+        case "promoted-tmp":
+            ok(env, `${verb}promote a hash-matching .tmp to ${result.settingsPath}`);
+            info(env, dim(env, "  the interrupted apply's intended bytes — completing the write."));
+            break;
+        case "restored-old":
+            ok(env, `${verb}restore ${result.settingsPath}.old back to ${result.settingsPath}`);
+            info(env, dim(env, "  the interrupted apply is undone — device returns to the prior state."));
+            break;
+        case "none":
+            // No step-4 recovery, but we may still have swept tmps / cleared markers.
+            break;
+    }
+
+    if (result.sweptTmps.length > 0) {
+        ok(env, `${verb}remove ${result.sweptTmps.length} orphan .tmp file(s):`);
+        for (const t of result.sweptTmps.slice(0, 8)) info(env, dim(env, `    ${t}`));
+        if (result.sweptTmps.length > 8) {
+            info(env, dim(env, `    ... and ${result.sweptTmps.length - 8} more`));
+        }
+    }
+    if (result.clearedMarkers.length > 0) {
+        ok(env, `${verb}clear ${result.clearedMarkers.length} in-progress marker(s)`);
+    }
+
+    if (result.mode === "dry-run") {
+        info(env, "");
+        info(env, dim(env, "(--dry-run — nothing written)"));
+    } else {
+        warn(env, "restart KOReader (or your Kindle) for changes to take effect.");
+    }
+}
+
 export const doctorHelp = `
 kindly doctor — check that kindly can read and trust the device's state.
 
 usage: kindly doctor [--mount <path>]
+       kindly doctor --repair [--dry-run] [--force-mount] [--mount <path>]
 
-Read-only. Emits findings grouped by category (mount, settings, schema,
-catalog, plugins, disk, secrets) — see 90-w34-doctor-output-spec.md.
+Read-only by default. Emits findings grouped by category (mount, settings,
+schema, catalog, plugins, disk, secrets) — see 90-w34-doctor-output-spec.md.
 
 Each finding carries one of four severities:
   ● fatal    kindly cannot operate (mount missing, settings unreadable)
@@ -120,4 +194,15 @@ Exit codes:
 
 Also lists on-device secret keys (passwords, PINs) that kindly won't sync,
 so you can rescue them to a password manager before a factory reset.
+
+--repair (mutating)
+  Recover from a SIGKILL'd \`kindly apply\` / \`kindly setup import\`:
+    - if settings.reader.lua is missing but .old survives, promote a
+      hash-matching .tmp into place (or restore .old if no tmp matches);
+    - sweep orphan settings.reader.lua.tmp.<pid>.<rand> files in the
+      koreader/ dir;
+    - clear processed in-progress markers under .kindly/in-progress/.
+  Refuses to act if any in-progress marker's mount fingerprint differs
+  from the currently-attached Kindle (override with --force-mount).
+  Pair with --dry-run to preview.
 `.trim();

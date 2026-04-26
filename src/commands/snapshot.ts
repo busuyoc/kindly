@@ -22,6 +22,7 @@ import type { SnapshotResult } from "../types/results.ts";
 import { emitJson } from "../cli/json.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
 import { withLock } from "../fs/lockfile.ts";
+import { computeMountFingerprint, isFingerprintEmpty } from "../device/fingerprint.ts";
 
 const FLAGS = {
     output: {
@@ -69,9 +70,13 @@ function executeSnapshotLocked(opts: SnapshotOptions, env: CliEnv): SnapshotResu
         outputPath,
     });
 
+    const fp = computeMountFingerprint(mount);
     appendHistoryEntry(env, "snapshot",
         { archive_path: res.archivePath },
-        opts.label ? { label: opts.label } : undefined,
+        {
+            ...(opts.label ? { label: opts.label } : {}),
+            ...(isFingerprintEmpty(fp) ? {} : { mount: fp }),
+        },
     );
 
     return {

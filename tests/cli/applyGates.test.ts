@@ -148,9 +148,14 @@ describe("apply — CODE_EXEC_ADJACENT_REQUIRES_ACK (C1a)", () => {
         expect(err.value).toContain("cover_image_path");
     });
 
-    test("--accept-code-exec allows the change through", async () => {
+    test("--accept-code-exec + --accept-sensitive allows the change through", async () => {
+        // SSH_port is both code-exec-adjacent AND SENSITIVE-class, so the
+        // promoted (Lead 7) SENSITIVE gate also fires — both bypasses needed.
         writeYaml("SSH_port: 2222\n");
-        const code = await main(["apply", "--accept-code-exec"], env);
+        const code = await main(
+            ["apply", "--accept-code-exec", "--accept-sensitive"],
+            env,
+        );
         expect(code).toBe(0);
         const after = readFileSync(kindle.settingsPath, "utf8");
         expect(after).toContain("2222");
@@ -178,74 +183,58 @@ describe("apply — CODE_EXEC_ADJACENT_REQUIRES_ACK (C1a)", () => {
 });
 
 // ============================================================================
-// C1c: --untrusted-yaml activates SENSITIVE_REQUIRES_ACK at apply boundary +
-// new DESTRUCTIVE_YAML_SHAPE gate. Default off — hand-authored kindly.yaml
-// runs without these.
+// Lead 7 / S600 closure: SENSITIVE_REQUIRES_ACK + DESTRUCTIVE_YAML_SHAPE
+// fire on every apply (no --untrusted-yaml gating). The pull → apply
+// round-trip stays silent because pull writes the device's own bytes
+// (no SENSITIVE diff to consent to).
 // ============================================================================
 
-describe("apply — SENSITIVE_REQUIRES_ACK on apply (C1c, behind --untrusted-yaml)", () => {
-    test("ota_server change passes WITHOUT --untrusted-yaml (default trusted mode)", async () => {
+describe("apply — SENSITIVE_REQUIRES_ACK on apply (always-on)", () => {
+    test("ota_server change BLOCKS by default", async () => {
         writeYaml("ota_server: \"https://attacker.example/koreader\"\n");
         const code = await main(["apply"], env);
-        expect(code).toBe(0);
-    });
-
-    test("ota_server change BLOCKS under --untrusted-yaml", async () => {
-        writeYaml("ota_server: \"https://attacker.example/koreader\"\n");
-        const code = await main(["apply", "--untrusted-yaml"], env);
         expect(code).toBe(3);
         expect(err.value).toContain("ota_server");
         expect(err.value).toContain("security-sensitive");
     });
 
-    test("--untrusted-yaml + --accept-sensitive lets it through", async () => {
+    test("--accept-sensitive lets it through", async () => {
         writeYaml("ota_server: \"https://attacker.example/koreader\"\n");
-        const code = await main(
-            ["apply", "--untrusted-yaml", "--accept-sensitive"],
-            env,
-        );
+        const code = await main(["apply", "--accept-sensitive"], env);
         expect(code).toBe(0);
     });
 
-    test("--untrusted-yaml + --accept-key=ota_server lets it through", async () => {
+    test("--accept-key=ota_server lets it through", async () => {
         writeYaml("ota_server: \"https://attacker.example/koreader\"\n");
-        const code = await main(
-            ["apply", "--untrusted-yaml", "--accept-key=ota_server"],
-            env,
-        );
+        const code = await main(["apply", "--accept-key=ota_server"], env);
         expect(code).toBe(0);
     });
 
-    test("--dry-run --untrusted-yaml does not block (firesIn: non-dry-run)", async () => {
+    test("--dry-run does not block (firesIn: non-dry-run)", async () => {
         writeYaml("ota_server: \"https://attacker.example/koreader\"\n");
-        const code = await main(
-            ["apply", "--dry-run", "--untrusted-yaml"],
-            env,
-        );
+        const code = await main(["apply", "--dry-run"], env);
+        expect(code).toBe(0);
+    });
+
+    test("plain USER-only edit does not trip the gate", async () => {
+        writeYaml("refresh_rate: 8\n");
+        const code = await main(["apply"], env);
         expect(code).toBe(0);
     });
 });
 
-describe("apply — DESTRUCTIVE_YAML_SHAPE (C1c)", () => {
-    test("does NOT fire on a small change without --untrusted-yaml", async () => {
+describe("apply — DESTRUCTIVE_YAML_SHAPE (always-on)", () => {
+    test("does NOT fire on a small change", async () => {
         writeYaml("refresh_rate: 5\n");
         const code = await main(["apply"], env);
         expect(code).toBe(0);
     });
 
-    test("does NOT fire when removed-USER-keys < threshold (5)", async () => {
-        // Default device has refresh_rate, zlibrary_password, kosync.{...}.
-        // No top-level USER removals — threshold not reached.
-        writeYaml("refresh_rate: 5\n");
-        const code = await main(["apply", "--untrusted-yaml"], env);
-        expect(code).toBe(0);
-    });
-
     test("plain user-edit YAML adding many keys is NOT destructive (only removals count)", async () => {
-        // Five additions are not destructive — only `removed` kind contributes
-        // to the cap. This test guards the semantic: the gate is for
-        // mass-removal, not mass-change. Keys chosen are USER-class (no
-        // sensitive change-class) so SENSITIVE_REQUIRES_ACK doesn't fire.
+        // Additions never count toward the cap; only `removed` does. The
+        // test guards the semantic — gate is for mass-removal, not mass-
+        // change. All keys are USER-class so SENSITIVE_REQUIRES_ACK is
+        // also silent.
         writeYaml(
             "refresh_rate: 5\n" +
             "page_overlap_pixels: 24\n" +
@@ -253,7 +242,7 @@ describe("apply — DESTRUCTIVE_YAML_SHAPE (C1c)", () => {
             "auto_save_paused_counter_minute: 30\n" +
             "screen_warmth: 60\n",
         );
-        const code = await main(["apply", "--untrusted-yaml"], env);
+        const code = await main(["apply"], env);
         expect(code).toBe(0);
     });
 });

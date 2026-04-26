@@ -89,6 +89,8 @@ export const ErrorCodes = {
     LOCK_HELD:            "LOCK_HELD",
     CONTROL_BYTES_IN_VALUE: "CONTROL_BYTES_IN_VALUE",
     SETUP_SIGNATURE_INVALID: "SETUP_SIGNATURE_INVALID",
+    MOUNT_FINGERPRINT_MISMATCH: "MOUNT_FINGERPRINT_MISMATCH",
+    SETTINGS_INTERRUPTED_APPLY: "SETTINGS_INTERRUPTED_APPLY",
 } as const;
 
 export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];
@@ -106,4 +108,5 @@ export const POLICY_BLOCK_CODES = new Set<string>([
     ErrorCodes.YAML_SHAPE_BLOCKED,
     ErrorCodes.DESTRUCTIVE_YAML_SHAPE,
     ErrorCodes.CONTROL_BYTES_IN_VALUE,
+    ErrorCodes.MOUNT_FINGERPRINT_MISMATCH,
 ]);

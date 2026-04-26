@@ -37,6 +37,20 @@ const WHITELIST: ReadonlyArray<{ file: string; code: string; reason: string }> =
         code: "SCHEMA_VIOLATION",
         reason: "setupExport --strict schema check; local write, not a trust-boundary policy decision",
     },
+    {
+        // doctor --repair (C10c) compares an on-disk in-progress marker's
+        // recorded mount fingerprint against the current mount before
+        // restoring/promoting bytes. The shape is identical to rollback's
+        // MOUNT_FINGERPRINT_MATCHES gate, but the surface is recovery of
+        // bytes ALREADY on the device, not a fresh trust-boundary
+        // crossing. Adding a "doctor:repair" GateBoundary just for this
+        // one check would route the entire repair flow through the gate
+        // orchestrator for no observability benefit; recovery decisions
+        // are already audited via the appended rollback history entry.
+        file: "src/lib/doctorRepair.ts",
+        code: "MOUNT_FINGERPRINT_MISMATCH",
+        reason: "doctor --repair refuses cross-device recovery; identical contract to MOUNT_FINGERPRINT_MATCHES gate, applied to on-disk markers (no new trust boundary)",
+    },
 ];
 
 function isWhitelisted(hit: { file: string; code: string }): boolean {

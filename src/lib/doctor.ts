@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { exists, readText, statFollow } from "../fs/safeRead.ts";
+import { detectInterruptedApply } from "../fs/interruptedApply.ts";
 import { parseSettingsFile, LuaParseError } from "../lua/reader.ts";
 import { classifyKey, isSecretPath } from "../schema/classify.ts";
 import type { LuaValue } from "../lua/writer.ts";
@@ -70,6 +71,22 @@ export function executeDoctor(env: CliEnv, opts: DoctorOptions = {}): DoctorResu
 
     const settingsPath = mount.settingsPath;
     if (!exists(settingsPath, "derived-from-mount")) {
+        const interrupted = detectInterruptedApply(settingsPath);
+        if (interrupted) {
+            // C10b: step-4 of safeWrite was interrupted. KOReader still
+            // boots from .old; kindly read paths ENOENT until --repair
+            // promotes .old back into place.
+            checks.push({
+                id: "settings_interrupted_apply", category: "settings",
+                severity: "fatal", ok: false,
+                label: "settings.reader.lua interrupted apply",
+                detail:
+                    `${settingsPath} is missing but ${interrupted.oldPath} survives — ` +
+                    "a previous kindly apply / setup import was interrupted between " +
+                    "rename steps. Run `kindly doctor --repair` to recover.",
+            });
+            return finalize(checks, []);
+        }
         checks.push({
             id: "settings_present", category: "settings",
             severity: "fatal", ok: false,

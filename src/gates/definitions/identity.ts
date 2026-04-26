@@ -6,6 +6,11 @@
 
 import type { GateDefinition } from "../types.ts";
 import type { ManifestIdentity } from "../producers/manifestIdentity.ts";
+import {
+    compareFingerprints,
+    isFingerprintEmpty,
+    type MountFingerprint,
+} from "../../device/fingerprint.ts";
 
 /**
  * MANIFEST_HASH_ASSERT — W34a.
@@ -43,5 +48,55 @@ export const MANIFEST_HASH_ASSERT: GateDefinition = {
             };
         }
         return { kind: "pass" };
+    },
+};
+
+/**
+ * MOUNT_FINGERPRINT_MATCHES — C10a / S1390.
+ *
+ * `kindly rollback --to N` resolves a snapshot via the history entry
+ * at index N. The recorded entry carries the mount fingerprint of the
+ * physical Kindle the original mutation hit (see device/fingerprint.ts).
+ * If the currently-attached Kindle's fingerprint differs, refuse:
+ * blindly restoring snapshot bytes from device A onto device B
+ * silently overwrites B's settings.
+ *
+ * Treats null fields on either side as "no signal" — pre-C10a entries
+ * have no recorded fingerprint at all (gate passes) and a Kindle that
+ * doesn't expose any of the three anchors degrades to today's
+ * unfingerprinted behavior. The gate fires only when at least one
+ * field on both sides has signal AND they differ.
+ *
+ * Bypass: --force-mount. Intended for the legitimate case where
+ * KOReader was upgraded between original mutation and rollback (the
+ * koreader_version + anchor_mtime change but the Kindle is the same
+ * physical device).
+ */
+export const MOUNT_FINGERPRINT_MATCHES: GateDefinition = {
+    id: "MOUNT_FINGERPRINT_MATCHES",
+    category: "IDENTITY",
+    appliesAt: ["rollback"],
+    requires: [],
+    firesIn: "non-dry-run",
+    bypassFlags: ["--force-mount"],
+    errorCode: "MOUNT_FINGERPRINT_MISMATCH",
+    remediation: [
+        { text: "Connect the original Kindle and re-run." },
+        { text: "If you upgraded KOReader between the original mutation and now, override with --force-mount." },
+    ],
+    check: (ctx) => {
+        const recorded = ctx.opts.recordedMount as MountFingerprint | undefined;
+        const current = ctx.opts.currentMount as MountFingerprint | undefined;
+        if (!recorded || isFingerprintEmpty(recorded) || !current) {
+            return { kind: "pass" };
+        }
+        const cmp = compareFingerprints(recorded, current);
+        if (cmp.match) return { kind: "pass" };
+        return {
+            kind: "block",
+            message:
+                "the currently-attached Kindle does not match the one this " +
+                `snapshot was taken from:\n  ${cmp.differences.join("\n  ")}`,
+        };
     },
 };

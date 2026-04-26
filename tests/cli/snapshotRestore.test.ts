@@ -227,7 +227,10 @@ describe("restore", () => {
         expect(readFileSync(settingsPath, "utf8")).toBe(before);
     });
 
-    test("--accept-code-exec lets the restore proceed (C1b)", async () => {
+    test("--accept-code-exec + --accept-sensitive lets the restore proceed", async () => {
+        // SSH_port is both code-exec-adjacent AND SENSITIVE-class. Lead 7
+        // closure promoted SENSITIVE_REQUIRES_ACK to the restore boundary,
+        // so both bypasses are needed.
         const stage = mkdtempSync(join(tmpdir(), "kindly-c1b-stage-"));
         writeFileSync(join(stage, "settings.reader.lua"),
             `return {\n    ["SSH_port"] = 2222,\n}\n`);
@@ -235,7 +238,10 @@ describe("restore", () => {
         spawnSync("tar", ["-czf", archive, "-C", stage,
             "settings.reader.lua"], { encoding: "utf8" });
 
-        const code = await main(["restore", archive, "--accept-code-exec"], env);
+        const code = await main(
+            ["restore", archive, "--accept-code-exec", "--accept-sensitive"],
+            env,
+        );
         expect(code).toBe(0);
         const settingsPath = join(fakeKindle, "koreader", "settings.reader.lua");
         expect(readFileSync(settingsPath, "utf8")).toContain("SSH_port");
@@ -279,6 +285,115 @@ describe("restore", () => {
             "settings.reader.lua"], { encoding: "utf8" });
 
         const code = await main(["restore", archive], env);
+        expect(code).toBe(0);
+    });
+
+    // Lead 7 closure: SENSITIVE_REQUIRES_ACK + DESTRUCTIVE_YAML_SHAPE
+    // promoted to the restore boundary. Previously restore extracted
+    // archive bytes byte-exact with no classify check (S601, S606).
+
+    test("SENSITIVE-only key (ota_server) blocks without --accept-sensitive", async () => {
+        const stage = mkdtempSync(join(tmpdir(), "kindly-restore-sens-"));
+        writeFileSync(join(stage, "settings.reader.lua"),
+            `return {\n    ["ota_server"] = "https://attacker.example/koreader",\n}\n`);
+        const archive = join(workdir, "sens.tar.gz");
+        spawnSync("tar", ["-czf", archive, "-C", stage,
+            "settings.reader.lua"], { encoding: "utf8" });
+
+        const code = await main(["restore", archive], env);
+        expect(code).toBe(3);
+        expect(stderr.value).toContain("ota_server");
+        expect(stderr.value).toContain("security-sensitive");
+        const settingsPath = join(fakeKindle, "koreader", "settings.reader.lua");
+        expect(readFileSync(settingsPath, "utf8")).toBe("return { a = 1 }\n");
+    });
+
+    test("--accept-sensitive lets a SENSITIVE-only restore through", async () => {
+        const stage = mkdtempSync(join(tmpdir(), "kindly-restore-sens-"));
+        writeFileSync(join(stage, "settings.reader.lua"),
+            `return {\n    ["ota_server"] = "https://attacker.example/koreader",\n}\n`);
+        const archive = join(workdir, "sens-ok.tar.gz");
+        spawnSync("tar", ["-czf", archive, "-C", stage,
+            "settings.reader.lua"], { encoding: "utf8" });
+
+        const code = await main(["restore", archive, "--accept-sensitive"], env);
+        expect(code).toBe(0);
+    });
+
+    test("--accept-key=ota_server lets only that key through", async () => {
+        const stage = mkdtempSync(join(tmpdir(), "kindly-restore-sens-"));
+        writeFileSync(join(stage, "settings.reader.lua"),
+            `return {\n    ["ota_server"] = "https://attacker.example/koreader",\n}\n`);
+        const archive = join(workdir, "sens-key.tar.gz");
+        spawnSync("tar", ["-czf", archive, "-C", stage,
+            "settings.reader.lua"], { encoding: "utf8" });
+
+        const code = await main(
+            ["restore", archive, "--accept-key=ota_server"], env);
+        expect(code).toBe(0);
+    });
+
+    test("--dry-run skips the SENSITIVE gate (firesIn: non-dry-run)", async () => {
+        const stage = mkdtempSync(join(tmpdir(), "kindly-restore-sens-"));
+        writeFileSync(join(stage, "settings.reader.lua"),
+            `return {\n    ["ota_server"] = "https://attacker.example/koreader",\n}\n`);
+        const archive = join(workdir, "sens-dry.tar.gz");
+        spawnSync("tar", ["-czf", archive, "-C", stage,
+            "settings.reader.lua"], { encoding: "utf8" });
+
+        const code = await main(["restore", archive, "--dry-run"], env);
+        expect(code).toBe(0);
+    });
+
+    test("DESTRUCTIVE_YAML_SHAPE blocks an archive that omits ≥5 USER keys", async () => {
+        // Seed device with 6 USER keys; archive has 0 of them. Restore is
+        // additive (tar replaces file-by-file, doesn't delete), but the
+        // diff sees 6 USER removals which is what the gate cares about —
+        // the archive is logically requesting that mass-removal shape.
+        const settingsPath = join(fakeKindle, "koreader", "settings.reader.lua");
+        writeFileSync(settingsPath,
+            `return {\n` +
+            `    ["refresh_rate"] = 2,\n` +
+            `    ["page_overlap_pixels"] = 24,\n` +
+            `    ["show_hidden"] = true,\n` +
+            `    ["screen_warmth"] = 60,\n` +
+            `    ["auto_save_paused_counter_minute"] = 30,\n` +
+            `    ["night_mode"] = false,\n` +
+            `}\n`);
+
+        const stage = mkdtempSync(join(tmpdir(), "kindly-restore-destr-"));
+        writeFileSync(join(stage, "settings.reader.lua"),
+            `return {\n    ["zzz_unrelated"] = 1,\n}\n`);
+        const archive = join(workdir, "destr.tar.gz");
+        spawnSync("tar", ["-czf", archive, "-C", stage,
+            "settings.reader.lua"], { encoding: "utf8" });
+
+        const code = await main(["restore", archive], env);
+        expect(code).toBe(3);
+        expect(stderr.value).toMatch(/would remove .* USER key/);
+    });
+
+    test("--accept-destructive lets the mass-removal restore through", async () => {
+        const settingsPath = join(fakeKindle, "koreader", "settings.reader.lua");
+        writeFileSync(settingsPath,
+            `return {\n` +
+            `    ["refresh_rate"] = 2,\n` +
+            `    ["page_overlap_pixels"] = 24,\n` +
+            `    ["show_hidden"] = true,\n` +
+            `    ["screen_warmth"] = 60,\n` +
+            `    ["auto_save_paused_counter_minute"] = 30,\n` +
+            `    ["night_mode"] = false,\n` +
+            `}\n`);
+
+        const stage = mkdtempSync(join(tmpdir(), "kindly-restore-destr-"));
+        writeFileSync(join(stage, "settings.reader.lua"),
+            `return {\n    ["zzz_unrelated"] = 1,\n}\n`);
+        const archive = join(workdir, "destr-ok.tar.gz");
+        spawnSync("tar", ["-czf", archive, "-C", stage,
+            "settings.reader.lua"], { encoding: "utf8" });
+
+        const code = await main(
+            ["restore", archive, "--accept-destructive"], env);
         expect(code).toBe(0);
     });
 

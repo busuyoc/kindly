@@ -4,6 +4,7 @@
 
 import { resolve } from "node:path";
 import { exists, readText } from "../fs/safeRead.ts";
+import { detectInterruptedApply } from "../fs/interruptedApply.ts";
 import { ArgError } from "../cli/args.ts";
 import { parseSettingsFile } from "../lua/reader.ts";
 import { yamlToLua } from "../schema/yaml.ts";
@@ -32,6 +33,26 @@ export function executeDiff(opts: DiffOptions, env: CliEnv): DiffResult {
     }
 
     const mount = resolveMount(env);
+    if (!exists(mount.settingsPath, "derived-from-mount")) {
+        const interrupted = detectInterruptedApply(mount.settingsPath);
+        if (interrupted) {
+            throw new KindlyError(
+                ErrorCodes.SETTINGS_INTERRUPTED_APPLY,
+                `${mount.settingsPath} is missing but ${interrupted.oldPath} survives — a previous kindly apply / setup import was interrupted between rename steps.`,
+                [
+                    {
+                        text: "Recover by promoting .old back into place.",
+                        command: "kindly doctor --repair",
+                    },
+                ],
+            );
+        }
+        throw new KindlyError(
+            ErrorCodes.SETTINGS_NOT_FOUND,
+            `Kindle mount found at ${mount.root}, but ${mount.settingsPath} doesn't exist.`,
+            [{ text: "Install KOReader on the Kindle, then retry." }],
+        );
+    }
     const onDevice = parseSettingsFile(readText(mount.settingsPath, "derived-from-mount")) as Record<string, LuaValue>;
     const fromYaml = yamlToLua(readText(yamlPath, "user-provided")) as Record<string, LuaValue>;
 

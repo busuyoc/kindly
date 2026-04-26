@@ -357,16 +357,27 @@ describe("setup import — no-trigger edge cases", () => {
     });
 });
 
-describe("setup import — apply is NOT gated (88 §3.2 scope)", () => {
-    test("kindly apply with a SENSITIVE change succeeds without --accept-sensitive", async () => {
+describe("setup import — apply is gated symmetrically (Lead 7 closure)", () => {
+    test("kindly apply with a SENSITIVE change blocks without --accept-sensitive", async () => {
         writeFileSync(
             join(workdir, "kindly.yaml"),
             "home_dir: /mnt/local/books\n",
         );
-        // apply (not setup import) — same SENSITIVE key, different command.
+        // apply (not setup import) — same SENSITIVE key, same gate.
+        // Pre-v0.12 (88 §3.2) docs scoped this gate to setup import only;
+        // S600 closed that asymmetry.
         const code = await main(["apply"], env);
+        expect(code).toBe(3);
+        expect(stderr.value).toContain("security-sensitive");
+    });
+
+    test("--accept-sensitive lets the apply through", async () => {
+        writeFileSync(
+            join(workdir, "kindly.yaml"),
+            "home_dir: /mnt/local/books\n",
+        );
+        const code = await main(["apply", "--accept-sensitive"], env);
         expect(code).toBe(0);
-        expect(stderr.value).not.toContain("security-sensitive");
     });
 });
 

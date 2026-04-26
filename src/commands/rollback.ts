@@ -33,6 +33,11 @@ import { writeInProgressMarker, clearInProgressMarker } from "../history/inProgr
 import { withLock } from "../fs/lockfile.ts";
 import { createHash } from "node:crypto";
 import {
+    computeMountFingerprint,
+    isFingerprintEmpty,
+    type MountFingerprint,
+} from "../device/fingerprint.ts";
+import {
     countAllHistory,
     findHistoryEntryByIndex,
     type HistoryEntryWithIndex,
@@ -42,6 +47,7 @@ import type { LuaValue } from "../lua/writer.ts";
 import { computeChanges } from "../schema/diff.ts";
 import { runPhase } from "../gates/orchestrator.ts";
 import { CODE_EXEC_ADJACENT_REQUIRES_ACK } from "../gates/definitions/dual.ts";
+import { MOUNT_FINGERPRINT_MATCHES } from "../gates/definitions/identity.ts";
 import { appendGateEvent } from "../history/gateLog.ts";
 
 const FLAGS = {
@@ -74,6 +80,14 @@ const FLAGS = {
             "consent to KOReader interpolating snapshot values into os.execute / " +
             "os.remove / shell calls (SSH_port, httpinspector_port, cover_image_path)",
     },
+    "force-mount": {
+        type: "boolean",
+        default: false,
+        description:
+            "proceed even if the current Kindle's fingerprint differs from the one " +
+            "recorded on the history entry (use after a KOReader upgrade that changed " +
+            "/koreader/git-rev between the original mutation and the rollback)",
+    },
 } as const satisfies FlagSpecs;
 
 const SETTINGS_FILENAME = "settings.reader.lua";
@@ -85,6 +99,13 @@ export interface RollbackOptions {
     safetySnapshot?: boolean;
     label?: string;
     acceptCodeExec?: boolean;
+    /** C10a / S1390: fingerprint recorded on the originating history
+     *  entry. Set by `--to <N>` resolution; absent when the user passes a
+     *  bare snapshot-dir path (we don't know which entry it belongs to). */
+    recordedMount?: MountFingerprint;
+    /** Bypass MOUNT_FINGERPRINT_MISMATCH (e.g. after a KOReader upgrade
+     *  changed /koreader/git-rev between original mutation and rollback). */
+    forceMount?: boolean;
 }
 
 export function executeRollback(opts: RollbackOptions, env: CliEnv): RollbackResult {
@@ -115,6 +136,8 @@ function executeRollbackLocked(opts: RollbackOptions, env: CliEnv): RollbackResu
     }
 
     const mount = resolveMount(env);
+    const currentFp = computeMountFingerprint(mount);
+
     const fatEntries: string[] = hasFat ? listTarGz(fatSnap) : [];
 
     // Path-safety pre-scan (F8). These archives come from disk — they're
@@ -139,7 +162,12 @@ function executeRollbackLocked(opts: RollbackOptions, env: CliEnv): RollbackResu
     // bytes first hit the device. Code-exec is the orthogonal hazard
     // that survives the original gating — its consent is a separate
     // mental model, gated independently every time.
-    runRollbackGates(snapshotDir, hasSettings, mount.settingsPath, opts, env);
+    //
+    // C10a / S1390: MOUNT_FINGERPRINT_MATCHES also fires here. It blocks
+    // when --to N's history entry was recorded against a different
+    // physical Kindle than the one currently mounted; bypass via
+    // --force-mount.
+    runRollbackGates(snapshotDir, hasSettings, mount.settingsPath, currentFp, opts, env);
 
     if (opts.dryRun) {
         return {
@@ -183,6 +211,7 @@ function executeRollbackLocked(opts: RollbackOptions, env: CliEnv): RollbackResu
             settings_path: mount.settingsPath,
             intended_sha256: createHash("sha256").update(content).digest("hex"),
             snapshot_dir: snapshotDir,
+            ...(isFingerprintEmpty(currentFp) ? {} : { mount: currentFp }),
         });
         safeWrite(mount.settingsPath, content, {
             verifyLua: true,
@@ -216,7 +245,10 @@ function executeRollbackLocked(opts: RollbackOptions, env: CliEnv): RollbackResu
     appendHistoryEntry(env, "rollback", {
         snapshot_dir: snapshotDir,
         ...(preRollbackDir ? { pre_rollback_path: preRollbackDir } : {}),
-    }, opts.label ? { label: opts.label } : undefined);
+    }, {
+        ...(opts.label ? { label: opts.label } : {}),
+        ...(isFingerprintEmpty(currentFp) ? {} : { mount: currentFp }),
+    });
 
     if (settingsMarkerPath) clearInProgressMarker(settingsMarkerPath);
 
@@ -235,47 +267,56 @@ function runRollbackGates(
     snapshotDir: string,
     hasSettings: boolean,
     deviceSettingsPath: string,
+    currentMount: MountFingerprint,
     opts: RollbackOptions,
     env: CliEnv,
 ): void {
-    if (!hasSettings) return;
-    const settingsSnap = join(snapshotDir, SETTINGS_FILENAME);
-
-    let fromSnapshot: Record<string, LuaValue>;
-    try {
-        fromSnapshot = parseSettingsFile(
-            readBytes(settingsSnap, "user-provided").toString("utf8"),
-        ) as Record<string, LuaValue>;
-    } catch {
-        // Snapshot file unparseable — skip the gate. KOReader will reject
-        // it on its own load path. Mirrors restore's lenient stance
-        // (S606 is a rollback-side echo of the same parser-strictness
-        // decision).
-        return;
-    }
-
-    let onDevice: Record<string, LuaValue> = {};
-    if (exists(deviceSettingsPath, "derived-from-mount")) {
+    // Settings-conditional context: only build `changes` when the snapshot
+    // actually carries settings. Mount-fingerprint gate is independent and
+    // still fires for fat-only rollbacks.
+    let changes: ReturnType<typeof computeChanges> = [];
+    if (hasSettings) {
+        const settingsSnap = join(snapshotDir, SETTINGS_FILENAME);
+        let fromSnapshot: Record<string, LuaValue> | null = null;
         try {
-            onDevice = parseSettingsFile(
-                readText(deviceSettingsPath, "derived-from-mount"),
+            fromSnapshot = parseSettingsFile(
+                readBytes(settingsSnap, "user-provided").toString("utf8"),
             ) as Record<string, LuaValue>;
         } catch {
-            // Device file unparseable → treat as empty so the gate flags
-            // any code-exec-adjacent key the snapshot would re-introduce.
+            // Snapshot file unparseable — leave changes=[]. The CODE_EXEC
+            // gate becomes a no-op; KOReader will reject the bytes on its
+            // own load path. Mirrors restore's lenient stance
+            // (S606 is a rollback-side echo of the same parser-strictness
+            // decision).
+        }
+
+        if (fromSnapshot !== null) {
+            let onDevice: Record<string, LuaValue> = {};
+            if (exists(deviceSettingsPath, "derived-from-mount")) {
+                try {
+                    onDevice = parseSettingsFile(
+                        readText(deviceSettingsPath, "derived-from-mount"),
+                    ) as Record<string, LuaValue>;
+                } catch {
+                    // Device file unparseable → treat as empty so the gate flags
+                    // any code-exec-adjacent key the snapshot would re-introduce.
+                }
+            }
+            changes = computeChanges(onDevice, fromSnapshot);
         }
     }
 
-    const changes = computeChanges(onDevice, fromSnapshot);
-
     runPhase({
         boundary: "rollback",
-        registry: [CODE_EXEC_ADJACENT_REQUIRES_ACK],
+        registry: [MOUNT_FINGERPRINT_MATCHES, CODE_EXEC_ADJACENT_REQUIRES_ACK],
         dryRun: opts.dryRun ?? false,
         strictImports: false,
         opts: {
             changes,
             acceptCodeExec: !!opts.acceptCodeExec,
+            ...(opts.recordedMount ? { recordedMount: opts.recordedMount } : {}),
+            currentMount,
+            forceMount: !!opts.forceMount,
         },
         logger: (fired) => {
             if (fired.result.kind === "bypass") {
@@ -424,12 +465,15 @@ export async function runRollback(argv: readonly string[], env: CliEnv): Promise
     if (flags.mount) env = { ...env, mountOverride: flags.mount };
 
     let resolvedDir: string;
+    let recordedMount: MountFingerprint | undefined;
     if (flags.to !== undefined) {
         const n = Number(flags.to);
         if (!Number.isInteger(n) || n < 1) {
             throw new ArgError(`--to must be a positive integer (got ${JSON.stringify(flags.to)})`);
         }
-        resolvedDir = resolveSnapshotFromHistory(n, env.cwd).snapshotDir;
+        const resolved = resolveSnapshotFromHistory(n, env.cwd);
+        resolvedDir = resolved.snapshotDir;
+        recordedMount = resolved.entry.mount;
     } else {
         resolvedDir = snapArg!;
     }
@@ -440,6 +484,8 @@ export async function runRollback(argv: readonly string[], env: CliEnv): Promise
         safetySnapshot: flags["safety-snapshot"],
         label: flags.label,
         acceptCodeExec: flags["accept-code-exec"],
+        forceMount: flags["force-mount"],
+        ...(recordedMount ? { recordedMount } : {}),
     }, env);
 
     if (env.jsonMode) emitJson(env, "rollback", result);
@@ -461,10 +507,10 @@ Two ways to pick the snapshot:
 Usage:
   kindly rollback <snapshot-dir> [--dry-run] [--no-safety-snapshot]
                                  [--label <text>] [--mount <path>]
-                                 [--accept-code-exec]
+                                 [--accept-code-exec] [--force-mount]
   kindly rollback --to <N>       [--dry-run] [--no-safety-snapshot]
                                  [--label <text>] [--mount <path>]
-                                 [--accept-code-exec]
+                                 [--accept-code-exec] [--force-mount]
 
 Options:
   --to <N>              resolve snapshot from history entry #N
@@ -477,6 +523,10 @@ Options:
   --accept-code-exec    consent to KOReader interpolating snapshot values
                         into os.execute / os.remove / shell calls
                         (SSH_port, httpinspector_port, cover_image_path)
+  --force-mount         override MOUNT_FINGERPRINT_MATCHES; proceed even if
+                        the history entry's recorded Kindle differs from
+                        the currently-attached one (use after a KOReader
+                        upgrade between original mutation and rollback)
 
 \`--to <N>\` works for apply, setup:import, and prior rollback entries.
 restore entries point you at the archive (\`kindly restore <path>\`); snapshot

@@ -52,19 +52,23 @@ export const STRICT_REPLACE_REMOVAL_CAP: GateDefinition = {
 };
 
 /**
- * DESTRUCTIVE_YAML_SHAPE — apply-side mass-removal cap (C1c).
+ * DESTRUCTIVE_YAML_SHAPE — mass-removal cap on apply / restore.
  *
- * Activated only when the apply registry includes this gate, which the
- * apply command does only under `--untrusted-yaml`. In that mode, a
- * YAML that would remove ≥ 5 top-level USER keys versus the device is
- * almost certainly hostile or misconfigured — bypass with
+ * A mutation that would remove ≥ 5 top-level USER keys versus the
+ * device is almost certainly hostile or misconfigured — bypass with
  * `--accept-destructive` if the removal is intentional.
  *
  * Most legitimate kindly applies are additive (YAML keys overwrite,
  * untouched device keys are preserved by the shallow merge). Removals
  * surface only when the YAML supplies a non-table at a parent (e.g.
  * `kosync: null` — already trapped by YAML_SHAPE_NORMAL) or when a
- * future YAML construct slips past the shape gate. Defense-in-depth.
+ * future YAML construct slips past the shape gate. Restore-side, the
+ * archive's settings.reader.lua is a complete file, so a fresh
+ * snapshot from kindly itself yields zero removals; this gate fires
+ * when the archive omits keys the device currently has.
+ *
+ * Lead 7 (S600/S606) closure: previously hidden behind --untrusted-yaml
+ * at apply / unguarded at restore — now always-on at both boundaries.
  *
  * Threshold (5) is the spec default per docs/infra/99-gates-refactor-
  * plan.md §Open decisions; tune from observed apply runs.
@@ -72,7 +76,7 @@ export const STRICT_REPLACE_REMOVAL_CAP: GateDefinition = {
 export const DESTRUCTIVE_YAML_SHAPE: GateDefinition = {
     id: "DESTRUCTIVE_YAML_SHAPE",
     category: "DESTRUCTION",
-    appliesAt: ["apply"],
+    appliesAt: ["apply", "restore"],
     requires: [],
     firesIn: "non-dry-run",
     bypassFlags: ["--accept-destructive"],
@@ -94,9 +98,9 @@ export const DESTRUCTIVE_YAML_SHAPE: GateDefinition = {
         return {
             kind: "block",
             message:
-                `--untrusted-yaml: this YAML would remove ` +
-                `${removedUserKeys.length} top-level USER key(s) ` +
-                `(threshold ${DESTRUCTIVE_REMOVAL_THRESHOLD}). First few: ${sample}`,
+                `this would remove ${removedUserKeys.length} top-level ` +
+                `USER key(s) (threshold ${DESTRUCTIVE_REMOVAL_THRESHOLD}). ` +
+                `First few: ${sample}`,
         };
     },
 };

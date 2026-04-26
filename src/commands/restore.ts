@@ -25,12 +25,15 @@ import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { emitJson } from "../cli/json.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
 import { withLock } from "../fs/lockfile.ts";
+import { computeMountFingerprint, isFingerprintEmpty } from "../device/fingerprint.ts";
 import { parseSettingsFile } from "../lua/reader.ts";
 import type { LuaValue } from "../lua/writer.ts";
 import { computeChanges } from "../schema/diff.ts";
 import { runPhase } from "../gates/orchestrator.ts";
 import { CODE_EXEC_ADJACENT_REQUIRES_ACK } from "../gates/definitions/dual.ts";
 import { CONTROL_BYTES_IN_VALUE } from "../gates/definitions/shape.ts";
+import { SENSITIVE_REQUIRES_ACK } from "../gates/definitions/consent.ts";
+import { DESTRUCTIVE_YAML_SHAPE } from "../gates/definitions/destruction.ts";
 import { appendGateEvent } from "../history/gateLog.ts";
 
 const FLAGS = {
@@ -57,6 +60,20 @@ const FLAGS = {
         default: false,
         description: "consent to KOReader interpolating archive-supplied values into shell / os.execute / os.remove calls (SSH_port family)",
     },
+    "accept-sensitive": {
+        type: "boolean",
+        default: false,
+        description: "blanket consent for SENSITIVE-class changes the archive introduces",
+    },
+    "accept-key": {
+        type: "string",
+        description: "per-key SENSITIVE consent (comma-separated dotted paths)",
+    },
+    "accept-destructive": {
+        type: "boolean",
+        default: false,
+        description: "consent to mass-removal of USER keys (≥5) implied by the archive",
+    },
 } as const satisfies FlagSpecs;
 
 const SAFETY_PATHS = [
@@ -79,6 +96,12 @@ export interface RestoreOptions {
      * KOReader interpolates into os.execute / os.remove / shell calls.
      */
     acceptCodeExec?: boolean;
+    /** Bypass SENSITIVE_REQUIRES_ACK (blanket consent). */
+    acceptSensitive?: boolean;
+    /** Per-key SENSITIVE consent. */
+    acceptKey?: Set<string>;
+    /** Bypass DESTRUCTIVE_YAML_SHAPE. */
+    acceptDestructive?: boolean;
 }
 
 export function executeRestore(opts: RestoreOptions, env: CliEnv): RestoreResult {
@@ -172,10 +195,14 @@ function executeRestoreLocked(opts: RestoreOptions, env: CliEnv): RestoreResult 
 
     const res = extractTarGz({ archivePath, destRoot: mount.koreaderRoot });
 
+    const fp = computeMountFingerprint(mount);
     appendHistoryEntry(env, "restore", {
         archive_path: archivePath,
         ...(safetySnapshotPath ? { pre_restore_path: safetySnapshotPath } : {}),
-    }, opts.label ? { label: opts.label } : undefined);
+    }, {
+        ...(opts.label ? { label: opts.label } : {}),
+        ...(isFingerprintEmpty(fp) ? {} : { mount: fp }),
+    });
 
     return {
         mode: "restored",
@@ -221,12 +248,19 @@ export async function runRestore(argv: readonly string[], env: CliEnv): Promise<
     }
     if (flags.mount) env = { ...env, mountOverride: flags.mount };
 
+    const acceptKey = flags["accept-key"]
+        ? new Set(flags["accept-key"].split(",").map((s) => s.trim()).filter(Boolean))
+        : undefined;
+
     const result = executeRestore({
         archive,
         dryRun: flags["dry-run"],
         safetySnapshot: flags["safety-snapshot"],
         label: flags.label,
         acceptCodeExec: flags["accept-code-exec"],
+        acceptSensitive: flags["accept-sensitive"],
+        acceptKey,
+        acceptDestructive: flags["accept-destructive"],
     }, env);
 
     if (env.jsonMode) emitJson(env, "restore", result);
@@ -270,17 +304,37 @@ function runRestoreGates(
         }
     }
 
+    // Restore is replace-semantics on settings.reader.lua: tar overwrites
+    // the whole file, so any device key the archive omits is effectively
+    // removed. computeChanges is additive-only — it never emits "removed"
+    // — so we synthesize the removal entries here for the
+    // DESTRUCTIVE_YAML_SHAPE gate to count. SENSITIVE_REQUIRES_ACK
+    // intentionally also sees them: an archive that wipes a SENSITIVE
+    // key the user has is a sensitive change.
     const changes = computeChanges(onDevice, fromArchive);
+    for (const k of Object.keys(onDevice).sort()) {
+        if (!(k in fromArchive)) {
+            changes.push({ kind: "removed", path: [k], prev: onDevice[k]! });
+        }
+    }
 
     runPhase({
         boundary: "restore",
-        registry: [CODE_EXEC_ADJACENT_REQUIRES_ACK, CONTROL_BYTES_IN_VALUE],
+        registry: [
+            CODE_EXEC_ADJACENT_REQUIRES_ACK,
+            CONTROL_BYTES_IN_VALUE,
+            SENSITIVE_REQUIRES_ACK,
+            DESTRUCTIVE_YAML_SHAPE,
+        ],
         dryRun: opts.dryRun ?? false,
         strictImports: false,
         opts: {
             changes,
             yamlSettings: fromArchive,
             acceptCodeExec: !!opts.acceptCodeExec,
+            acceptSensitive: !!opts.acceptSensitive,
+            acceptKey: opts.acceptKey ?? new Set<string>(),
+            acceptDestructive: !!opts.acceptDestructive,
         },
         logger: (fired) => {
             if (fired.result.kind === "bypass") {
@@ -311,6 +365,8 @@ kindly restore <archive> — extract a snapshot back into the Kindle.
 usage: kindly restore <archive.tar.gz> [--dry-run] [--no-safety-snapshot]
                                        [--label <text>] [--mount <path>]
                                        [--accept-code-exec]
+                                       [--accept-sensitive | --accept-key=<a,b>]
+                                       [--accept-destructive]
 
   --dry-run              list entries without writing
   --no-safety-snapshot   skip the pre-restore snapshot of current state
@@ -319,6 +375,10 @@ usage: kindly restore <archive.tar.gz> [--dry-run] [--no-safety-snapshot]
   --accept-code-exec     consent to KOReader interpolating archive values
                          into shell / os.execute / os.remove (SSH_port,
                          httpinspector_port, cover_image_path)
+  --accept-sensitive     blanket consent for SENSITIVE-class changes
+                         the archive introduces vs. current device state
+  --accept-key=<a,b>     per-key SENSITIVE consent (comma-separated paths)
+  --accept-destructive   consent to mass USER-key removal (≥5 top-level)
 
 By default, takes a safety snapshot of the CURRENT device state first. If
 restore goes wrong, re-extract that file to roll back. The safety snapshot

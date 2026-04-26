@@ -9,6 +9,7 @@ import { writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { exists, readText } from "../fs/safeRead.ts";
+import { detectInterruptedApply } from "../fs/interruptedApply.ts";
 import { parseSettingsFile } from "../lua/reader.ts";
 import { luaToYaml } from "../schema/yaml.ts";
 import type { LuaTable } from "../lua/writer.ts";
@@ -37,6 +38,19 @@ export function executePull(opts: PullOptions, env: CliEnv): PullResult {
     const settingsPath = mount.settingsPath;
 
     if (!exists(settingsPath, "derived-from-mount")) {
+        const interrupted = detectInterruptedApply(settingsPath);
+        if (interrupted) {
+            throw new KindlyError(
+                ErrorCodes.SETTINGS_INTERRUPTED_APPLY,
+                `${settingsPath} is missing but ${interrupted.oldPath} survives — a previous kindly apply / setup import was interrupted between rename steps.`,
+                [
+                    {
+                        text: "Recover by promoting .old back into place.",
+                        command: "kindly doctor --repair",
+                    },
+                ],
+            );
+        }
         throw new KindlyError(
             ErrorCodes.SETTINGS_NOT_FOUND,
             `Kindle mount found at ${mount.root}, but ${settingsPath} doesn't exist. ` +

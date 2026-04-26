@@ -46,3 +46,8 @@ tests/fixtures/kindle/*.lua
 # Snapshot archives — contain plaintext secrets (settings.reader.lua,
 # history.lua, device_id, etc.). Never commit.
 *.tar.gz
+
+# Local probe artifacts at repo root (from running `kindly pull` against
+# a real device). May contain device data. The user-facing kindly.yaml
+# lives wherever the user runs the CLI — not in the repo root.
+/kindly.yaml

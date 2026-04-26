@@ -8,6 +8,7 @@
 
 import { join, resolve } from "node:path";
 import { exists, readText } from "../fs/safeRead.ts";
+import { detectInterruptedApply } from "../fs/interruptedApply.ts";
 import { parseSettingsFile } from "../lua/reader.ts";
 import { dumpSettingsFile } from "../lua/writer.ts";
 import type { LuaTable, LuaValue } from "../lua/writer.ts";
@@ -19,6 +20,7 @@ import type { ApplyResult } from "../types/results.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
 import { writeInProgressMarker, clearInProgressMarker } from "../history/inProgress.ts";
+import { computeMountFingerprint, isFingerprintEmpty } from "../device/fingerprint.ts";
 import { withLock } from "../fs/lockfile.ts";
 import { createHash } from "node:crypto";
 import { runPhase } from "../gates/orchestrator.ts";
@@ -35,22 +37,16 @@ export interface ApplyOptions {
     backupDir?: string;
     label?: string;
     /**
-     * C1a: bypass CODE_EXEC_ADJACENT_REQUIRES_ACK at the apply boundary.
-     * Consents to KOReader interpolating YAML-supplied values into
-     * os.execute / os.remove / shell calls.
+     * Bypass CODE_EXEC_ADJACENT_REQUIRES_ACK. Consents to KOReader
+     * interpolating YAML-supplied values into os.execute / os.remove /
+     * shell calls (SSH_port, httpinspector_port, cover_image_path).
      */
     acceptCodeExec?: boolean;
-    /**
-     * C1c: treat the YAML as untrusted input. Activates the apply-side
-     * SENSITIVE_REQUIRES_ACK + DESTRUCTIVE_YAML_SHAPE gates. Default off
-     * because hand-written kindly.yaml is usually authored by the user.
-     */
-    untrustedYaml?: boolean;
-    /** C1c: bypass SENSITIVE_REQUIRES_ACK (only meaningful with untrustedYaml). */
+    /** Bypass SENSITIVE_REQUIRES_ACK (blanket consent). */
     acceptSensitive?: boolean;
-    /** C1c: per-key SENSITIVE bypass list (only meaningful with untrustedYaml). */
+    /** Per-key SENSITIVE consent. */
     acceptKey?: Set<string>;
-    /** C1c: bypass DESTRUCTIVE_YAML_SHAPE (only meaningful with untrustedYaml). */
+    /** Bypass DESTRUCTIVE_YAML_SHAPE. */
     acceptDestructive?: boolean;
 }
 
@@ -69,6 +65,31 @@ function executeApplyLocked(opts: ApplyOptions, env: CliEnv): ApplyResult {
     }
 
     const mount = resolveMount(env);
+
+    // C10b: surface step-4 interrupted state with the repair hint instead
+    // of letting readText raise a raw ENOENT. Pull/diff/doctor do the same.
+    if (!exists(mount.settingsPath, "derived-from-mount")) {
+        const interrupted = detectInterruptedApply(mount.settingsPath);
+        if (interrupted) {
+            throw new KindlyError(
+                ErrorCodes.SETTINGS_INTERRUPTED_APPLY,
+                `${mount.settingsPath} is missing but ${interrupted.oldPath} survives — a previous kindly apply / setup import was interrupted between rename steps.`,
+                [
+                    {
+                        text: "Recover by promoting .old back into place.",
+                        command: "kindly doctor --repair",
+                    },
+                ],
+            );
+        }
+        throw new KindlyError(
+            ErrorCodes.SETTINGS_NOT_FOUND,
+            `Kindle mount found at ${mount.root}, but ${mount.settingsPath} doesn't exist. ` +
+            `Is KOReader installed on this Kindle?`,
+            [{ text: "Install KOReader on the Kindle, then retry." }],
+        );
+    }
+
     const onDeviceSrc = readText(mount.settingsPath, "derived-from-mount");
     const onDevice = parseSettingsFile(onDeviceSrc) as Record<string, LuaValue>;
     const fromYaml = yamlToLua(readText(yamlPath, "user-provided")) as Record<string, LuaValue>;
@@ -78,32 +99,40 @@ function executeApplyLocked(opts: ApplyOptions, env: CliEnv): ApplyResult {
     // the YAML is touching.
     const changes = computeChanges(onDevice, fromYaml);
 
-    // Apply-side gate run — Step 12 of the gates refactor. YAML_SHAPE_NORMAL
-    // is the S89 activation: a crafted YAML with `kosync: null`, `kosync:
-    // []`, `kosync.userkey: ~`, or a top-level SECRET key (e.g.
-    // `zlibrary_password: ~`) would otherwise get through the shallow-merge
-    // and wipe on-device SECRETs. Fires always (including --dry-run):
-    // shape rejection has zero false-positive risk and the preview output
-    // should reflect the same block the write would.
+    // Apply-side gate run. Five gates fire on every apply:
     //
-    // CODE_EXEC_ADJACENT_REQUIRES_ACK (C1a) closes the apply-side gap for
-    // the SSH_port / httpinspector_port / cover_image_path family — keys
-    // KOReader interpolates into os.execute/os.remove. Bypass:
-    // --accept-code-exec. firesIn: non-dry-run, so --dry-run previews
-    // show the change without blocking.
+    //   YAML_SHAPE_NORMAL              — S89 fix: rejects null/[]-at-secret-
+    //                                    parent shapes that would wipe
+    //                                    on-device SECRETs through the
+    //                                    shallow-merge. Fires always
+    //                                    (incl. --dry-run); zero FP.
+    //   CONTROL_BYTES_IN_VALUE         — Batch O fix: rejects ESC/CR/NUL
+    //                                    in SENSITIVE/SECRET string values.
+    //   CODE_EXEC_ADJACENT_REQUIRES_ACK — C1a: SSH_port / httpinspector_port
+    //                                    / cover_image_path family.
+    //                                    Bypass: --accept-code-exec.
+    //   SENSITIVE_REQUIRES_ACK         — Lead 7 / S600 closure: any
+    //                                    SENSITIVE-class change requires
+    //                                    --accept-sensitive or
+    //                                    --accept-key=<list>. firesIn:
+    //                                    non-dry-run so --dry-run previews
+    //                                    don't trip on the gate.
+    //   DESTRUCTIVE_YAML_SHAPE         — Lead 7 / S606 closure: mass-
+    //                                    removal cap (≥5 top-level USER
+    //                                    removals). Bypass:
+    //                                    --accept-destructive.
     //
-    // Additional apply gates (SENSITIVE_REQUIRES_ACK behind
-    // --untrusted-yaml; DESTRUCTIVE_YAML_SHAPE for mass-removal) are
-    // queued for Step 12b — they have real FP risk on legitimate user
-    // edits and want their own activation/flag surface.
+    // SENSITIVE + DESTRUCTIVE were previously hidden behind --untrusted-
+    // yaml; promoted to always-on in v0.12. The legitimate `kindly pull
+    // → kindly apply` round-trip has no SENSITIVE diff (pull writes the
+    // device's own bytes), so the gates are invisible to that flow.
     const registry: GateDefinition[] = [
         YAML_SHAPE_NORMAL,
         CONTROL_BYTES_IN_VALUE,
         CODE_EXEC_ADJACENT_REQUIRES_ACK,
+        SENSITIVE_REQUIRES_ACK,
+        DESTRUCTIVE_YAML_SHAPE,
     ];
-    if (opts.untrustedYaml) {
-        registry.push(SENSITIVE_REQUIRES_ACK, DESTRUCTIVE_YAML_SHAPE);
-    }
 
     runPhase({
         boundary: "apply",
@@ -172,12 +201,14 @@ function executeApplyLocked(opts: ApplyOptions, env: CliEnv): ApplyResult {
     // C10: crash-recovery marker. Surviving markers indicate either an
     // in-flight apply in another process, or an apply that died before
     // step-6 / before history was appended. doctor surfaces them.
+    const fp = computeMountFingerprint(mount);
     const markerPath = writeInProgressMarker(env, {
         cmd: "apply",
         started_at: env.now().toISOString(),
         pid: process.pid,
         settings_path: mount.settingsPath,
         intended_sha256: createHash("sha256").update(newContent).digest("hex"),
+        ...(isFingerprintEmpty(fp) ? {} : { mount: fp }),
     });
 
     const res = safeWrite(mount.settingsPath, newContent, { backupDir, verifyLua: true });
@@ -185,7 +216,10 @@ function executeApplyLocked(opts: ApplyOptions, env: CliEnv): ApplyResult {
     appendHistoryEntry(env, "apply", {
         settings_delta_n: changes.length,
         ...(res.backupPath ? { backup_path: res.backupPath } : {}),
-    }, opts.label ? { label: opts.label } : undefined);
+    }, {
+        ...(opts.label ? { label: opts.label } : {}),
+        ...(isFingerprintEmpty(fp) ? {} : { mount: fp }),
+    });
 
     clearInProgressMarker(markerPath);
 

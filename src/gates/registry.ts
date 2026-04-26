@@ -10,7 +10,7 @@
 // ./definitions/*.ts and appending them here.
 
 import type { GateDefinition } from "./types.ts";
-import { MANIFEST_HASH_ASSERT } from "./definitions/identity.ts";
+import { MANIFEST_HASH_ASSERT, MOUNT_FINGERPRINT_MATCHES } from "./definitions/identity.ts";
 import {
     PLUGINS_REQUIRE_ACK,
     PATCHES_REQUIRE_ACK,
@@ -36,6 +36,7 @@ import { SCHEMA_VIOLATION, YAML_SHAPE_NORMAL } from "./definitions/shape.ts";
 
 export const GATES: ReadonlyArray<GateDefinition> = [
     MANIFEST_HASH_ASSERT,
+    MOUNT_FINGERPRINT_MATCHES,
     YAML_SHAPE_NORMAL,
     PLUGINS_REQUIRE_ACK,
     PATCHES_REQUIRE_ACK,

@@ -169,6 +169,31 @@ export interface DoctorResult {
     ok: boolean;
 }
 
+// C10c — `kindly doctor --repair`: recover from a SIGKILL'd safeWrite or
+// sweep tmp orphans without manual fs surgery.
+export interface DoctorRepairResult {
+    mode: "no-op" | "dry-run" | "repaired";
+    settingsPath: string;
+    /** Step taken to recover the canonical file:
+     *   - "promoted-tmp": a `.tmp` file's bytes hashed to the marker's
+     *                    intended_sha256 — promoted to the canonical name.
+     *                    The interrupted apply effectively COMPLETES.
+     *   - "restored-old": no matching .tmp; `.old` was renamed back to
+     *                    the canonical name. The interrupted apply is
+     *                    UNDONE.
+     *   - "none":        no step-4 interruption was detected — the
+     *                    canonical file already exists or `.old` is
+     *                    absent. Tmp sweep may still have run. */
+    settingsRecovery: "promoted-tmp" | "restored-old" | "none";
+    /** Orphan `.tmp.<pid>.<rand>` files removed from the koreader/ dir. */
+    sweptTmps: string[];
+    /** Markers cleared from `.kindly/in-progress/`. Either the marker
+     *  matched a recovered .tmp, or its intended_sha256 didn't match any
+     *  surviving tmp and the marker was discarded along with .old
+     *  restoration. */
+    clearedMarkers: string[];
+}
+
 export interface SnapshotResult {
     /** Absolute path to the .tar.gz written. */
     archivePath: string;

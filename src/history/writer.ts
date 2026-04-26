@@ -68,6 +68,7 @@ import {
 import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { exists, readText } from "../fs/safeRead.ts";
+import type { MountFingerprint } from "../device/fingerprint.ts";
 
 import pkg from "../../package.json" with { type: "json" };
 
@@ -117,6 +118,10 @@ export interface HistoryEntry {
      *  entries emitted by W17 onward. Pre-W17 files may omit it — readers
      *  fall back to line position. */
     index: number;
+    /** C10a / S1390: identifies the physical Kindle this entry mutated.
+     *  Optional because pre-C10a entries don't carry it. `rollback --to N`
+     *  refuses if the recorded fingerprint differs from the current mount's. */
+    mount?: MountFingerprint;
     summary: HistorySummary;
 }
 
@@ -142,7 +147,7 @@ export function appendHistoryEntry(
     env: AppendEnv,
     cmd: HistoryCommand,
     summary: HistorySummary,
-    opts?: { label?: string },
+    opts?: { label?: string; mount?: MountFingerprint },
 ): HistoryEntry {
     const p = historyPath(env.cwd);
     mkdirSync(dirname(p), { recursive: true });
@@ -168,6 +173,7 @@ export function appendHistoryEntry(
         ...(opts?.label ? { label: opts.label } : {}),
         kindly_version: pkg.version,
         index: nextIndex,
+        ...(opts?.mount ? { mount: opts.mount } : {}),
         summary,
     };
     const line = JSON.stringify(entry) + "\n";

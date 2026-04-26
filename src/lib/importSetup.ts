@@ -64,6 +64,7 @@ import { scanShippedLuaFiles } from "../catalog/scanPipeline.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
 import { writeInProgressMarker, clearInProgressMarker } from "../history/inProgress.ts";
+import { computeMountFingerprint, isFingerprintEmpty } from "../device/fingerprint.ts";
 import { withLock } from "../fs/lockfile.ts";
 import { createHash } from "node:crypto";
 
@@ -625,6 +626,7 @@ function executeSetupImportLocked(
     let snapshotDir: string | null = null;
     let backupPath: string | null = null;
     let importMarkerPath: string | null = null;
+    const fp = computeMountFingerprint(mount);
     if (writeSettings) {
         const merged = isReplace
             ? replaceYamlIntoLua(onDevice, safeFlat) as LuaTable
@@ -640,6 +642,7 @@ function executeSetupImportLocked(
             settings_path: mount.settingsPath,
             intended_sha256: createHash("sha256").update(newContent).digest("hex"),
             setup_id: baseResult.id,
+            ...(isFingerprintEmpty(fp) ? {} : { mount: fp }),
         });
         const res = safeWrite(mount.settingsPath, newContent, {
             backupDir,
@@ -691,7 +694,10 @@ function executeSetupImportLocked(
         ...(backupPath ? { backup_path: backupPath } : {}),
         ...(snapshotDir ? { pre_import_path: snapshotDir } : {}),
         setup_id: baseResult.id,
-    }, opts.label ? { label: opts.label } : undefined);
+    }, {
+        ...(opts.label ? { label: opts.label } : {}),
+        ...(isFingerprintEmpty(fp) ? {} : { mount: fp }),
+    });
 
     if (importMarkerPath) clearInProgressMarker(importMarkerPath);
 

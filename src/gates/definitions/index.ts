@@ -4,7 +4,7 @@
 // exports them by name. registry.ts imports from here or directly from
 // the category files.
 
-export { MANIFEST_HASH_ASSERT } from "./identity.ts";
+export { MANIFEST_HASH_ASSERT, MOUNT_FINGERPRINT_MATCHES } from "./identity.ts";
 export {
     PLUGINS_REQUIRE_ACK,
     PATCHES_REQUIRE_ACK,

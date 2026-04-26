@@ -22,6 +22,7 @@
 import { mkdirSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { CliEnv } from "../cli/env.ts";
+import type { MountFingerprint } from "../device/fingerprint.ts";
 
 export interface InProgressPayload {
     cmd: "apply" | "setup:import" | "rollback";
@@ -29,6 +30,10 @@ export interface InProgressPayload {
     pid: number;
     settings_path: string;
     intended_sha256?: string;
+    /** C10a / S1390: physical Kindle identity at marker-write time.
+     *  doctor --repair refuses to act on a marker whose mount differs
+     *  from the currently-attached device. */
+    mount?: MountFingerprint;
     [k: string]: unknown;
 }
 

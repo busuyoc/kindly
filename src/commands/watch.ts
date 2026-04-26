@@ -45,6 +45,7 @@ import { exists, readText } from "../fs/safeRead.ts";
 import { ArgError, parseArgs, type FlagSpecs } from "../cli/args.ts";
 import type { CliEnv } from "../cli/env.ts";
 import { historyPath, highestArchivedIndexPublic, type HistoryEntry } from "../history/writer.ts";
+import { historyEntrySchema } from "../history/schema.ts";
 
 import pkg from "../../package.json" with { type: "json" };
 const KINDLY_VERSION: string = pkg.version;
@@ -101,16 +102,31 @@ function emit(env: CliEnv, ev: WatchEvent): void {
     env.stdout.write(JSON.stringify(ev) + "\n");
 }
 
+// Round-3 follow-up (live probe 2026-04-26): bare JSON.parse + index-is-number
+// check let forged entries (e.g. ts="../../../etc/passwd",
+// ts="2026-04-26T19:99:99.999Z", or any unknown summary key) propagate to the
+// watch event stream, while `kindly history --json` (S1101) drops them as
+// malformed. That parity gap means an attacker with .kindly/ write access can
+// inject GUI-visible "history" the audit reader silently rejects. Validate
+// against the same schema the reader uses; entries that fail schema fall
+// silently — same crash-partial discipline as before, just stricter.
+//
+// `index` stays a required field for watch (unlike read-side, which tolerates
+// pre-W17 entries lacking it). A pre-W17 entry has no `index` so it can't
+// participate in the watch index ordering anyway.
 function readActive(path: string): HistoryEntry[] {
     if (!exists(path, "derived-from-cwd")) return [];
     const raw = readText(path, "derived-from-cwd");
     const out: HistoryEntry[] = [];
     for (const line of raw.split("\n")) {
         if (line.length === 0) continue;
-        try {
-            const parsed = JSON.parse(line) as HistoryEntry;
-            if (typeof parsed.index === "number") out.push(parsed);
-        } catch { /* partial-last or otherwise malformed, skip */ }
+        let parsed: unknown;
+        try { parsed = JSON.parse(line); }
+        catch { continue; /* partial-last or otherwise malformed, skip */ }
+        const r = historyEntrySchema.safeParse(parsed);
+        if (!r.success) continue;
+        if (typeof r.data.index !== "number") continue;
+        out.push(r.data as HistoryEntry);
     }
     return out;
 }

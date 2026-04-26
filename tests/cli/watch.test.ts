@@ -55,8 +55,14 @@ function writeEntry(path: string, entry: HistoryEntry): void {
 }
 
 function mkEntry(index: number, overrides: Partial<HistoryEntry> = {}): HistoryEntry {
+    // Build a per-index ts that always satisfies the F3 ISO-8601 schema
+    // (sec 00-59, min 00-59, hr 00-23). Watch sorts by index, not ts, so any
+    // valid distinct ts works.
+    const sec = index % 60;
+    const min = Math.floor(index / 60) % 60;
+    const hr = Math.floor(index / 3600) % 24;
     return {
-        ts: `2026-04-22T12:00:${String(index).padStart(2, "0")}.000Z`,
+        ts: `2026-04-22T${String(hr).padStart(2, "0")}:${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}.000Z`,
         cmd: "apply",
         kindly_version: "0.10.0",
         index,
@@ -270,6 +276,60 @@ describe("runWatchLoop", () => {
         expect(lines.length).toBe(2);
         expect(lines[1]!.type).toBe("entry");
         expect((lines[1]!.entry as HistoryEntry).index).toBe(1);
+    });
+
+    test("forged-shape entries (parity with reader S1101 schema) are not emitted", async () => {
+        // Round-3 follow-up (live probe 2026-04-26): bare JSON.parse +
+        // index-is-number was permissive — any line with a numeric index
+        // reached the GUI, even with ts="../../../etc/passwd" or
+        // ts="2026-04-26T19:99:99.999Z" or with unknown summary keys. The
+        // reader (S1101) drops these; watch should match. Otherwise an
+        // attacker with .kindly/ write access could plant entries that
+        // `kindly history` rejects but `kindly watch` propagates.
+        const validIndex = 7;
+        const forgedLines = [
+            // ts is a path-traversal shape
+            JSON.stringify({
+                ts: "../../../etc/passwd", cmd: "apply", kindly_version: "0.10.0",
+                index: 1, summary: { settings_delta_n: 1 },
+            }),
+            // ts wall-clock impossible (F3 follow-up regex)
+            JSON.stringify({
+                ts: "2026-04-26T19:99:99.999Z", cmd: "apply", kindly_version: "0.10.0",
+                index: 2, summary: { settings_delta_n: 1 },
+            }),
+            // ts impossible month
+            JSON.stringify({
+                ts: "2026-13-01T12:00:00.000Z", cmd: "apply", kindly_version: "0.10.0",
+                index: 3, summary: { settings_delta_n: 1 },
+            }),
+            // unknown summary key (z.strict)
+            JSON.stringify({
+                ts: "2026-04-22T12:00:00.000Z", cmd: "apply", kindly_version: "0.10.0",
+                index: 4, summary: { settings_delta_n: 1, malicious_key: "payload" },
+            }),
+            // unknown cmd value (historyCommandSchema enum)
+            JSON.stringify({
+                ts: "2026-04-22T12:00:00.000Z", cmd: "setup:promote", kindly_version: "0.10.0",
+                index: 5, summary: {},
+            }),
+            // legitimate entry — should be the only one emitted
+            JSON.stringify(mkEntry(validIndex)),
+        ];
+        require("node:fs").writeFileSync(hpath, forgedLines.join("\n") + "\n");
+
+        const d = driver();
+        const done = runWatchLoop(env, d.triggers);
+        await Promise.resolve();
+        d.close();
+        await done;
+
+        const lines = parseLines(out) as Array<Record<string, unknown>>;
+        // hello + the one valid entry; the 5 forged lines fall to malformed.
+        expect(lines.length).toBe(1); // just hello — the valid entry is at index 7,
+        // but watermark covered it (index 7 was the highest seen). Watch tail-f
+        // semantics: only future-of-watermark emit. Verify watermark sat at 7.
+        expect((lines[0]! as any).watermark).toBe(validIndex);
     });
 
     test("idempotent: spurious trigger without new entries emits nothing", async () => {

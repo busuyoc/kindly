@@ -537,9 +537,13 @@ DoD: test passes today; fails on any future inline policy throw outside gates/.
   owning modules; only gate definitions + orchestrator live under gates/.
 - **Classify data location**: `data/classify/settings.v1.json`, matches
   existing `data/schemas/`, `data/taxonomy/`, `data/catalog/` pattern.
-- **Apply's trust default**: phase 1 enables YAML_SHAPE_NORMAL only
-  (zero-FP); SENSITIVE + DESTRUCTIVE gates fire only when user passes
-  `--untrusted-yaml`. Provenance auto-bypass is phase 2.
+- **Apply's trust default**: phase 1 enabled YAML_SHAPE_NORMAL only
+  (zero-FP); SENSITIVE + DESTRUCTIVE gates fired only behind
+  `--untrusted-yaml`. **v0.12 / Lead 7 closure (S600/S601/S606)**
+  promoted both gates to always-on at apply AND restore — the legitimate
+  pull → apply round-trip has zero SENSITIVE diff (pull writes the
+  device's own bytes), so the gates are silent on the trusted-author
+  flow. Provenance auto-bypass is phase 2.
 - **Escape hatch for imperative gates**: deferred. All 12 current gates
   are pure predicates. Extend `GateResult` with `{kind: "prompt", ...}`
   when first non-pure gate appears.

@@ -215,6 +215,21 @@ async function runMain(argv: readonly string[], env: CliEnv): Promise<number> {
 }
 
 // When invoked directly (not imported), run main().
+//
+// Round 3 history --json envelope F1: process.exit(code) is synchronous
+// — buffered stdout/stderr writes that haven't reached the kernel are
+// dropped on the floor. With `kindly history --json | jq` over a slow
+// pipe, the receiver can see a truncated JSON object — every fix that
+// shipped CONTROL_BYTES_IN_VALUE messages, history rows, gate event
+// blobs etc. is exposed to the same hazard. Drain both streams via
+// the empty-write callback pattern before exit; Node only fires the
+// callback once the pipe has actually accepted the prior bytes.
 if (import.meta.main) {
-    main(process.argv.slice(2)).then((code) => process.exit(code));
+    main(process.argv.slice(2)).then((code) => {
+        process.stdout.write("", () => {
+            process.stderr.write("", () => {
+                process.exit(code);
+            });
+        });
+    });
 }

@@ -28,8 +28,26 @@ export interface Writer {
 
 export class StreamWriter implements Writer {
     constructor(private stream: NodeJS.WritableStream) {}
-    write(s: string): void { this.stream.write(sanitizeForTerminal(s)); }
-    writeRaw(s: string): void { this.stream.write(s); }
+    // Red-team S1181 (2026-04-26): if the consumer closes the read end
+    // (e.g. `kindly pull | head -5`, GUI quits mid-response, broken pipe
+    // mid-serve write), Node raises EPIPE/ERR_STREAM_DESTROYED on the
+    // next write. Without this catch, serve crashed uncaught — every
+    // pipe-closed-by-consumer scenario was a hard fault. Swallow these
+    // because by definition the consumer no longer cares; let other I/O
+    // errors propagate so genuine fs/permission problems still surface.
+    write(s: string): void {
+        try { this.stream.write(sanitizeForTerminal(s)); }
+        catch (e) { if (!isBrokenPipe(e)) throw e; }
+    }
+    writeRaw(s: string): void {
+        try { this.stream.write(s); }
+        catch (e) { if (!isBrokenPipe(e)) throw e; }
+    }
+}
+
+function isBrokenPipe(e: unknown): boolean {
+    const code = (e as NodeJS.ErrnoException).code;
+    return code === "EPIPE" || code === "ERR_STREAM_DESTROYED";
 }
 
 export class StringWriter implements Writer {

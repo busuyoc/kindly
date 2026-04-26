@@ -44,7 +44,7 @@ import { exists, readText } from "../fs/safeRead.ts";
 
 import { ArgError, parseArgs, type FlagSpecs } from "../cli/args.ts";
 import type { CliEnv } from "../cli/env.ts";
-import { historyPath, type HistoryEntry } from "../history/writer.ts";
+import { historyPath, highestArchivedIndexPublic, type HistoryEntry } from "../history/writer.ts";
 
 import pkg from "../../package.json" with { type: "json" };
 const KINDLY_VERSION: string = pkg.version;
@@ -171,8 +171,17 @@ export async function runWatchLoop(
     // Watermark: highest index currently in active at start. Setting
     // lastSeen to the watermark means we emit nothing from before — tail -f.
     // --from overrides with a caller-supplied baseline (crash recovery).
+    //
+    // Red-team S1420 (2026-04-26): if active was just rotated (or has
+    // never had a write since startup), it's empty but the archive may
+    // hold up to 500 entries. Pre-fix, watermark was 0 and the next
+    // append at index 501 emitted with a phantom "everything before
+    // me is missing" gap visible to the GUI. Take max(active, archive)
+    // so the audit trail is correct across rotation boundaries.
     const initial = readActive(path);
-    const watermark = highestIndex(initial);
+    const activeMax = highestIndex(initial);
+    const archiveMax = highestArchivedIndexPublic(env.cwd);
+    const watermark = activeMax > archiveMax ? activeMax : archiveMax;
     let lastSeen = opts.fromIndex !== undefined ? opts.fromIndex : watermark;
 
     emit(env, {

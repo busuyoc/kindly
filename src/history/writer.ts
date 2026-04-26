@@ -107,6 +107,17 @@ export interface HistorySummary {
     setup_id?: string;
     /** Source snapshot dir for rollback. */
     snapshot_dir?: string;
+    /** Set when the mutation failed mid-flight and we auto-rolled back from
+     *  the safety snapshot. Logged so `kindly history` shows the attempted
+     *  import wasn't silently dropped — the user can see something went
+     *  wrong and inspect the error message. (M1 / Lead 18 caller follow-up.) */
+    failed_reason?: string;
+    /** Round-3 snapshot integrity binding. Content hash of the safety
+     *  snapshot dir at write time (`hashSnapshotDir`). Verified at
+     *  `rollback --to <N>` read time; mismatch raises
+     *  SNAPSHOT_HASH_MISMATCH. Format: `sha256:<64 lowercase hex>`.
+     *  Optional for backward-compat with pre-round-3 entries. */
+    snapshot_sha256?: string;
 }
 
 export interface HistoryEntry {
@@ -269,7 +280,28 @@ function rotateActive(cwd: string, activePath: string, entries: HistoryEntry[]):
     writeFileSync(activePath, "");
 }
 
+// Red-team S362/S1000 (2026-04-26): monthKey is the chokepoint that
+// converts an entry's `ts` field into a path segment for the archive
+// file. A forged history entry with ts="../../../etc/passwd" yields
+// "../../.", which path-join'd with the archive dir escapes
+// .kindly/history-archive/ and produces an arbitrary-write primitive
+// (verified writing /private/var/.../..jsonl). Legit entries always
+// carry env.now().toISOString() so this only fires on tampered
+// active/archive files; refuse to rotate rather than write attacker-
+// chosen JSONL bytes outside the archive dir.
 function monthKey(ts: string): string {
-    // ISO 8601 starts with "YYYY-MM" — no parsing needed.
-    return ts.slice(0, 7);
+    const month = ts.slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+        throw new Error(
+            `refusing rotation: invalid month key from ts=${JSON.stringify(ts).slice(0, 60)}`,
+        );
+    }
+    return month;
+}
+
+// Public helper — used by `kindly watch` hello to pick a watermark when
+// the active file is empty (e.g. just rotated). Without this, watch
+// reports watermark:0 even when the archive holds 500 entries (S1420).
+export function highestArchivedIndexPublic(cwd: string): number {
+    return highestArchivedIndex(cwd);
 }

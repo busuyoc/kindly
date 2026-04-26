@@ -144,7 +144,16 @@ async function handleRequest(parentEnv: CliEnv, req: ServeRequest): Promise<void
 
     // On success, envelope is on reqStdout. On error (--json mode), main()
     // writes the error envelope to reqStderr. Pick whichever is non-empty.
-    const raw = exitCode === 0 ? reqStdout.value : reqStderr.value;
+    //
+    // Red-team S442 (2026-04-26): exit code 4 means "command produced a
+    // result envelope on stdout, but with warnings" — that's `doctor`'s
+    // canonical exit when any check warns. Pre-fix, `serve` treated
+    // anything non-zero as error and looked at stderr only, which made
+    // every doctor-via-serve return INTERNAL/no envelope. Route exit 4
+    // through stdout alongside exit 0.
+    const raw = (exitCode === 0 || exitCode === 4)
+        ? reqStdout.value
+        : reqStderr.value;
     if (!raw.trim()) {
         emitFramingError(
             parentEnv, req.id, "INTERNAL",
@@ -171,21 +180,42 @@ async function handleRequest(parentEnv: CliEnv, req: ServeRequest): Promise<void
     parentEnv.stdout.write(JSON.stringify(resp) + "\n");
 }
 
+// Red-team S1180 (2026-04-26): without a buffer cap, a client (malicious
+// or buggy) that sends 50 MiB without a newline drives serve's RSS to
+// hundreds of MB. Cap each line at 1 MiB (well above any legitimate
+// request — kindly argv is dozens of bytes), and resync at the next
+// newline on overflow so the loop survives.
+const MAX_LINE_BYTES = 1024 * 1024;
+
+type LineEvent = { kind: "line"; line: string } | { kind: "overflow" };
+
 /** Read lines from an async iterable of string chunks. Splits on \n, holds
- *  a trailing partial line across chunks, drops \r. Empty lines are skipped. */
-async function* lines(chunks: AsyncIterable<string>): AsyncGenerator<string> {
+ *  a trailing partial line across chunks, drops \r. Empty lines are skipped.
+ *  Yields `{kind: "overflow"}` once per buffer overrun and resyncs at the
+ *  next newline. */
+async function* lines(
+    chunks: AsyncIterable<string>,
+    maxBytes: number = MAX_LINE_BYTES,
+): AsyncGenerator<LineEvent> {
     let buf = "";
     for await (const chunk of chunks) {
         buf += chunk;
+        if (buf.length > maxBytes) {
+            const nl = buf.indexOf("\n");
+            yield { kind: "overflow" };
+            buf = nl < 0 ? "" : buf.slice(nl + 1);
+        }
         let nl: number;
         while ((nl = buf.indexOf("\n")) >= 0) {
             const line = buf.slice(0, nl).replace(/\r$/, "");
             buf = buf.slice(nl + 1);
-            if (line.length > 0) yield line;
+            if (line.length > 0) yield { kind: "line", line };
         }
     }
-    const tail = buf.replace(/\r$/, "");
-    if (tail.length > 0) yield tail;
+    if (buf.length > 0 && buf.length <= maxBytes) {
+        const tail = buf.replace(/\r$/, "");
+        if (tail.length > 0) yield { kind: "line", line: tail };
+    }
 }
 
 /** Testable core: read requests from `input`, write framed responses to
@@ -195,8 +225,15 @@ export async function runServeLoop(
     env: CliEnv,
 ): Promise<void> {
     emitHello(env);
-    for await (const line of lines(input)) {
-        const parsed = parseRequest(line);
+    for await (const ev of lines(input)) {
+        if (ev.kind === "overflow") {
+            emitFramingError(
+                env, null, "FRAMING_OVERFLOW",
+                `request line exceeded ${MAX_LINE_BYTES}-byte cap`,
+            );
+            continue;
+        }
+        const parsed = parseRequest(ev.line);
         if ("error" in parsed) {
             emitFramingError(env, null, "BAD_REQUEST", parsed.error);
             continue;

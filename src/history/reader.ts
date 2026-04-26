@@ -20,6 +20,7 @@ import {
     historyPath,
     type HistoryEntry,
 } from "./writer.ts";
+import { historyEntrySchema } from "./schema.ts";
 
 export interface HistoryEntryWithIndex extends HistoryEntry {
     /** 1-based, oldest = 1. Stable handle for `rollback --to N`. */
@@ -67,15 +68,15 @@ export function readHistoryFile(opts: ReadHistoryOptions): HistoryReadResult {
     let malformed = 0;
     for (const line of lines) {
         if (line.length === 0) continue;
-        try {
-            const parsed = JSON.parse(line) as HistoryEntry;
-            const idx = typeof parsed.index === "number"
-                ? parsed.index
-                : entries.length + 1;
-            entries.push({ ...parsed, index: idx });
-        } catch {
+        const parsed = parseHistoryLine(line);
+        if (!parsed) {
             malformed++;
+            continue;
         }
+        const idx = typeof parsed.index === "number"
+            ? parsed.index
+            : entries.length + 1;
+        entries.push({ ...parsed, index: idx });
     }
     const total = entries.length;
 
@@ -156,12 +157,26 @@ function* parseEntriesFromFile(
     for (const line of raw.split("\n")) {
         if (line.length === 0) continue;
         positional++;
-        try {
-            const parsed = JSON.parse(line) as HistoryEntry;
-            const idx = typeof parsed.index === "number" ? parsed.index : positional;
-            yield { ...parsed, index: idx };
-        } catch {
-            /* skip malformed */
-        }
+        const parsed = parseHistoryLine(line);
+        if (!parsed) continue;
+        const idx = typeof parsed.index === "number" ? parsed.index : positional;
+        yield { ...parsed, index: idx };
     }
+}
+
+// Parse + validate one JSONL line. Returns null for malformed JSON OR
+// schema-invalid entries — both look the same to callers (skip the line,
+// bump the malformed count). S1101: rejecting invented `cmd` values and
+// unknown summary fields at read time defangs replay attacks where an
+// attacker writes a forward-compatible-looking entry that becomes
+// executable when a future kindly version ships a matching handler.
+function parseHistoryLine(line: string): HistoryEntry | null {
+    let raw: unknown;
+    try {
+        raw = JSON.parse(line);
+    } catch {
+        return null;
+    }
+    const result = historyEntrySchema.safeParse(raw);
+    return result.success ? result.data as HistoryEntry : null;
 }

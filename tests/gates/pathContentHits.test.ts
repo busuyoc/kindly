@@ -163,8 +163,8 @@ describe("PATH_CONTENT_HEURISTIC gate", () => {
         expect(PATH_CONTENT_HEURISTIC.bypassFlags).toEqual([]);
     });
 
-    test("fires on import + apply + restore", () => {
-        expect(PATH_CONTENT_HEURISTIC.appliesAt).toEqual(["import", "apply", "restore"]);
+    test("fires on import + apply + restore + rollback", () => {
+        expect(PATH_CONTENT_HEURISTIC.appliesAt).toEqual(["import", "apply", "restore", "rollback"]);
     });
 
     test("fires always (including --dry-run)", () => {

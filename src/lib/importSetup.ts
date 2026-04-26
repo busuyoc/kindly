@@ -4,7 +4,7 @@
 //
 // Shared with `setup inspect` via `loadManifestFile` + `LoadedSetup`.
 
-import { mkdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync } from "node:fs";
 import { exists, readText } from "../fs/safeRead.ts";
 import { dirname, join, resolve } from "node:path";
 
@@ -22,7 +22,7 @@ import {
     topLevelRemovedKeys, type Change,
 } from "../schema/diff.ts";
 import { safeWrite } from "../fs/safeWrite.ts";
-import { createTarGz } from "../fs/archive.ts";
+import { createTarGz, extractTarGz } from "../fs/archive.ts";
 import { type CliEnv, resolveMount } from "../cli/env.ts";
 import { hashBytes, shortId } from "../setup/canonical.ts";
 import { runPhase, collectWarnings, type GateEventLogger } from "../gates/orchestrator.ts";
@@ -68,6 +68,7 @@ import type { GateWarning, ScanReport, SetupImportResult } from "../types/result
 import { scanShippedLuaFiles } from "../catalog/scanPipeline.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
+import { hashSnapshotDir } from "../history/snapshotHash.ts";
 import { writeInProgressMarker, clearInProgressMarker } from "../history/inProgress.ts";
 import { computeMountFingerprint, isFingerprintEmpty } from "../device/fingerprint.ts";
 import { withLock } from "../fs/lockfile.ts";
@@ -674,9 +675,15 @@ function executeSetupImportLocked(
             snapshotDir = dirname(res.backupPath);
         }
     } else if (opts.safetySnapshot !== false && (willInstallPlugins || willInstallPatches)) {
+        // Round 3 disk-hygiene F1: ensure the stamp directory is freshly
+        // created with an unguessable random suffix so a pre-staged
+        // symlink at <cwd>/.kindly/pre-import/<predicted-stamp>/ cannot
+        // adopt safety bytes (PIN/passwords) into an attacker-chosen
+        // location. mkdtempSync atomically creates a unique dir.
         const stamp = env.now().toISOString().replace(/[:.]/g, "-");
-        snapshotDir = join(env.cwd, ".kindly", "pre-import", stamp);
-        mkdirSync(snapshotDir, { recursive: true });
+        const preImportRoot = join(env.cwd, ".kindly", "pre-import");
+        mkdirSync(preImportRoot, { recursive: true });
+        snapshotDir = mkdtempSync(join(preImportRoot, stamp + "-"));
     }
 
     let fatSnapshotPath: string | null = null;
@@ -692,16 +699,78 @@ function executeSetupImportLocked(
             if (!exists(fatSnapshotPath, "derived-from-cwd")) fatSnapshotPath = null;
         }
 
-        if (willInstallPlugins) {
-            installPluginFiles(mount.pluginsDir, shippedPlugins, files);
-            installedPluginFiles = shippedPlugins.length;
-        }
-        if (willInstallPatches) {
-            installPatches(mount.patchesDir, shippedPatches, files);
-            installedPatches = shippedPatches.length;
+        // M1 / Lead 18 caller (2026-04-26): installPluginFiles wipes a
+        // top-level dir before writing. If a per-file fsync fails midway
+        // (FAT32 cluster exhaustion, USB unplug, EIO), the wipe is
+        // permanent and the user sees a half-installed plugin directory
+        // with no rollback. Wrap installs and auto-restore from the FAT
+        // snapshot we just took, then re-throw so the caller sees the
+        // original error and the history entry below records the failed
+        // attempt rather than silently absorbing it.
+        try {
+            if (willInstallPlugins) {
+                installPluginFiles(mount.pluginsDir, shippedPlugins, files);
+                installedPluginFiles = shippedPlugins.length;
+            }
+            if (willInstallPatches) {
+                installPatches(mount.patchesDir, shippedPatches, files);
+                installedPatches = shippedPatches.length;
+            }
+        } catch (installErr) {
+            const reason = installErr instanceof Error ? installErr.message : String(installErr);
+            if (fatSnapshotPath && exists(fatSnapshotPath, "derived-from-cwd")) {
+                try {
+                    extractTarGz({ archivePath: fatSnapshotPath, destRoot: mount.koreaderRoot });
+                } catch {
+                    // Restore failure is its own incident; we still want
+                    // the original install error to surface, so swallow
+                    // here and let the user see the primary cause.
+                }
+            }
+            let failureSnapshotHash: string | null = null;
+            if (snapshotDir) {
+                try {
+                    failureSnapshotHash = hashSnapshotDir(snapshotDir);
+                } catch {
+                    // Defense in depth — proceed with logging the
+                    // install failure even if the safety snapshot can't
+                    // be hashed (e.g. it never materialized).
+                }
+            }
+            try {
+                appendHistoryEntry(env, "setup:import", {
+                    plugins_delta: {
+                        installed_files: 0,
+                        installed_patches: 0,
+                        skipped_files: baseResult.skippedPluginFiles,
+                        skipped_patches: baseResult.skippedPatches,
+                    },
+                    ...(backupPath ? { backup_path: backupPath } : {}),
+                    ...(snapshotDir ? { pre_import_path: snapshotDir } : {}),
+                    ...(failureSnapshotHash ? { snapshot_sha256: failureSnapshotHash } : {}),
+                    setup_id: baseResult.id,
+                    failed_reason: reason.slice(0, 240),
+                }, {
+                    ...(opts.label ? { label: opts.label } : {}),
+                    ...(isFingerprintEmpty(fp) ? {} : { mount: fp }),
+                });
+            } catch {
+                // Failure to log is also its own incident; don't mask
+                // the install error.
+            }
+            if (importMarkerPath) clearInProgressMarker(importMarkerPath);
+            throw installErr;
         }
     }
 
+    let successSnapshotHash: string | null = null;
+    if (snapshotDir) {
+        try {
+            successSnapshotHash = hashSnapshotDir(snapshotDir);
+        } catch {
+            // Defense in depth — see the failure path above.
+        }
+    }
     appendHistoryEntry(env, "setup:import", {
         settings_delta_n: baseResult.changes.length,
         plugins_delta: {
@@ -713,6 +782,7 @@ function executeSetupImportLocked(
         },
         ...(backupPath ? { backup_path: backupPath } : {}),
         ...(snapshotDir ? { pre_import_path: snapshotDir } : {}),
+        ...(successSnapshotHash ? { snapshot_sha256: successSnapshotHash } : {}),
         setup_id: baseResult.id,
     }, {
         ...(opts.label ? { label: opts.label } : {}),

@@ -6,7 +6,7 @@
 // This is the core safety property — a half-populated YAML doesn't wipe
 // your zlibrary password.
 
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { exists, readText } from "../fs/safeRead.ts";
 import { detectInterruptedApply } from "../fs/interruptedApply.ts";
 import { parseSettingsFile } from "../lua/reader.ts";
@@ -19,6 +19,7 @@ import { type CliEnv, resolveMount } from "../cli/env.ts";
 import type { ApplyResult } from "../types/results.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
+import { hashSnapshotDir } from "../history/snapshotHash.ts";
 import { writeInProgressMarker, clearInProgressMarker } from "../history/inProgress.ts";
 import { computeMountFingerprint, isFingerprintEmpty } from "../device/fingerprint.ts";
 import { withLock } from "../fs/lockfile.ts";
@@ -232,9 +233,29 @@ function executeApplyLocked(opts: ApplyOptions, env: CliEnv): ApplyResult {
 
     const res = safeWrite(mount.settingsPath, newContent, { backupDir, verifyLua: true });
 
+    // Round-3 snapshot integrity binding: hash the backup dir's contents
+    // so `kindly rollback --to N` can detect tampering (a swapped
+    // `settings.reader.lua` whose bytes parse fine but mutate a SECRET
+    // or sensitive flag). Skipped when no backup was taken (the surface
+    // doesn't exist without an on-disk dir to hash). dirname(backupPath)
+    // gives the per-write archive root that safeWrite created via
+    // mkdtempSync; that's the exact dir we hash.
+    let snapshotHash: string | null = null;
+    if (res.backupPath) {
+        try {
+            snapshotHash = hashSnapshotDir(dirname(res.backupPath));
+        } catch {
+            // Hashing is defense in depth, not a correctness invariant.
+            // If readdir/stat raced something else (rotation pruning at
+            // the same instant), proceed without the binding rather than
+            // fail the apply that already succeeded.
+        }
+    }
+
     appendHistoryEntry(env, "apply", {
         settings_delta_n: changes.length,
         ...(res.backupPath ? { backup_path: res.backupPath } : {}),
+        ...(snapshotHash ? { snapshot_sha256: snapshotHash } : {}),
     }, {
         ...(opts.label ? { label: opts.label } : {}),
         ...(isFingerprintEmpty(fp) ? {} : { mount: fp }),

@@ -343,3 +343,43 @@ describe("rollback — CODE_EXEC_ADJACENT_REQUIRES_ACK (C7)", () => {
         expect(code).toBe(0);
     });
 });
+
+// Round 3 rollback gate-parity F1: a tampered snapshot whose settings
+// file carries a control byte inside a SENSITIVE/SECRET value would
+// previously roll back unchecked. CONTROL_BYTES_IN_VALUE now fires at
+// the rollback boundary; the snapshot bytes never hit the device.
+describe("rollback — CONTROL_BYTES_IN_VALUE (round 3 F1 parity)", () => {
+    test("snapshot with ESC in a sensitive value blocks the rollback", async () => {
+        const kindle = makeFakeKindle();
+        writeFileSync(kindle.settingsPath, `return {\n    ["night_mode"] = false,\n}\n`);
+        const snap = join(workdir, "snap");
+        mkdirSync(snap, { recursive: true });
+        // ESC (0x1B) inside extra_plugin_paths — code-exec adjacent.
+        const tampered = `return {\n    ["extra_plugin_paths"] = "/mnt/us/x\\27y",\n}\n`;
+        writeFileSync(join(snap, "settings.reader.lua"), tampered);
+
+        const { env, err } = makeEnv(workdir, kindle.root);
+        const code = await main(["rollback", snap], env);
+        expect(code).toBe(3);
+        expect(err.value).toContain("control bytes");
+        expect(err.value).toContain("0x1B");
+        // Device unchanged — the snapshot's bytes never landed.
+        expect(readFileSync(kindle.settingsPath, "utf8")).toBe(
+            `return {\n    ["night_mode"] = false,\n}\n`,
+        );
+    });
+
+    test("clean snapshot (no control bytes) rolls back normally", async () => {
+        const kindle = makeFakeKindle();
+        writeFileSync(kindle.settingsPath, `return {\n    ["night_mode"] = false,\n}\n`);
+        const snap = join(workdir, "snap");
+        mkdirSync(snap, { recursive: true });
+        const benign = `return {\n    ["extra_plugin_paths"] = "/mnt/us/plugins",\n}\n`;
+        writeFileSync(join(snap, "settings.reader.lua"), benign);
+
+        const { env } = makeEnv(workdir, kindle.root);
+        const code = await main(["rollback", snap, "--accept-code-exec"], env);
+        expect(code).toBe(0);
+        expect(readFileSync(kindle.settingsPath, "utf8")).toBe(benign);
+    });
+});

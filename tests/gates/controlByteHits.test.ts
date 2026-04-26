@@ -201,8 +201,8 @@ describe("CONTROL_BYTES_IN_VALUE gate", () => {
         expect(CONTROL_BYTES_IN_VALUE.bypassFlags).toEqual([]);
     });
 
-    test("fires on import + apply + restore boundaries", () => {
-        expect(CONTROL_BYTES_IN_VALUE.appliesAt).toEqual(["import", "apply", "restore"]);
+    test("fires on import + apply + restore + rollback boundaries", () => {
+        expect(CONTROL_BYTES_IN_VALUE.appliesAt).toEqual(["import", "apply", "restore", "rollback"]);
     });
 
     test("fires always (including --dry-run) — preview reflects the block", () => {

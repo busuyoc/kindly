@@ -124,10 +124,13 @@ describe("restore", () => {
         const archive = join(workdir, archives[0]!);
 
         await main(["restore", archive], env);
+        // Round 3 disk-hygiene F1: archives nest under a random-suffix
+        // subdir to defeat predicted-stamp symlink redirects.
         const safetyDir = join(workdir, ".kindly", "pre-restore");
         expect(existsSync(safetyDir)).toBe(true);
-        expect(readdirSync(safetyDir).filter((f) => f.endsWith(".tar.gz")).length)
-            .toBeGreaterThan(0);
+        const subdirs = readdirSync(safetyDir);
+        expect(subdirs.length).toBeGreaterThan(0);
+        expect(existsSync(join(safetyDir, subdirs[0]!, "snapshot.tar.gz"))).toBe(true);
     });
 
     test("--no-safety-snapshot skips the rollback copy", async () => {
@@ -413,10 +416,14 @@ describe("restore", () => {
         await main(["restore", good], env);
         expect(readFileSync(settingsPath, "utf8")).toBe("return { a = 1 }\n");
 
-        // Find the safety snapshot — restore it to roll back.
-        const safetyDir = join(workdir, ".kindly", "pre-restore");
-        const safety = readdirSync(safetyDir).filter((f) => f.endsWith(".tar.gz"))[0]!;
-        await main(["restore", join(safetyDir, safety), "--no-safety-snapshot"], env);
+        // Find the safety snapshot — restore it to roll back. Round 3
+        // disk-hygiene F1: pre-restore archives now live under a
+        // mkdtempSync'd <stamp>-<random>/ subdir to defeat predicted-
+        // stamp symlink redirects, so traverse two levels.
+        const safetyRoot = join(workdir, ".kindly", "pre-restore");
+        const safetySubdir = readdirSync(safetyRoot)[0]!;
+        const safetyArchive = join(safetyRoot, safetySubdir, "snapshot.tar.gz");
+        await main(["restore", safetyArchive, "--no-safety-snapshot"], env);
         expect(readFileSync(settingsPath, "utf8")).toBe(current);
     });
 });

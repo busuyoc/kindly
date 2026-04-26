@@ -18,8 +18,10 @@ import {
     ArchiveTooLargeError, assertSafeArchive, createTarGz, extractFileToMemory,
     extractTarGz, listTarGz, MalformedArchiveError, UnsafeArchivePathError,
 } from "../fs/archive.ts";
-import { resolve } from "node:path";
+import { resolve, join } from "node:path";
+import { mkdirSync, mkdtempSync } from "node:fs";
 import { exists, readText } from "../fs/safeRead.ts";
+import { rotateBackups } from "../fs/backupRotation.ts";
 import type { RestoreResult } from "../types/results.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { emitJson } from "../cli/json.ts";
@@ -173,14 +175,22 @@ function executeRestoreLocked(opts: RestoreOptions, env: CliEnv): RestoreResult 
 
     // Pre-restore safety snapshot. Rollback = extract this back over the
     // koreader dir if something goes wrong.
+    //
+    // Round 3 disk-hygiene F1 sibling: the pre-restore archive used to
+    // live at `.kindly/pre-restore/<isoStamp>.tar.gz` — a clock-derived
+    // path. An attacker with .kindly/ write access could pre-stage a
+    // symlink at the predicted stamp; createTarGz would then follow it
+    // and clobber a target outside the snapshot dir. Two-layer fix:
+    // mkdtempSync below creates an unguessable parent directory, AND
+    // archive.ts:createTarGz lstats outputPath and refuses to write
+    // when it resolves to a symlink.
     let safetySnapshotPath: string | null = null;
     if (opts.safetySnapshot !== false) {
-        const safetyPath = resolve(
-            env.cwd,
-            ".kindly",
-            "pre-restore",
-            `${isoStamp(env.now())}.tar.gz`,
-        );
+        const preRestoreRoot = resolve(env.cwd, ".kindly", "pre-restore");
+        mkdirSync(preRestoreRoot, { recursive: true });
+        const stamp = isoStamp(env.now());
+        const archiveDir = mkdtempSync(join(preRestoreRoot, stamp + "-"));
+        const safetyPath = join(archiveDir, "snapshot.tar.gz");
         try {
             const saf = createTarGz({
                 cwd: mount.koreaderRoot,
@@ -205,6 +215,14 @@ function executeRestoreLocked(opts: RestoreOptions, env: CliEnv): RestoreResult 
         ...(opts.label ? { label: opts.label } : {}),
         ...(isFingerprintEmpty(fp) ? {} : { mount: fp }),
     });
+
+    // Round 3 disk-hygiene F2: rotate pre-restore archives the same way
+    // apply rotates .kindly/backups/. Default keep-N (20) matches the
+    // existing convention. Skipped when --no-safety-snapshot is set
+    // (no archive was created).
+    if (safetySnapshotPath) {
+        rotateBackups(resolve(env.cwd, ".kindly", "pre-restore"));
+    }
 
     return {
         mode: "restored",

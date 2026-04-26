@@ -12,7 +12,7 @@
 // testing against a simulated Kindle without touching /Volumes/Kindle).
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { lstatSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { exists, statFollow } from "./safeRead.ts";
 import { isSafeRelativePath } from "./paths.ts";
@@ -50,6 +50,26 @@ export function createTarGz(opts: CreateOptions): CreateResult {
     }
     const outDir = dirname(outputPath);
     if (!exists(outDir, "user-provided")) mkdirSync(outDir, { recursive: true });
+
+    // Round 3 disk-hygiene F1: refuse to write the archive through a
+    // pre-staged symlink at outputPath. `tar -czf` happily follows a
+    // symlink and overwrites whatever it points to, which composes with
+    // the predictable-stamp callsites (pre-restore/<isoStamp>.tar.gz):
+    // an attacker who can write under .kindly/ pre-stages a symlink at
+    // the predicted path and redirects the tar output to clobber a file
+    // outside the snapshot dir. lstatSync inspects the link itself, not
+    // the target. ENOENT is the expected case (no prior file, fresh
+    // write); any other lstat failure should bubble up.
+    try {
+        const st = lstatSync(outputPath);
+        if (st.isSymbolicLink()) {
+            throw new Error(
+                `refusing to write archive through symlink at ${outputPath}`,
+            );
+        }
+    } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+    }
 
     const included: string[] = [];
     const skipped: string[] = [];
@@ -219,6 +239,14 @@ function enforceSizeCaps(archivePath: string, opts: ExtractOptions): void {
         if (e.type === "symlink") {
             throw new MalformedArchiveError(
                 `archive contains symlink entry (typeflag 2) at ${e.path}; kindly does not extract links`,
+            );
+        }
+        if (e.type === "sparse") {
+            // S1452: GNU old-style sparse (typeflag "S"). Stored size is
+            // small, real expanded size lives in the GNU sparse map and
+            // can be many GB. ISIZE and totalApparentBytes both miss it.
+            throw new MalformedArchiveError(
+                `archive contains GNU sparse entry (typeflag S) at ${e.path}; kindly does not extract sparse files`,
             );
         }
     }

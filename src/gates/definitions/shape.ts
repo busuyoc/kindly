@@ -117,7 +117,14 @@ export const YAML_SHAPE_NORMAL: GateDefinition = {
 export const CONTROL_BYTES_IN_VALUE: GateDefinition = {
     id: "CONTROL_BYTES_IN_VALUE",
     category: "SHAPE",
-    appliesAt: ["import", "apply", "restore"],
+    // Round 3 rollback gate-parity F1: rollback writes the snapshot's
+    // bytes onto the device. Apply rejects control bytes inside SECRET
+    // / SENSITIVE / code-exec values; without this gate, rollback
+    // re-introduces them silently if the snapshot was tampered with
+    // post-creation (the .kindly/ surface is writable, see snapshot-
+    // integrity F3) or if the original apply bypassed the gate via a
+    // (non-existent) flag in some future flag matrix.
+    appliesAt: ["import", "apply", "restore", "rollback"],
     requires: ["controlByteHits"],
     firesIn: "always",
     bypassFlags: [],
@@ -167,7 +174,12 @@ export const CONTROL_BYTES_IN_VALUE: GateDefinition = {
 export const PATH_CONTENT_HEURISTIC: GateDefinition = {
     id: "PATH_CONTENT_HEURISTIC",
     category: "SHAPE",
-    appliesAt: ["import", "apply", "restore"],
+    // Round 3 rollback gate-parity F2: warn-tier traversal/out-of-tree
+    // checks belong on rollback as well. A snapshot-tamper attacker
+    // can rewrite a path to point outside /mnt/us/; rollback then
+    // writes that path to settings.reader.lua. Restore already warns;
+    // rollback should match.
+    appliesAt: ["import", "apply", "restore", "rollback"],
     requires: ["pathContentHits"],
     firesIn: "always",
     bypassFlags: [],

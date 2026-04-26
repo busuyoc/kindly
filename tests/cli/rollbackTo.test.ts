@@ -162,7 +162,7 @@ describe("rollback --to — resolution by command", () => {
         const preImport = seedPreImportDir(workdir, "2026-04-22T11-00-00-000Z", pristine);
         seedHistory(workdir, [
             { ts: "2026-04-22T11:00:00.000Z", cmd: "setup:import", kindly_version: "0.3.0",
-              summary: { settings_delta_n: 3, pre_import_path: preImport, setup_id: "abc123" } },
+              summary: { settings_delta_n: 3, pre_import_path: preImport, setup_id: "abc123def456" } },
         ]);
 
         writeFileSync(kindle.settingsPath, `return { ["broken"] = true, }\n`);
@@ -223,7 +223,7 @@ describe("rollback --to — resolution by command", () => {
         const kindle = makeFakeKindle();
         seedHistory(workdir, [
             { ts: "2026-04-22T09:00:00.000Z", cmd: "setup:export", kindly_version: "0.3.0",
-              summary: { output_path: "/x.kset", setup_id: "abc" } },
+              summary: { output_path: "/x.kset", setup_id: "abcdef012345" } },
         ]);
         const { env, err } = makeEnv(workdir, kindle.root);
         const code = await main(["rollback", "--to", "1"], env);
@@ -338,7 +338,7 @@ describe("rollback --to — crosses archives (W17)", () => {
                 cmd: "setup:import",
                 kindly_version: "0.3.0",
                 index: 42,
-                summary: { settings_delta_n: 2, pre_import_path: preImportDir, setup_id: "abc123" },
+                summary: { settings_delta_n: 2, pre_import_path: preImportDir, setup_id: "abc123def456" },
             }) + "\n",
         );
 
@@ -391,5 +391,225 @@ describe("rollback --to --dry-run", () => {
         expect(code).toBe(0);
         expect(out.value).toMatch(/dry-run/i);
         expect(readFileSync(kindle.settingsPath, "utf8")).toBe(before);
+    });
+});
+
+// Round 3 disk-hygiene F3: history.jsonl is in the same `.kindly/`
+// directory as pre-import snapshots, so an attacker with cwd-write
+// access can tamper history to point `pre_import_path` /
+// `pre_rollback_path` / `backup_path` outside the expected subtype dir.
+// Resolver must reject paths that don't resolve under the expected
+// `<cwd>/.kindly/<subtype>/` root.
+describe("rollback --to — F3 history-path subtype validation", () => {
+    test("apply entry with backup_path outside .kindly/backups/ → SNAPSHOT_INVALID", async () => {
+        const kindle = makeFakeKindle();
+        // Stage a fake settings file outside .kindly/backups/.
+        const evilDir = mkdtempSync(join(tmpdir(), "kindly-evil-"));
+        const evilBackup = join(evilDir, "settings.reader.lua");
+        writeFileSync(evilBackup, `return { ["pwned"] = true, }\n`);
+        seedHistory(workdir, [
+            { ts: "2026-04-22T10:00:00.000Z", cmd: "apply", kindly_version: "0.3.0",
+              summary: { settings_delta_n: 1, backup_path: evilBackup } },
+        ]);
+        const { env, err } = makeEnv(workdir, kindle.root);
+        const code = await main(["rollback", "--to", "1"], env);
+        expect(code).toBe(1);
+        expect(err.value).toMatch(/resolves outside/);
+        expect(err.value).toMatch(/\.kindly\/backups/);
+        // Device unchanged (rollback never executed).
+        expect(readFileSync(kindle.settingsPath, "utf8")).not.toContain("pwned");
+    });
+
+    test("setup:import entry with pre_import_path outside .kindly/pre-import/ → SNAPSHOT_INVALID", async () => {
+        const kindle = makeFakeKindle();
+        const evilDir = mkdtempSync(join(tmpdir(), "kindly-evil-imp-"));
+        writeFileSync(join(evilDir, "settings.reader.lua"), `return { ["x"] = 1, }\n`);
+        seedHistory(workdir, [
+            { ts: "2026-04-22T11:00:00.000Z", cmd: "setup:import", kindly_version: "0.3.0",
+              summary: { settings_delta_n: 1, pre_import_path: evilDir, setup_id: "abcdef012345" } },
+        ]);
+        const { env, err } = makeEnv(workdir, kindle.root);
+        const code = await main(["rollback", "--to", "1"], env);
+        expect(code).toBe(1);
+        expect(err.value).toMatch(/resolves outside/);
+        expect(err.value).toMatch(/\.kindly\/pre-import/);
+    });
+
+    test("rollback entry with pre_rollback_path outside .kindly/pre-rollback/ → SNAPSHOT_INVALID", async () => {
+        const kindle = makeFakeKindle();
+        const evilDir = mkdtempSync(join(tmpdir(), "kindly-evil-rb-"));
+        writeFileSync(join(evilDir, "settings.reader.lua"), `return { ["x"] = 1, }\n`);
+        seedHistory(workdir, [
+            { ts: "2026-04-22T11:00:00.000Z", cmd: "rollback", kindly_version: "0.3.0",
+              summary: { snapshot_dir: "/ignored", pre_rollback_path: evilDir } },
+        ]);
+        const { env, err } = makeEnv(workdir, kindle.root);
+        const code = await main(["rollback", "--to", "1"], env);
+        expect(code).toBe(1);
+        expect(err.value).toMatch(/resolves outside/);
+        expect(err.value).toMatch(/\.kindly\/pre-rollback/);
+    });
+
+    test("path-traversal lookalike (`.kindly/backups-evil/...`) is rejected", async () => {
+        const kindle = makeFakeKindle();
+        // Stage a sibling dir whose name starts with "backups" to exercise
+        // the trailing-separator guard on subtype prefix matching.
+        const lookalikeDir = join(workdir, ".kindly", "backups-evil", "x");
+        mkdirSync(lookalikeDir, { recursive: true });
+        const lookalike = join(lookalikeDir, "settings.reader.lua");
+        writeFileSync(lookalike, `return { ["pwned2"] = true, }\n`);
+        seedHistory(workdir, [
+            { ts: "2026-04-22T10:00:00.000Z", cmd: "apply", kindly_version: "0.3.0",
+              summary: { settings_delta_n: 1, backup_path: lookalike } },
+        ]);
+        const { env, err } = makeEnv(workdir, kindle.root);
+        const code = await main(["rollback", "--to", "1"], env);
+        expect(code).toBe(1);
+        expect(err.value).toMatch(/resolves outside/);
+    });
+});
+
+// Round-3 snapshot integrity hash-binding. The history entry records
+// hashSnapshotDir(<snapshot>) at write time; rollback recomputes and
+// compares before re-applying any bytes. A mismatch raises
+// SNAPSHOT_HASH_MISMATCH and refuses to proceed; pre-round-3 entries
+// without the hash are accepted (backward-compat).
+describe("rollback --to — round-3 snapshot integrity hash-binding", () => {
+    test("hash mismatch (tampered snapshot file) → SNAPSHOT_HASH_MISMATCH", async () => {
+        const kindle = makeFakeKindle();
+        const stamp = "2026-04-22T10-00-00-000Z";
+        // Compute the hash for the *original* contents, write to history,
+        // then mutate the file on disk to simulate tampering.
+        const backupPath = seedSettingsBackup(workdir, stamp,
+            `return {\n    ["night_mode"] = true,\n}\n`);
+        const { hashSnapshotDir } = await import("../../src/history/snapshotHash.ts");
+        const originalHash = hashSnapshotDir(join(workdir, ".kindly", "backups", stamp));
+        // Tamper: flip a value (matches the threat model — attacker
+        // swapped settings.reader.lua bytes between original write and
+        // rollback read).
+        writeFileSync(backupPath, `return {\n    ["pin"] = "9999",\n}\n`);
+
+        seedHistory(workdir, [
+            {
+                ts: "2026-04-22T10:00:00.000Z",
+                cmd: "apply",
+                kindly_version: "0.3.0",
+                summary: {
+                    settings_delta_n: 1,
+                    backup_path: backupPath,
+                    snapshot_sha256: originalHash,
+                },
+            },
+        ]);
+
+        const { env, err } = makeEnv(workdir, kindle.root);
+        const code = await main(["rollback", "--to", "1"], env);
+        expect(code).toBe(1);
+        expect(err.value).toMatch(/SNAPSHOT_HASH_MISMATCH|content hash does not match/i);
+        // Device must NOT have been re-written from the tampered bytes.
+        expect(readFileSync(kindle.settingsPath, "utf8")).not.toContain("pin");
+        expect(readFileSync(kindle.settingsPath, "utf8")).not.toContain("9999");
+    });
+
+    test("hash matches (untampered snapshot) → rollback proceeds", async () => {
+        const kindle = makeFakeKindle();
+        const stamp = "2026-04-22T10-00-00-000Z";
+        const backupPath = seedSettingsBackup(workdir, stamp,
+            `return {\n    ["night_mode"] = true,\n}\n`);
+        const { hashSnapshotDir } = await import("../../src/history/snapshotHash.ts");
+        const originalHash = hashSnapshotDir(join(workdir, ".kindly", "backups", stamp));
+
+        seedHistory(workdir, [
+            {
+                ts: "2026-04-22T10:00:00.000Z",
+                cmd: "apply",
+                kindly_version: "0.3.0",
+                summary: {
+                    settings_delta_n: 1,
+                    backup_path: backupPath,
+                    snapshot_sha256: originalHash,
+                },
+            },
+        ]);
+
+        const { env } = makeEnv(workdir, kindle.root);
+        const code = await main(["rollback", "--to", "1", "--no-safety-snapshot"], env);
+        expect(code).toBe(0);
+        // Device updated from the (untampered) snapshot.
+        expect(readFileSync(kindle.settingsPath, "utf8")).toContain("night_mode");
+        expect(readFileSync(kindle.settingsPath, "utf8")).toContain("true");
+    });
+
+    test("pre-round-3 entry (no snapshot_sha256) is accepted (backward-compat)", async () => {
+        const kindle = makeFakeKindle();
+        const stamp = "2026-04-22T10-00-00-000Z";
+        const backupPath = seedSettingsBackup(workdir, stamp,
+            `return {\n    ["night_mode"] = true,\n}\n`);
+
+        seedHistory(workdir, [
+            {
+                ts: "2026-04-22T10:00:00.000Z",
+                cmd: "apply",
+                kindly_version: "0.3.0",
+                summary: {
+                    settings_delta_n: 1,
+                    backup_path: backupPath,
+                    // intentionally NO snapshot_sha256 — pre-round-3 shape
+                },
+            },
+        ]);
+
+        const { env } = makeEnv(workdir, kindle.root);
+        const code = await main(["rollback", "--to", "1", "--no-safety-snapshot"], env);
+        expect(code).toBe(0);
+        expect(readFileSync(kindle.settingsPath, "utf8")).toContain("night_mode");
+    });
+
+    test("explicit snapshot dir bypasses hash binding (no recorded hash to compare)", async () => {
+        // `kindly rollback <dir>` is the "I trust this dir" surface.
+        // No history lookup, no hash check — caller asserts trust.
+        const kindle = makeFakeKindle();
+        const explicitDir = mkdtempSync(join(tmpdir(), "kindly-explicit-"));
+        writeFileSync(join(explicitDir, "settings.reader.lua"),
+            `return {\n    ["explicit"] = 1,\n}\n`);
+
+        const { env } = makeEnv(workdir, kindle.root);
+        const code = await main(["rollback", explicitDir, "--no-safety-snapshot"], env);
+        expect(code).toBe(0);
+        expect(readFileSync(kindle.settingsPath, "utf8")).toContain("explicit");
+    });
+
+    test("snapshot dir vanished (rotated/deleted) but history retains hash → SNAPSHOT_HASH_MISMATCH", async () => {
+        const kindle = makeFakeKindle();
+        const stamp = "2026-04-22T10-00-00-000Z";
+        const backupPath = seedSettingsBackup(workdir, stamp,
+            `return {\n    ["night_mode"] = true,\n}\n`);
+        const { hashSnapshotDir } = await import("../../src/history/snapshotHash.ts");
+        const originalHash = hashSnapshotDir(join(workdir, ".kindly", "backups", stamp));
+
+        seedHistory(workdir, [
+            {
+                ts: "2026-04-22T10:00:00.000Z",
+                cmd: "apply",
+                kindly_version: "0.3.0",
+                summary: {
+                    settings_delta_n: 1,
+                    backup_path: backupPath,
+                    snapshot_sha256: originalHash,
+                },
+            },
+        ]);
+
+        // Simulate rotation/cleanup — remove the file from the snapshot
+        // dir. The path-subtype assertion still passes (parent dir exists)
+        // but hashSnapshotDir throws ENOENT on the file or returns a
+        // different hash for an empty dir.
+        const { rmSync } = await import("node:fs");
+        rmSync(backupPath);
+
+        const { env, err } = makeEnv(workdir, kindle.root);
+        const code = await main(["rollback", "--to", "1"], env);
+        expect(code).toBe(1);
+        expect(err.value).toMatch(/SNAPSHOT_HASH_MISMATCH|content hash does not match|can't be hashed/i);
     });
 });

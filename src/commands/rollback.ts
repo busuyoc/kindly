@@ -15,7 +15,7 @@
 // (unless --no-safety-snapshot) at `<cwd>/.kindly/pre-rollback/<stamp>/`.
 // If the rollback itself goes wrong, you can roll it forward again.
 
-import { mkdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { copyFile, exists, readBytes, readText, statFollow } from "../fs/safeRead.ts";
 
@@ -25,10 +25,12 @@ import { dim, heading, info, ok, warn } from "../cli/log.ts";
 import { createTarGz, extractTarGz, listTarGz } from "../fs/archive.ts";
 import { isSafeRelativePath } from "../fs/paths.ts";
 import { safeWrite } from "../fs/safeWrite.ts";
+import { rotateBackups } from "../fs/backupRotation.ts";
 import type { RollbackResult } from "../types/results.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 import { emitJson } from "../cli/json.ts";
 import { appendHistoryEntry } from "../history/writer.ts";
+import { hashSnapshotDir } from "../history/snapshotHash.ts";
 import { writeInProgressMarker, clearInProgressMarker } from "../history/inProgress.ts";
 import { withLock } from "../fs/lockfile.ts";
 import { createHash } from "node:crypto";
@@ -48,6 +50,7 @@ import { computeChanges } from "../schema/diff.ts";
 import { runPhase } from "../gates/orchestrator.ts";
 import { CODE_EXEC_ADJACENT_REQUIRES_ACK } from "../gates/definitions/dual.ts";
 import { MOUNT_FINGERPRINT_MATCHES } from "../gates/definitions/identity.ts";
+import { CONTROL_BYTES_IN_VALUE, PATH_CONTENT_HEURISTIC } from "../gates/definitions/shape.ts";
 import { appendGateEvent, gateEventFromFiredGate } from "../history/gateLog.ts";
 
 const FLAGS = {
@@ -185,9 +188,13 @@ function executeRollbackLocked(opts: RollbackOptions, env: CliEnv): RollbackResu
     // BACK to, one level deeper: current device state → .kindly/pre-rollback/<stamp>/.
     let preRollbackDir: string | null = null;
     if (opts.safetySnapshot !== false) {
+        // Round 3 disk-hygiene F1: random-suffixed dir so a pre-staged
+        // symlink at the predicted-stamp path cannot redirect the
+        // safety copy. mkdtempSync atomically creates the unique dir.
         const stamp = env.now().toISOString().replace(/[:.]/g, "-");
-        preRollbackDir = join(env.cwd, ".kindly", "pre-rollback", stamp);
-        mkdirSync(preRollbackDir, { recursive: true });
+        const preRollbackRoot = join(env.cwd, ".kindly", "pre-rollback");
+        mkdirSync(preRollbackRoot, { recursive: true });
+        preRollbackDir = mkdtempSync(join(preRollbackRoot, stamp + "-"));
     }
 
     let settingsRestored = false;
@@ -242,13 +249,34 @@ function executeRollbackLocked(opts: RollbackOptions, env: CliEnv): RollbackResu
         fatFileCount = r.fileCount;
     }
 
+    let preRollbackHash: string | null = null;
+    if (preRollbackDir) {
+        try {
+            preRollbackHash = hashSnapshotDir(preRollbackDir);
+        } catch {
+            // Defense in depth — see lib/apply.ts and lib/importSetup.ts
+            // for the same defensive pattern. Hashing failures don't
+            // unwind the rollback that already succeeded on device.
+        }
+    }
     appendHistoryEntry(env, "rollback", {
         snapshot_dir: snapshotDir,
         ...(preRollbackDir ? { pre_rollback_path: preRollbackDir } : {}),
+        ...(preRollbackHash ? { snapshot_sha256: preRollbackHash } : {}),
     }, {
         ...(opts.label ? { label: opts.label } : {}),
         ...(isFingerprintEmpty(currentFp) ? {} : { mount: currentFp }),
     });
+
+    // Round 3 disk-hygiene F2: pre-rollback safety snapshots accumulate
+    // forever otherwise — every interactive rollback writes a fresh
+    // <stamp>-<random>/ subdir under .kindly/pre-rollback/. Apply already
+    // calls rotateBackups for .kindly/backups/; the parallel directory
+    // tree should rotate the same way. Default keep-N (20) matches the
+    // existing convention.
+    if (preRollbackDir) {
+        rotateBackups(join(env.cwd, ".kindly", "pre-rollback"));
+    }
 
     if (settingsMarkerPath) clearInProgressMarker(settingsMarkerPath);
 
@@ -306,13 +334,42 @@ function runRollbackGates(
         }
     }
 
+    // Round 3 rollback gate-parity F1/F2: rollback is a write-path. A
+    // tampered snapshot — `.kindly/pre-import/<stamp>/` is writable
+    // by anyone who can write under the user's cwd — would otherwise
+    // re-introduce control bytes / out-of-tree paths that apply would
+    // have rejected. CONTROL_BYTES_IN_VALUE is structural (no consent
+    // bypass); PATH_CONTENT_HEURISTIC is warn-tier.
+    //
+    // The producers walk `ctx.opts.yamlSettings`; we feed the parsed
+    // snapshot under that key. The shape (Record<string, LuaValue>)
+    // matches the parsed-YAML shape the producers expect — strings,
+    // numbers, booleans, arrays, nested objects.
+    let snapshotForGates: Record<string, unknown> | null = null;
+    if (hasSettings) {
+        const settingsSnap = join(snapshotDir, SETTINGS_FILENAME);
+        try {
+            snapshotForGates = parseSettingsFile(
+                readBytes(settingsSnap, "user-provided").toString("utf8"),
+            ) as Record<string, unknown>;
+        } catch {
+            // Snapshot file unparseable — gates become no-ops. Mirrors
+            // the existing CODE_EXEC fall-through above.
+        }
+    }
     runPhase({
         boundary: "rollback",
-        registry: [MOUNT_FINGERPRINT_MATCHES, CODE_EXEC_ADJACENT_REQUIRES_ACK],
+        registry: [
+            MOUNT_FINGERPRINT_MATCHES,
+            CONTROL_BYTES_IN_VALUE,
+            PATH_CONTENT_HEURISTIC,
+            CODE_EXEC_ADJACENT_REQUIRES_ACK,
+        ],
         dryRun: opts.dryRun ?? false,
         strictImports: false,
         opts: {
             changes,
+            yamlSettings: snapshotForGates ?? {},
             acceptCodeExec: !!opts.acceptCodeExec,
             ...(opts.recordedMount ? { recordedMount: opts.recordedMount } : {}),
             currentMount,
@@ -368,6 +425,83 @@ function settingsPresent(result: RollbackResult): boolean {
     return exists(join(result.snapshotDir, SETTINGS_FILENAME), "user-provided");
 }
 
+// Round 3 disk-hygiene F3: snapshot paths in history.jsonl come from
+// kindly's own writers (apply / importSetup / rollback) and live under
+// `.kindly/<subtype>/` by construction. But history.jsonl itself is
+// writable by anything with write access to `.kindly/` (the same bucket
+// that holds pre-import snapshots), so a tampered entry could redirect
+// the read of `settings.reader.lua` / `plugins-patches.tar.gz` to any
+// path on the filesystem (e.g. `/etc/passwd`'s parent dir if it contained
+// a sibling `settings.reader.lua` from another project, or an attacker-
+// staged dir at `/tmp/X` with arbitrary on-device payload). Validate
+// that the resolved path stays under the expected subtype directory.
+function assertSnapshotUnderExpectedSubtype(
+    snapshotDir: string,
+    subtype: "backups" | "pre-import" | "pre-rollback",
+    cwd: string,
+    historyIndex: number,
+): void {
+    const expectedRoot = resolve(cwd, ".kindly", subtype);
+    const resolvedDir = resolve(cwd, snapshotDir);
+    // startsWith with a trailing separator avoids the
+    // `<expectedRoot>-attacker/` confusion (e.g. `.kindly/backups-evil/`
+    // would match `.kindly/backups` without the separator guard).
+    const guard = expectedRoot + "/";
+    if (resolvedDir !== expectedRoot && !resolvedDir.startsWith(guard)) {
+        throw new KindlyError(
+            ErrorCodes.SNAPSHOT_INVALID,
+            `history entry #${historyIndex} points at ${snapshotDir} which resolves outside ${expectedRoot} — refusing to roll back to a path that didn't come from kindly's own writer`,
+            [
+                {
+                    text: "Pass a snapshot directory explicitly if you trust it, or run `kindly doctor` to investigate a potentially tampered history.",
+                    command: "kindly doctor",
+                },
+            ],
+        );
+    }
+}
+
+// Round-3 snapshot integrity hash-binding. The history entry recorded
+// the hash of the snapshot dir's contents at write time; recompute now
+// and compare. A mismatch means someone (or something) edited the
+// snapshot bytes between the original mutation and this rollback —
+// refuse rather than re-apply attacker-chosen bytes onto the device.
+//
+// Pre-round-3 entries lack snapshot_sha256 and bypass the check; we
+// can't retroactively bind history that was written before the hash
+// was added. New entries always carry the hash — apply, setup:import,
+// and rollback all wire `hashSnapshotDir` into appendHistoryEntry.
+function assertSnapshotHashMatches(
+    snapshotDir: string,
+    recordedHash: string | undefined,
+    historyIndex: number,
+): void {
+    if (!recordedHash) return;
+    let actual: string;
+    try {
+        actual = hashSnapshotDir(snapshotDir);
+    } catch (e) {
+        throw new KindlyError(
+            ErrorCodes.SNAPSHOT_HASH_MISMATCH,
+            `history entry #${historyIndex} recorded a content hash for ${snapshotDir} but the directory can't be hashed now: ${(e as Error).message}`,
+            [{ text: "Inspect the snapshot directory; if files have been removed or replaced, the safety net is gone." }],
+        );
+    }
+    if (actual !== recordedHash) {
+        throw new KindlyError(
+            ErrorCodes.SNAPSHOT_HASH_MISMATCH,
+            `history entry #${historyIndex} content hash does not match the snapshot at ${snapshotDir} — ` +
+            `the safety snapshot has been modified since it was written. Refusing to roll back to potentially tampered bytes.`,
+            [
+                {
+                    text: "Pass a snapshot directory explicitly if you trust it, or run `kindly doctor` to investigate.",
+                    command: "kindly doctor",
+                },
+            ],
+        );
+    }
+}
+
 // Resolve a 1-based history index (oldest = 1) to the matching mutation's
 // pre-* safety snapshot directory. This is the `--to <N>` bridge: users
 // pick an entry out of `kindly history`, we locate its backup for rollback.
@@ -405,12 +539,16 @@ export function resolveSnapshotFromHistory(
 
     const s = entry.summary;
     if (entry.cmd === "apply" && s.backup_path) {
-        return { snapshotDir: dirname(s.backup_path), entry };
+        const dir = dirname(s.backup_path);
+        assertSnapshotUnderExpectedSubtype(dir, "backups", cwd, index);
+        return { snapshotDir: dir, entry };
     }
     if (entry.cmd === "setup:import" && s.pre_import_path) {
+        assertSnapshotUnderExpectedSubtype(s.pre_import_path, "pre-import", cwd, index);
         return { snapshotDir: s.pre_import_path, entry };
     }
     if (entry.cmd === "rollback" && s.pre_rollback_path) {
+        assertSnapshotUnderExpectedSubtype(s.pre_rollback_path, "pre-rollback", cwd, index);
         return { snapshotDir: s.pre_rollback_path, entry };
     }
     if (entry.cmd === "restore" && s.pre_restore_path) {
@@ -462,6 +600,14 @@ export async function runRollback(argv: readonly string[], env: CliEnv): Promise
         const resolved = resolveSnapshotFromHistory(n, env.cwd);
         resolvedDir = resolved.snapshotDir;
         recordedMount = resolved.entry.mount;
+        // Round-3 hash-binding verification: the history entry committed
+        // to a content hash at write time; reject rollback if the
+        // on-disk snapshot has drifted. Bypassed for pre-round-3 entries
+        // that have no recorded hash. Caller-supplied snapshot dirs
+        // (`kindly rollback <dir>`) skip this check by design — there's
+        // no recorded hash to compare against, the user is asserting
+        // trust in the directory.
+        assertSnapshotHashMatches(resolvedDir, resolved.entry.summary.snapshot_sha256, n);
     } else {
         resolvedDir = snapArg!;
     }

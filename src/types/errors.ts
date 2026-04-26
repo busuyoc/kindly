@@ -111,8 +111,5 @@ export const POLICY_BLOCK_CODES = new Set<string>([
     ErrorCodes.DESTRUCTIVE_YAML_SHAPE,
     ErrorCodes.CONTROL_BYTES_IN_VALUE,
     ErrorCodes.MOUNT_FINGERPRINT_MISMATCH,
-    // UNTRUSTED_SIGNER added to POLICY_BLOCK_CODES when its gate lands
-    // in step 5 of the W39 trust-roster rollout. The arch test in
-    // tests/arch/gatesOnly.test.ts enforces that codes here are
-    // referenced by a gate in src/gates/.
+    ErrorCodes.UNTRUSTED_SIGNER,
 ]);

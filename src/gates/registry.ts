@@ -10,7 +10,11 @@
 // ./definitions/*.ts and appending them here.
 
 import type { GateDefinition } from "./types.ts";
-import { MANIFEST_HASH_ASSERT, MOUNT_FINGERPRINT_MATCHES } from "./definitions/identity.ts";
+import {
+    MANIFEST_HASH_ASSERT,
+    MOUNT_FINGERPRINT_MATCHES,
+    SIGNER_TRUSTED,
+} from "./definitions/identity.ts";
 import {
     PLUGINS_REQUIRE_ACK,
     PATCHES_REQUIRE_ACK,
@@ -40,6 +44,7 @@ import {
 // error is the first block the CLI surfaces.
 
 export const GATES: ReadonlyArray<GateDefinition> = [
+    SIGNER_TRUSTED,
     MANIFEST_HASH_ASSERT,
     MOUNT_FINGERPRINT_MATCHES,
     YAML_SHAPE_NORMAL,

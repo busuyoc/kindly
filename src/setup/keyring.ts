@@ -32,9 +32,16 @@ import { dirname, join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 
-import type { CliEnv } from "../cli/env.ts";
 import { keyIdFromPublicKey } from "./signing.ts";
 import { createPublicKey } from "node:crypto";
+
+/** Minimal slice of CliEnv this module needs. Both the keyring loader and
+ *  saver only read `homeOverride` (path resolution); decoupling lets the
+ *  gates/producers/signerTrust producer call us without conjuring a full
+ *  CliEnv with stub writers. */
+export interface KeyringEnv {
+    homeOverride?: string;
+}
 
 // ---- Schema ---------------------------------------------------------------
 
@@ -76,7 +83,7 @@ export type KeyringErrorCode =
 // ---- Path resolution ------------------------------------------------------
 
 /** Where the keyring lives. Honors CliEnv.homeOverride for tests. */
-export function keyringPath(env: CliEnv): string {
+export function keyringPath(env: KeyringEnv): string {
     const home = env.homeOverride ?? homedir();
     return join(home, ".kindly", "trusted-keys.json");
 }
@@ -85,7 +92,7 @@ export function keyringPath(env: CliEnv): string {
 
 /** Read and validate the keyring. Returns an empty roster if the file
  *  doesn't exist (the natural first-run state — we don't pre-create it). */
-export function loadKeyring(env: CliEnv): TrustedKeysFile {
+export function loadKeyring(env: KeyringEnv): TrustedKeysFile {
     const path = keyringPath(env);
     if (!existsSync(path)) {
         return { kindly_trust: "v1", keys: [] };
@@ -125,7 +132,7 @@ export function loadKeyring(env: CliEnv): TrustedKeysFile {
 /** Write the keyring atomically. Creates ~/.kindly/ if missing. Tmp+rename
  *  prevents partial-write corruption — destination always sees a complete
  *  prior file or a complete new file, never a half-written one. */
-export function saveKeyring(env: CliEnv, file: TrustedKeysFile): void {
+export function saveKeyring(env: KeyringEnv, file: TrustedKeysFile): void {
     const path = keyringPath(env);
     const dir = dirname(path);
     mkdirSync(dir, { recursive: true });

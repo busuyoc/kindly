@@ -6,6 +6,7 @@
 
 import type { GateDefinition } from "../types.ts";
 import type { ManifestIdentity } from "../producers/manifestIdentity.ts";
+import type { SignerTrust } from "../producers/signerTrust.ts";
 import {
     compareFingerprints,
     isFingerprintEmpty,
@@ -97,6 +98,67 @@ export const MOUNT_FINGERPRINT_MATCHES: GateDefinition = {
             message:
                 "the currently-attached Kindle does not match the one this " +
                 `snapshot was taken from:\n  ${cmp.differences.join("\n  ")}`,
+        };
+    },
+};
+
+/**
+ * SIGNER_TRUSTED — W39 step 5.
+ *
+ * Once a Setup carries an Ed25519 sidecar (`<archive>.sig`), the signer's
+ * key_id must appear in the user's local trust roster
+ * (~/.kindly/trusted-keys.json). Pure crypto verification proves
+ * "the holder of <key_id> signed this archive"; whether <key_id> is one
+ * the user has chosen to trust is a separate decision, answered here.
+ *
+ * Unsigned Setups (no sidecar) pass — signing is opt-in for v0.13. This
+ * gate exists to make signed-but-untrusted explicit, not to require
+ * signatures across the board.
+ *
+ * A corrupt roster fails closed: we cannot answer "is the signer
+ * trusted?" so we don't silently degrade to "yes" or "no". The user
+ * either fixes the roster (see KEYRING_CORRUPT remediation) or passes
+ * --accept-untrusted-signature with eyes open.
+ *
+ * Bypass: --accept-untrusted-signature. Intended for one-off imports
+ * where the user has out-of-band confidence in the publisher but hasn't
+ * (or won't) install their key. Sticky: emits a gate-event so the
+ * choice is auditable.
+ */
+export const SIGNER_TRUSTED: GateDefinition = {
+    id: "SIGNER_TRUSTED",
+    category: "IDENTITY",
+    appliesAt: ["import"],
+    requires: ["signerTrust"],
+    firesIn: "always",
+    bypassFlags: ["--accept-untrusted-signature"],
+    errorCode: "UNTRUSTED_SIGNER",
+    remediation: [
+        {
+            text: "If you trust this publisher, install their key first:",
+            command: "kindly setup trust add <pubkey.pem> --label <name>",
+        },
+        {
+            text: "Or override (with eyes open) — sticky warning, audited:",
+            command: "kindly setup import --accept-untrusted-signature <file>",
+        },
+    ],
+    check: (ctx) => {
+        const t = ctx.producers.signerTrust as SignerTrust;
+        if (t.kind === "unsigned") return { kind: "pass" };
+        if (t.rosterStatus === "trusted") return { kind: "pass" };
+        if (t.rosterStatus === "roster-error") {
+            return {
+                kind: "block",
+                message:
+                    `signer ${t.signerKeyId} is signed but trust state is unknown — ` +
+                    `your trust roster is unreadable: ${t.rosterError}`,
+            };
+        }
+        // rosterStatus === "untrusted"
+        return {
+            kind: "block",
+            message: `signer ${t.signerKeyId} is not in your trust roster.`,
         };
     },
 };

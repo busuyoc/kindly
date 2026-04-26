@@ -934,6 +934,14 @@ const IMPORT_FLAGS = {
         default: false,
         description: "CI mode: refuse the import if any SENSITIVE key is changed, any plugin file is tampered, or any uncatalogued plugin is shipped. Incompatible with --accept-sensitive and --accept-key.",
     },
+    "accept-untrusted-signature": {
+        type: "boolean",
+        default: false,
+        description:
+            "import even when the .kset is signed by a key not in your local trust roster " +
+            "(~/.kindly/trusted-keys.json). Use only if you have out-of-band confidence in " +
+            "the publisher; sticky and audited via .kindly/gate-events.jsonl.",
+    },
 } as const satisfies FlagSpecs;
 
 // Parse + validate --accept-key=<a,b,c>. Returns the dotted-key set.
@@ -1381,6 +1389,7 @@ async function runSetupImport(argv: readonly string[], env: CliEnv): Promise<num
         acceptCodeExec: flags["accept-code-exec"],
         ...(acceptKey ? { acceptKey } : {}),
         strictImports: flags["strict-imports"],
+        acceptUntrustedSignature: flags["accept-untrusted-signature"],
     }, env);
 
     if (env.jsonMode) {

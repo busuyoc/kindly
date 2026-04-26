@@ -27,7 +27,7 @@ import { type CliEnv, resolveMount } from "../cli/env.ts";
 import { hashBytes, shortId } from "../setup/canonical.ts";
 import { runPhase, collectWarnings, type GateEventLogger } from "../gates/orchestrator.ts";
 import { appendGateEvent, gateEventFromFiredGate } from "../history/gateLog.ts";
-import { MANIFEST_HASH_ASSERT } from "../gates/definitions/identity.ts";
+import { MANIFEST_HASH_ASSERT, SIGNER_TRUSTED } from "../gates/definitions/identity.ts";
 import {
     PLUGINS_REQUIRE_ACK,
     PATCHES_REQUIRE_ACK,
@@ -232,6 +232,15 @@ export interface SetupImportOptions {
      */
     strictImports?: boolean;
     /**
+     * W39 step 5: bypass for SIGNER_TRUSTED. Lets a signed Setup import
+     * even when the signer's key isn't in the local trust roster (or the
+     * roster is corrupt). Distinct from `force` (compat) and from
+     * `acceptSensitive` (per-change consent) — this is the
+     * "I know this publisher, just not on this machine" lane. Emits a
+     * gate-event so the choice is auditable in `.kindly/gate-events.jsonl`.
+     */
+    acceptUntrustedSignature?: boolean;
+    /**
      * Testability hook — override the plugin catalog path for hash
      * verification. Production leaves this undefined so `loadPluginCatalog`
      * reads the committed `data/catalog/plugins.bundled.v1.json`. Not
@@ -368,6 +377,7 @@ function executeSetupImportLocked(
         logger: gateLogger,
         boundary: "import",
         registry: [
+            SIGNER_TRUSTED,
             MANIFEST_HASH_ASSERT,
             YAML_SHAPE_NORMAL,
             CONTROL_BYTES_IN_VALUE,
@@ -387,6 +397,10 @@ function executeSetupImportLocked(
             skipPlugins: !!opts.skipPlugins,
             acceptPatches: !!opts.acceptPatches,
             skipPatches: !!opts.skipPatches,
+            // SIGNER_TRUSTED inputs.
+            archivePath: path,
+            homeOverride: env.homeOverride,
+            acceptUntrustedSignature: !!opts.acceptUntrustedSignature,
         },
     })));
 

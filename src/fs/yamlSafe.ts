@@ -36,7 +36,20 @@ export class YamlTooLargeError extends Error {
 // reinterprets `no/yes/on/off` as booleans (S488). Reject any directive
 // at the source layer — kindly never emits one and publishers have no
 // legitimate reason to include one.
-const YAML_DIRECTIVE_RE = /^%YAML\b/m;
+//
+// Round 4 narrow audit (S1240 HIGH): yaml@2 silently consumes a leading
+// U+FEFF BOM before reading directives, so a BOM-prefixed `%YAML 1.1`
+// header activated 1.1 mode while the original `^%YAML` regex saw the
+// BOM at position 0 and missed the match. Allow zero or more BOMs after
+// `^`. The `/m` flag's LineTerminator class covers LF, CR, U+2028 and
+// U+2029 but NOT BOM, since yaml@2 treats BOM as a special encoding
+// marker rather than content. End-to-end consequence of the original
+// bug: any unsigned source path (kindly.yaml, lean `.kset.yaml` without
+// sidecar, manifest.yaml inside an archive trusted by filename only)
+// could silently flip every yes/no/on/off in the document from string
+// to boolean — semantic inversion of every boolean-shaped key in the
+// schema.
+const YAML_DIRECTIVE_RE = /^﻿*%YAML\b/m;
 export function parseYamlSafe(src: string, opts: ParseYamlSafeOptions = {}): unknown {
     const limit = opts.maxBytes ?? DEFAULT_MAX_BYTES;
     const bytes = Buffer.byteLength(src, "utf8");
@@ -70,10 +83,10 @@ export function parseYamlSafe(src: string, opts: ParseYamlSafeOptions = {}): unk
 // Lead 19 round 2 (2026-04-26): NFC-equivalent invisible codepoints
 // (ZWSP U+200B, ZWNJ U+200C, ZWJ U+200D, BOM U+FEFF, BiDi marks
 // U+202A-202E + U+2066-2069, soft hyphen U+00AD, etc.) are their own
-// NFC form — `"kosync​".normalize("NFC") === "kosync​"` —
+// NFC form — a ZWSP-injected variant of `kosync` normalizes to itself —
 // so they pass the byte-equality check above but still defeat
-// `classify.ts` lookups (`"kosync​" !== "kosync"`). Reject any
-// Cf (format) or Cc (control) codepoint in keys to close that
+// classify.ts lookups (the ZWSP-injected variant !== `kosync`). Reject
+// any Cf (format) or Cc (control) codepoint in keys to close that
 // remaining bypass surface. Same fail-closed posture as NFC.
 const INVISIBLE_OR_CONTROL_RE = /[\p{Cf}\p{Cc}]/u;
 function assertNfcKeys(value: unknown, pathHint: string, seen: WeakSet<object>): void {

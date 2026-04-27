@@ -93,6 +93,55 @@ h: [*g,*g,*g,*g,*g,*g,*g,*g,*g]
             // Only directives (column-0, standalone line) are rejected.
             expect(parseYamlSafe('note: "see %YAML docs"\n')).toEqual({ note: "see %YAML docs" });
         });
+
+        // S1240 (Round 4 narrow audit, 2026-04-26 evening). yaml@2 silently
+        // consumes a leading U+FEFF BOM before reading directives, so a
+        // BOM-prefixed source flips to YAML 1.1 mode while the original
+        // `^%YAML` regex (built only against JS LineTerminator class) saw
+        // BOM at position 0 and missed the match. End-to-end consequence:
+        // any unsigned source path could silently flip every yes/no/on/off
+        // from string to boolean — semantic inversion of every boolean-
+        // shaped key in the schema. Fix: regex now allows zero or more
+        // BOMs after `^`.
+        describe("S1240 — BOM-prefix bypass of directive guard", () => {
+            test("rejects %YAML 1.1 prefixed by U+FEFF BOM", () => {
+                expect(() => parseYamlSafe(`﻿%YAML 1.1\n---\nx: 1\n`))
+                    .toThrow(/YAML version directive is not allowed/);
+            });
+
+            test("rejects %YAML 1.2 prefixed by U+FEFF BOM", () => {
+                expect(() => parseYamlSafe(`﻿%YAML 1.2\n---\nx: 1\n`))
+                    .toThrow(/YAML version directive is not allowed/);
+            });
+
+            test("rejects multiple-BOM-prefixed %YAML directive", () => {
+                // Repeated BOMs may sneak past a single-BOM allowlist.
+                expect(() => parseYamlSafe(`﻿﻿﻿%YAML 1.1\n---\nx: 1\n`))
+                    .toThrow(/YAML version directive is not allowed/);
+            });
+
+            test("BOM-prefix without a directive parses normally", () => {
+                // A bare BOM at the start of the source is harmless;
+                // yaml@2 strips it, and our pre-check must not produce
+                // a false positive.
+                expect(parseYamlSafe(`﻿a: 1\n`)).toEqual({ a: 1 });
+            });
+
+            test("end-to-end: BOM + %YAML 1.1 would otherwise re-enable yes→true (S488 reopener)", () => {
+                // Confirms the bypass would cause real semantic harm if the
+                // pre-check were absent: yaml@2 would silently parse `yes`
+                // as boolean true under 1.1. The pre-check fires first so
+                // we never reach the unsafe parse.
+                let threw = false;
+                try {
+                    parseYamlSafe(`﻿%YAML 1.1\n---\nyes_key: yes\n`);
+                } catch (e: any) {
+                    threw = true;
+                    expect(e.code).toBe(ErrorCodes.YAML_DIRECTIVE);
+                }
+                expect(threw).toBe(true);
+            });
+        });
     });
 
     describe("C5 — non-NFC key rejection (Lead 19, S730-S739)", () => {

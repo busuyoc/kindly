@@ -112,6 +112,15 @@ export function inspectTarGz(archivePath: string, maxUncompressedBytes: number):
     const entries: TarEntry[] = [];
     let totalApparentBytes = 0;
     let pendingLongName: string | null = null;
+    // Round 6 S2104: PAX `x` records describe ONLY the next entry; `g`
+    // records establish defaults for every subsequent entry (until the
+    // next `g` overrides them). Tracking both keeps the in-memory walker
+    // in sync with `tar -tzf`/`tar -xzf`, both of which honor PAX path
+    // overrides — pre-fix, inspectTarGz would report the ustar name
+    // while the shell-out walkers reported the PAX-overridden name, and
+    // the typeflag check in enforceSizeCaps would key off the wrong path.
+    let pendingPaxPath: string | null = null;
+    let globalPaxPath: string | null = null;
     let offset = 0;
     let zeroBlocks = 0;
     while (offset + 512 <= data.length) {
@@ -130,7 +139,13 @@ export function inspectTarGz(archivePath: string, maxUncompressedBytes: number):
         const typeflag = String.fromCharCode(header[156] ?? 0);
         const prefix = readField(header, 345, 155);
         const ustarName = prefix ? `${prefix}/${baseName}` : baseName;
-        const name = pendingLongName ?? ustarName;
+        // Priority for the entry's effective path mirrors POSIX pax:
+        //   PAX `x` (next-entry) > GNU long-name > PAX `g` (global) > ustar.
+        const name = pendingPaxPath
+            ?? pendingLongName
+            ?? globalPaxPath
+            ?? ustarName;
+        pendingPaxPath = null;
         pendingLongName = null;
         const type = classifyTypeflag(typeflag);
         if (type === "longname") {
@@ -148,6 +163,12 @@ export function inspectTarGz(archivePath: string, maxUncompressedBytes: number):
                     `archive contains GNU sparse extension (PAX GNU.sparse.*); kindly does not extract sparse files`,
                 );
             }
+            const records = parsePaxRecords(paxBody);
+            const paxPath = records.get("path");
+            if (paxPath !== undefined) {
+                if (typeflag === "g") globalPaxPath = paxPath;
+                else pendingPaxPath = paxPath;
+            }
         } else if (type === "longlink") {
             // long-link extension headers describe the next entry;
             // they don't themselves represent files in the archive.
@@ -159,6 +180,37 @@ export function inspectTarGz(archivePath: string, maxUncompressedBytes: number):
         offset += 512 + contentBlocks * 512;
     }
     return { entries, totalApparentBytes };
+}
+
+// Parse a PAX extended header body. POSIX format per record:
+//   "<length-as-decimal> <key>=<value>\n"
+// where <length> counts every byte of the record including the length
+// prefix, the space, the `=`, and the trailing newline. We bail at the
+// first malformed record rather than attempting to recover — a
+// malformed PAX header is itself suspicious enough to ignore the rest.
+function parsePaxRecords(body: string): Map<string, string> {
+    const out = new Map<string, string>();
+    let i = 0;
+    while (i < body.length) {
+        let j = i;
+        while (j < body.length && body[j] !== " ") j++;
+        if (j >= body.length) break;
+        const len = parseInt(body.slice(i, j), 10);
+        if (!Number.isFinite(len) || len <= 0 || i + len > body.length) break;
+        const recordEnd = i + len;
+        const eq = body.indexOf("=", j + 1);
+        if (eq < 0 || eq >= recordEnd) {
+            i = recordEnd;
+            continue;
+        }
+        const key = body.slice(j + 1, eq);
+        // value is everything between '=' and the trailing '\n' that
+        // closes the record at recordEnd-1.
+        const value = body.slice(eq + 1, recordEnd - 1);
+        out.set(key, value);
+        i = recordEnd;
+    }
+    return out;
 }
 
 function classifyTypeflag(t: string): TarEntryType {

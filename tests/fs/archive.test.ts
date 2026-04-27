@@ -9,8 +9,9 @@ import { spawnSync } from "node:child_process";
 import { gzipSync } from "node:zlib";
 import {
     ArchiveTooLargeError, assertSafeArchive, createTarGz, extractTarGz,
-    listTarGz, MalformedArchiveError,
+    listTarGz, MalformedArchiveError, UnsafeArchivePathError,
 } from "../../src/fs/archive.ts";
+import { inspectTarGz } from "../../src/fs/tarInspect.ts";
 
 let src: string;
 let dest: string;
@@ -226,5 +227,186 @@ describe("C4: tar-header inspection", () => {
         ]);
         expect(r.status).toBe(0);
         expect(() => assertSafeArchive(archive)).toThrow(MalformedArchiveError);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Round 6 FF batch — S2104 + S2110 closures.
+// ---------------------------------------------------------------------------
+
+function pad(s: string, n: number): Buffer {
+    const b = Buffer.alloc(n);
+    b.write(s);
+    return b;
+}
+function octal(n: number, len: number): Buffer {
+    return Buffer.from(n.toString(8).padStart(len - 1, "0") + "\0", "ascii");
+}
+function tarHeader(opts: {
+    name: string; size: number; typeflag: string; prefix?: string;
+}): Buffer {
+    const h = Buffer.alloc(512);
+    pad(opts.name, 100).copy(h, 0);
+    octal(0o644, 8).copy(h, 100);
+    octal(0, 8).copy(h, 108);
+    octal(0, 8).copy(h, 116);
+    octal(opts.size, 12).copy(h, 124);
+    octal(0, 12).copy(h, 136);
+    Buffer.alloc(8, 0x20).copy(h, 148);
+    h[156] = opts.typeflag.charCodeAt(0);
+    pad("", 100).copy(h, 157);
+    pad("ustar", 6).copy(h, 257);
+    pad("00", 2).copy(h, 263);
+    if (opts.prefix) pad(opts.prefix, 155).copy(h, 345);
+    let sum = 0;
+    for (let i = 0; i < 512; i++) sum += h[i]!;
+    Buffer.from(sum.toString(8).padStart(6, "0") + "\0 ", "ascii").copy(h, 148);
+    return h;
+}
+
+function paxRecord(key: string, value: string): string {
+    // POSIX format: "<length> <key>=<value>\n" where length counts every
+    // byte of the record including the length prefix and trailing \n.
+    const body = ` ${key}=${value}\n`;
+    let len = body.length + String(body.length).length;
+    while (String(len).length !== String(len - String(len).length + String(body.length).length).length) len++;
+    return String(len) + body;
+}
+
+function paxBlock(records: string[]): { header: Buffer; body: Buffer; pad: Buffer; typeflag: "x" | "g" } {
+    return paxBlockTyped("x", records);
+}
+function paxBlockTyped(typeflag: "x" | "g", records: string[]): { header: Buffer; body: Buffer; pad: Buffer; typeflag: "x" | "g" } {
+    const body = Buffer.from(records.join(""), "utf8");
+    const pad = Buffer.alloc(Math.ceil(body.length / 512) * 512 - body.length);
+    const name = typeflag === "g" ? "PaxGlobal/x" : "PaxHeader/x";
+    const header = tarHeader({ name, size: body.length, typeflag });
+    return { header, body, pad, typeflag };
+}
+
+describe("S2104: inspectTarGz honors PAX path= records", () => {
+    test("PAX `x` record overrides the next entry's ustar name", () => {
+        const pax = paxBlock([paxRecord("path", "real/path/main.lua")]);
+        const fb = Buffer.from("data");
+        const fileH = tarHeader({ name: "ignored.txt", size: fb.length, typeflag: "0" });
+        const filePad = Buffer.alloc(Math.ceil(fb.length / 512) * 512 - fb.length);
+        const tar = Buffer.concat([
+            pax.header, pax.body, pax.pad,
+            fileH, fb, filePad,
+            Buffer.alloc(1024),
+        ]);
+        writeFileSync(archive, gzipSync(tar));
+        const insp = inspectTarGz(archive, 1024 * 1024);
+        expect(insp.entries).toHaveLength(1);
+        expect(insp.entries[0]!.path).toBe("real/path/main.lua");
+    });
+
+    test("inspectTarGz agrees with listTarGz on PAX-overridden paths " +
+        "(no two-view divergence)", () => {
+        // Pre-fix: listTarGz returned the PAX path, inspectTarGz returned
+        // the ustar name — exactly the seam S2104 documented.
+        const pax = paxBlock([paxRecord("path", "plugins/Calibre.koplugin/main.lua")]);
+        const fb = Buffer.from("safe");
+        const fileH = tarHeader({ name: "main.lua", size: fb.length, typeflag: "0" });
+        const filePad = Buffer.alloc(Math.ceil(fb.length / 512) * 512 - fb.length);
+        const tar = Buffer.concat([
+            pax.header, pax.body, pax.pad,
+            fileH, fb, filePad,
+            Buffer.alloc(1024),
+        ]);
+        writeFileSync(archive, gzipSync(tar));
+        const listed = listTarGz(archive);
+        const insp = inspectTarGz(archive, 1024 * 1024);
+        expect(insp.entries.map((e) => e.path)).toEqual(listed);
+    });
+
+    test("PAX `g` (global) record applies to subsequent entries", () => {
+        const pax = paxBlockTyped("g", [paxRecord("path", "global-default.txt")]);
+        const fb = Buffer.from("a");
+        const f1 = tarHeader({ name: "ignored1.txt", size: fb.length, typeflag: "0" });
+        const f1Pad = Buffer.alloc(Math.ceil(fb.length / 512) * 512 - fb.length);
+        const fb2 = Buffer.from("b");
+        const f2 = tarHeader({ name: "ignored2.txt", size: fb2.length, typeflag: "0" });
+        const f2Pad = Buffer.alloc(Math.ceil(fb2.length / 512) * 512 - fb2.length);
+        const tar = Buffer.concat([
+            pax.header, pax.body, pax.pad,
+            f1, fb, f1Pad,
+            f2, fb2, f2Pad,
+            Buffer.alloc(1024),
+        ]);
+        writeFileSync(archive, gzipSync(tar));
+        const insp = inspectTarGz(archive, 1024 * 1024);
+        expect(insp.entries.map((e) => e.path)).toEqual([
+            "global-default.txt",
+            "global-default.txt",
+        ]);
+    });
+
+    test("PAX `x` (next-only) overrides one entry; subsequent entry " +
+        "falls back to global default", () => {
+        // Order: g{path=g.txt}, x{path=x.txt}, file ustar A, file ustar B
+        // → entry A uses x record, entry B falls back to global.
+        const g = paxBlockTyped("g", [paxRecord("path", "g.txt")]);
+        const x = paxBlockTyped("x", [paxRecord("path", "x.txt")]);
+        const fb = Buffer.from("a");
+        const fA = tarHeader({ name: "ustarA.txt", size: fb.length, typeflag: "0" });
+        const fAPad = Buffer.alloc(Math.ceil(fb.length / 512) * 512 - fb.length);
+        const fB = tarHeader({ name: "ustarB.txt", size: fb.length, typeflag: "0" });
+        const fBPad = Buffer.alloc(Math.ceil(fb.length / 512) * 512 - fb.length);
+        const tar = Buffer.concat([
+            g.header, g.body, g.pad,
+            x.header, x.body, x.pad,
+            fA, fb, fAPad,
+            fB, fb, fBPad,
+            Buffer.alloc(1024),
+        ]);
+        writeFileSync(archive, gzipSync(tar));
+        const insp = inspectTarGz(archive, 1024 * 1024);
+        expect(insp.entries.map((e) => e.path)).toEqual(["x.txt", "g.txt"]);
+    });
+
+    test("PAX-overridden traversal path is rejected by " +
+        "assertSafeArchive (defense in depth via inspectTarGz)", () => {
+        const pax = paxBlock([paxRecord("path", "../../escaped")]);
+        const fb = Buffer.from("evil");
+        const fileH = tarHeader({ name: "innocent.txt", size: fb.length, typeflag: "0" });
+        const filePad = Buffer.alloc(Math.ceil(fb.length / 512) * 512 - fb.length);
+        const tar = Buffer.concat([
+            pax.header, pax.body, pax.pad,
+            fileH, fb, filePad,
+            Buffer.alloc(1024),
+        ]);
+        writeFileSync(archive, gzipSync(tar));
+        // Refusal still fires — listTarGz already saw the PAX-overridden
+        // name pre-fix; the new behavior is that inspectTarGz now sees it
+        // too, closing the inspect-vs-list divergence.
+        expect(() => assertSafeArchive(archive)).toThrow(UnsafeArchivePathError);
+    });
+});
+
+describe("S2110: listTarGz does not blow spawnSync's default 1 MiB stdout cap", () => {
+    test("archive whose listing exceeds 1 MiB lists cleanly", () => {
+        // Pre-fix: spawnSync's default 1 MiB maxBuffer crashed `tar -tzf`
+        // with empty stderr and exit=null on any archive whose stdout
+        // listing topped 1 MiB, even when the archive was well under
+        // both the archive-bytes and uncompressed-bytes caps.
+        // 5500 entries × ~256 bytes ≈ 1.4 MiB stdout — past the old cap,
+        // well under the new one. Each header is 512 bytes so the tar
+        // itself is ~2.7 MiB (gzips down to ~50 KiB).
+        const blocks: Buffer[] = [];
+        const N = 5500;
+        const longPrefix = "p".repeat(140);  // pushes name+prefix > 240 bytes
+        for (let i = 0; i < N; i++) {
+            const baseName = `${i.toString().padStart(7, "0")}.lua`;
+            blocks.push(tarHeader({
+                name: baseName, size: 0, typeflag: "0", prefix: longPrefix,
+            }));
+        }
+        blocks.push(Buffer.alloc(1024));
+        writeFileSync(archive, gzipSync(Buffer.concat(blocks)));
+        const listed = listTarGz(archive);
+        expect(listed).toHaveLength(N);
+        // Sanity: every path was prefix + "/" + base.
+        expect(listed[0]!.startsWith(longPrefix + "/")).toBe(true);
     });
 });

@@ -329,7 +329,17 @@ export function listTarGz(archivePath: string): string[] {
         throw new Error(`archive not found: ${archivePath}`);
     }
     assertGzipMagic(archivePath);
-    const r = spawnSync("tar", ["-tzf", archivePath], { encoding: "utf8" });
+    // Round 6 S2110: spawnSync's default stdout cap is 1 MiB. A legal
+    // archive at the supported uncompressed bound (500 MiB) of mostly
+    // tiny entries can produce a multi-MiB listing; pre-fix, listTarGz
+    // threw "tar listing failed (exit null):" with empty stderr —
+    // a non-actionable error indistinguishable from a real tar bug.
+    // The listing can never exceed the uncompressed cap (one path per
+    // entry, one entry per ≥512-byte header), so use that as the bound.
+    const r = spawnSync("tar", ["-tzf", archivePath], {
+        encoding: "utf8",
+        maxBuffer: DEFAULT_MAX_UNCOMPRESSED_BYTES,
+    });
     if (r.status !== 0) {
         throw new Error(`tar listing failed (exit ${r.status}): ${r.stderr}`);
     }

@@ -165,6 +165,23 @@ describe("serve — request dispatch", () => {
         const err = envelope.error as Record<string, unknown>;
         expect(err.code).toBe("PLUGIN_NOT_FOUND");
     });
+
+    test("preview is whitelisted (Slice 4) — missing --output surfaces ARG_INVALID, not UNSUPPORTED_COMMAND", async () => {
+        // We don't spin docker here. The argv triggers ArgError before the
+        // harness ever runs, which is enough to prove `preview` is in the
+        // whitelist.
+        await runServeLoop(
+            scripted([{ id: 99, argv: ["preview"] }]),
+            env,
+        );
+        const resp = parseStream(stdout.value)[1]!;
+        expect(resp.error).toBeUndefined();
+        const envelope = resp.envelope as Record<string, unknown>;
+        expect(envelope.status).toBe("error");
+        const err = envelope.error as Record<string, unknown>;
+        expect(err.code).toBe("ARG_INVALID");
+        expect(String(err.message)).toContain("--output");
+    });
 });
 
 describe("serve — framing errors", () => {

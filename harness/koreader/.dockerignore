@@ -1,0 +1,9 @@
+# probe/ has its own Dockerfile (Slice 0); exclude it from the main
+# image build context so docker doesn't ship those files into the
+# builder stage.
+probe/
+
+# Patches and entrypoint land here in Slices 2-3. Keep dockerignore
+# permissive; explicit COPY in Dockerfile is the source of truth.
+*.swp
+.DS_Store

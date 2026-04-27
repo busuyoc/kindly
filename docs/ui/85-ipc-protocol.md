@@ -110,7 +110,7 @@ envelope; a command falling back to text output would break line-framing.
 `argv[0]` must be one of:
 
 ```
-apply, diff, doctor, history, init, plugin, pull, restore, rollback, setup, snapshot
+apply, diff, doctor, history, init, plugin, preview, pull, restore, rollback, setup, snapshot
 ```
 
 Excluded:

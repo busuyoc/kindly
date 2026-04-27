@@ -48,7 +48,7 @@ export const SERVE_PROTOCOL_VERSION = 1;
 const COMMAND_WHITELIST = new Set<string>([
     "pull", "apply", "diff", "init", "doctor",
     "snapshot", "restore", "rollback", "history",
-    "setup", "plugin",
+    "setup", "plugin", "preview",
 ]);
 
 interface ServeRequest {

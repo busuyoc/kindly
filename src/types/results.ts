@@ -543,3 +543,12 @@ export interface PluginDescribeResult {
     /** Absolute path to the catalog file read. */
     catalogPath: string;
 }
+
+export interface PreviewResult {
+    /** Absolute path of the YAML rendered. */
+    yamlPath: string;
+    /** Absolute path of the PNG written. */
+    outputPath: string;
+    /** Whether a device baseline was merged in (vs YAML-only render). */
+    usedDeviceBaseline: boolean;
+}

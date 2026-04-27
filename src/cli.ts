@@ -24,6 +24,7 @@ import { runSetup, setupHelp } from "./commands/setup.ts";
 import { runPlugin, pluginHelp } from "./commands/plugin.ts";
 import { runServe, serveHelp } from "./cli/serve.ts";
 import { runWatch, watchHelp } from "./commands/watch.ts";
+import { runPreview, previewHelp } from "./commands/preview.ts";
 
 import pkg from "../package.json" with { type: "json" };
 const VERSION: string = pkg.version;
@@ -55,6 +56,7 @@ const COMMANDS: Record<string, Command> = {
     plugin:   { run: runPlugin,   help: pluginHelp,   mutating: false },
     serve:    { run: runServe,    help: serveHelp,    mutating: false },
     watch:    { run: runWatch,    help: watchHelp,    mutating: false },
+    preview:  { run: runPreview,  help: previewHelp,  mutating: true  }, // writes PNG
 };
 
 const TOP_HELP = `
@@ -90,6 +92,8 @@ Automation:
              (see \`kindly serve --help\` for the protocol)
   watch      stream new history entries as JSON (tail -f for the GUI)
              (see \`kindly watch --help\` for the protocol)
+  preview    render a kindly.yaml as a Kindle-screen PNG via the
+             KOReader-in-Docker harness (requires Docker)
 
 Other:
   help <cmd>   print that command's help

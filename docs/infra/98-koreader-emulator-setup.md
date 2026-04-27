@@ -1,7 +1,11 @@
 # 98 -- KOReader emulator on macOS: build, run, and screenshot pipeline
 
 Date: 2026-04-23.
-Status: **research complete -- ready for hands-on verification.**
+Status: **research complete; empirically verified by W46 Slices 0-4 (2026-04-27).**
+The harness lives at `harness/koreader/` and is wired into `kindly preview`.
+Open questions §8.2 are answered inline below. macOS-native build path here
+remains useful for one-off probing; the production substrate is the
+Linux-in-Docker harness.
 Companion: `contrib/preview-patch/2-kindly-screenshot.lua`, `docs/86-gui-sandbox.md`.
 
 ---
@@ -552,19 +556,31 @@ The preview needs a book to render. Options:
    window appears for ~2 seconds during the screenshot pipeline. Cosmetic
    issue only.
 
-### 8.2 Open questions (need hands-on testing)
+### 8.2 Open questions (resolved by W46 Slices 0-4, 2026-04-27)
 
-1. Does `SDL_VIDEO_DRIVER=offscreen` work with KOReader's SDL3 build on
-   macOS?
-2. Can `KO_HOME` fully isolate the emulator from its own data directory,
-   or does it still look for some files relative to the binary?
-3. What's the minimum `KINDLY_SCREENSHOT_DELAY` that produces a fully
-   rendered page?
-4. Does the emulator work from a relocated directory (not
-   `koreader-emulator/koreader/`)? The `luajit` binary may have
-   hard-coded rpaths.
-5. Can we run two emulator instances simultaneously with different
-   `KO_HOME` directories?
+1. **Does `SDL_VIDEO_DRIVER=offscreen` work?** Yes — apt's libsdl3-dev
+   3.2.10 on debian:trixie ships both `offscreen` and `dummy` compiled
+   in. Slice 0 probe confirms; Slice 1 runtime image uses it. Kept the
+   macOS-build path as a fallback for one-off probing.
+2. **Does `KO_HOME` fully isolate the emulator?** Yes for the
+   bind-mounted directory; KOReader writes settings, cache, fontinfo
+   under `$KO_HOME/`, only reads code under `/opt/koreader/`. Slice 2
+   `tests/harness/boot.test.ts` works against a fresh tmpdir KO_HOME.
+3. **Minimum `KINDLY_SCREENSHOT_DELAY`?** Empirically 2 s on the
+   reader's "no book passed → file manager" path; Slice 3
+   `tests/harness/preview.test.ts` uses delay=2 reliably. Heavy plugins
+   may want more.
+4. **Does the emulator work from a relocated directory?** Yes from
+   `/opt/koreader/` — but only after materializing the symlinks that
+   kodev produces (`luajit` and `libs/*.so` are symlinks back into
+   `/src/base/build/<arch>-debug/` after build). The Dockerfile uses
+   `cp -aL` to dereference them into a self-contained tree before the
+   runtime stage COPY.
+5. **Multi-instance simultaneous `KO_HOME`?** Not yet tested
+   end-to-end. Bind-mount semantics make it likely safe (each
+   container has its own KO_HOME and is `--network=none`), but the
+   first concrete need is Phase 3 multi-device sim — defer until
+   then.
 
 ### 8.3 Architecture constraint
 

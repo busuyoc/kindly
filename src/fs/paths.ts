@@ -16,6 +16,18 @@
 // the entire Unicode "format" category.
 const SEGMENT_INVISIBLE_RE = new RegExp("[\\p{Cc}\\p{Cf}]", "u");
 
+// S2201: cap path and per-segment lengths at parse time. FAT32's long
+// filename limit is 255 UTF-16 code units per component, and a 1024-
+// char total relative path comfortably fits inside Linux PATH_MAX (4096)
+// even when joined under a longer extraction root. Without this cap,
+// pathological manifest entries (4-MiB single component) reach
+// writeFileSync and crash mid-install with ENAMETOOLONG, leaving a
+// half-applied state on FAT32 (S542 sibling). Defence-in-depth: the
+// kernel would catch this anyway, but failing at parse keeps the safety
+// snapshot intact and produces a structured SetupSchemaError.
+const MAX_PATH_LENGTH = 1024;
+const MAX_SEGMENT_LENGTH = 255;
+
 // Reject any path that could escape the extraction root or be
 // interpreted as a non-relative path on any platform. Archives and
 // manifests come from strangers; "by shape, not by trust" is the rule.
@@ -23,11 +35,13 @@ const SEGMENT_INVISIBLE_RE = new RegExp("[\\p{Cc}\\p{Cf}]", "u");
 // backslashes are rejected outright.
 export function isSafeRelativePath(p: string): boolean {
     if (p.length === 0) return false;
+    if (p.length > MAX_PATH_LENGTH) return false;    // S2201
     if (p.includes("\0")) return false;              // null byte
     if (p.startsWith("/")) return false;             // POSIX absolute
     if (/^[a-zA-Z]:/.test(p)) return false;          // Windows drive letter
     if (p.includes("\\")) return false;              // Windows separator
     for (const seg of p.split("/")) {
+        if (seg.length > MAX_SEGMENT_LENGTH) return false; // S2201
         if (SEGMENT_INVISIBLE_RE.test(seg)) return false;
         // S965 (Angle X): compare against NFC-normalized segment so that
         // visually-identical bytes — ZWSP-suffixed `.`, NFD-decomposed

@@ -90,4 +90,19 @@ describe("isSafeRelativePath", () => {
         // in the round-3 reject set — only Cf+Cc are.
         expect(isSafeRelativePath("..́")).toBe(true);
     });
+
+    // S2201: cap path and per-segment lengths so pathological manifest
+    // entries can't reach writeFileSync and crash mid-install with
+    // ENAMETOOLONG. Cap is JS string length (UTF-16 code units), matching
+    // FAT32's 255-LFN-component and a comfortable 1024 total.
+    test("rejects pathologically long paths (S2201)", () => {
+        // 256-char single segment: one over FAT32 LFN cap.
+        expect(isSafeRelativePath("a".repeat(256))).toBe(false);
+        // 255-char segment is allowed (boundary).
+        expect(isSafeRelativePath("a".repeat(255))).toBe(true);
+        // 1025-char total path (multiple segments, all individually fine).
+        const longPath = Array.from({ length: 9 }, () => "a".repeat(113)).join("/") + "/x";
+        expect(longPath.length).toBeGreaterThan(1024);
+        expect(isSafeRelativePath(longPath)).toBe(false);
+    });
 });

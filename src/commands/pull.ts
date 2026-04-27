@@ -38,6 +38,11 @@ const FLAGS = {
         type: "string",
         description: "path to a mounted Kindle (auto-detected by default)",
     },
+    "auto-repair": {
+        type: "boolean",
+        default: false,
+        description: "auto-run `doctor --repair` if a previous apply was interrupted (default: prompt on TTY, throw otherwise)",
+    },
 } as const satisfies FlagSpecs;
 
 export function renderPull(result: PullResult, env: CliEnv): void {
@@ -69,6 +74,7 @@ export async function runPull(argv: readonly string[], env: CliEnv): Promise<num
         full: flags.full,
         output: flags.output,
         force: flags.force,
+        autoRepair: flags["auto-repair"],
     }, env);
     if (env.jsonMode) emitJson(env, "pull", result);
     else renderPull(result, env);
@@ -84,4 +90,6 @@ usage: kindly pull [--full] [--output <path>] [--force] [--mount <path>]
   --output <path>  where to write the YAML (default: kindly.yaml in cwd)
   --force          overwrite the output if it exists
   --mount <path>   path to a mounted Kindle (auto-detect by default)
+  --auto-repair    auto-recover from an interrupted previous apply.
+                   Default: prompt on TTY, throw structured error otherwise.
 `.trim();

@@ -5,6 +5,7 @@
 import { resolve } from "node:path";
 import { exists, readText } from "../fs/safeRead.ts";
 import { detectInterruptedApply } from "../fs/interruptedApply.ts";
+import { handleInterruptedApply } from "./recoverInterrupted.ts";
 import { ArgError } from "../cli/args.ts";
 import { parseSettingsFile } from "../lua/reader.ts";
 import { yamlToLua } from "../schema/yaml.ts";
@@ -20,6 +21,9 @@ export interface DiffOptions {
     file?: string;
     /** Restrict output to this taxonomy category. Unknown names throw ArgError. */
     category?: string;
+    /** R8: when true, auto-run doctor --repair if interrupted-apply
+     *  state is detected. When undefined, prompt on TTY / throw on non-TTY. */
+    autoRepair?: boolean;
 }
 
 export function executeDiff(opts: DiffOptions, env: CliEnv): DiffResult {
@@ -36,22 +40,32 @@ export function executeDiff(opts: DiffOptions, env: CliEnv): DiffResult {
     if (!exists(mount.settingsPath, "derived-from-mount")) {
         const interrupted = detectInterruptedApply(mount.settingsPath);
         if (interrupted) {
+            const decision = handleInterruptedApply(interrupted, env, {
+                autoRepair: opts.autoRepair,
+            });
+            if (decision === "throw" || !exists(mount.settingsPath, "derived-from-mount")) {
+                throw new KindlyError(
+                    ErrorCodes.SETTINGS_INTERRUPTED_APPLY,
+                    `${mount.settingsPath} is missing but ${interrupted.oldPath} survives — a previous kindly apply / setup import was interrupted between rename steps.`,
+                    [
+                        {
+                            text: "Recover by promoting .old back into place.",
+                            command: "kindly doctor --repair",
+                        },
+                        {
+                            text: "Or pass --auto-repair to recover automatically.",
+                        },
+                    ],
+                );
+            }
+            // Repair succeeded; fall through.
+        } else {
             throw new KindlyError(
-                ErrorCodes.SETTINGS_INTERRUPTED_APPLY,
-                `${mount.settingsPath} is missing but ${interrupted.oldPath} survives — a previous kindly apply / setup import was interrupted between rename steps.`,
-                [
-                    {
-                        text: "Recover by promoting .old back into place.",
-                        command: "kindly doctor --repair",
-                    },
-                ],
+                ErrorCodes.SETTINGS_NOT_FOUND,
+                `Kindle mount found at ${mount.root}, but ${mount.settingsPath} doesn't exist.`,
+                [{ text: "Install KOReader on the Kindle, then retry." }],
             );
         }
-        throw new KindlyError(
-            ErrorCodes.SETTINGS_NOT_FOUND,
-            `Kindle mount found at ${mount.root}, but ${mount.settingsPath} doesn't exist.`,
-            [{ text: "Install KOReader on the Kindle, then retry." }],
-        );
     }
     const onDevice = parseSettingsFile(readText(mount.settingsPath, "derived-from-mount")) as Record<string, LuaValue>;
     const fromYaml = yamlToLua(readText(yamlPath, "user-provided")) as Record<string, LuaValue>;

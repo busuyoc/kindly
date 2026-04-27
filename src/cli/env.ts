@@ -91,6 +91,10 @@ export type CliEnv = {
      * directory the user happened to run `kindly plugin list/describe`
      * from). Tests inject a fixture path here. */
     catalogPath?: string;
+    /** Whether stdin is a TTY (R8: gates the interrupted-apply prompt).
+     *  defaultEnv() reads `process.stdin.isTTY`. Tests pass `true`/`false`
+     *  explicitly. */
+    tty?: boolean;
 };
 
 export function resolveSetupsDir(env: CliEnv): string {
@@ -105,6 +109,7 @@ export function defaultEnv(): CliEnv {
         color: process.stdout.isTTY ?? false,
         now: () => new Date(),
         trace: process.env.KINDLY_TRACE === "1",
+        tty: process.stdin.isTTY ?? false,
     };
 }
 

@@ -35,6 +35,11 @@ const FLAGS = {
         type: "string",
         description: "narrow output to a single taxonomy category (e.g. fonts, display)",
     },
+    "auto-repair": {
+        type: "boolean",
+        default: false,
+        description: "auto-run `doctor --repair` if a previous apply was interrupted (default: prompt on TTY, throw otherwise)",
+    },
 } as const satisfies FlagSpecs;
 
 export function renderDiff(result: DiffResult, env: CliEnv): void {
@@ -70,6 +75,7 @@ export async function runDiff(argv: readonly string[], env: CliEnv): Promise<num
         {
             file: flags.file,
             ...(flags.category ? { category: flags.category } : {}),
+            autoRepair: flags["auto-repair"],
         },
         env,
     );
@@ -111,6 +117,8 @@ usage: kindly diff [--file <path>] [--mount <path>] [--category <name>]
   --mount <path>     path to a mounted Kindle (auto-detected by default)
   --category <name>  restrict output to a single taxonomy category
                      (e.g. fonts, display, status_bar, reading)
+  --auto-repair      auto-recover from an interrupted previous apply
+                     (default: prompt on TTY, throw otherwise)
 
 Exit code: 0 if no changes, 1 if changes present.
 `.trim();

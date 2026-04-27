@@ -72,6 +72,11 @@ const FLAGS = {
             "(W31a's code-exec consent — required alongside --accept-sensitive " +
             "for any YAML setting extra_plugin_paths)",
     },
+    "auto-repair": {
+        type: "boolean",
+        default: false,
+        description: "auto-run `doctor --repair` if a previous apply was interrupted (default: prompt on TTY, throw otherwise)",
+    },
 } as const satisfies FlagSpecs;
 
 export function renderApply(result: ApplyResult, env: CliEnv): void {
@@ -119,6 +124,7 @@ export async function runApply(argv: readonly string[], env: CliEnv): Promise<nu
         acceptKey,
         acceptDestructive: flags["accept-destructive"],
         acceptPlugins: flags["accept-plugins"],
+        autoRepair: flags["auto-repair"],
     }, env);
 
     if (env.jsonMode) emitJson(env, "apply", result);
@@ -166,6 +172,9 @@ usage: kindly apply [--file <path>] [--dry-run] [--mount <path>] [--backup-dir <
   --accept-plugins     consent to KOReader loading Lua plugins from any
                        extra_plugin_paths value in the YAML (W31a code-exec
                        half — required ALONGSIDE --accept-sensitive)
+  --auto-repair        auto-recover from an interrupted previous apply
+                       (default: prompt on TTY, throw structured error
+                       otherwise; --json mode never prompts)
 
 Apply is non-destructive: on-device keys not present in YAML are preserved
 (this is how secrets and ephemerals survive round-tripping through YAML).

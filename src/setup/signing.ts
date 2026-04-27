@@ -35,7 +35,7 @@
 // builders without invalidating the signature, as long as canonical-tree
 // equality holds (W46 invariant).
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, statSync } from "node:fs";
 import {
     createPrivateKey, createPublicKey, createHash,
     sign as cryptoSign, verify as cryptoVerify,
@@ -286,6 +286,13 @@ export function verifySetupArchive(archivePath: string): VerifyResult {
     const sidecarPath = `${archivePath}.sig`;
     let sidecar: SidecarSignature;
     try {
+        const st = statSync(sidecarPath);
+        if (st.size > SIDECAR_MAX_BYTES) {
+            throw new SigningError(
+                `sidecar at ${sidecarPath} is ${st.size} bytes, exceeds ${SIDECAR_MAX_BYTES} cap`,
+                "INVALID_SIDECAR",
+            );
+        }
         const raw = readFileSync(sidecarPath, "utf8");
         sidecar = parseSidecar(raw);
     } catch (e) {
@@ -419,6 +426,12 @@ export function verifySetupArchive(archivePath: string): VerifyResult {
 // ACCEPTED_FILTER_VERSIONS so future bumps don't have to update both.
 const FILTER_VERSION_MAX_LEN = 32;
 const FILTER_VERSION_RE = /^v\d{1,5}\.\d{1,5}\.\d{1,5}(-[A-Za-z0-9.]+)?$/;
+
+// R1 (review hardening): cap sidecar bytes before JSON.parse to defeat
+// a multi-GiB buffer allocation from a hostile <archive>.kset.sig. Real
+// sidecars are <1 KB; 1 MiB is generously above any legitimate growth.
+// Mirrors the KEYRING_MAX_BYTES pattern in setup/keyring.ts.
+const SIDECAR_MAX_BYTES = 1 * 1024 * 1024;
 
 function parseSidecar(raw: string): SidecarSignature {
     let obj: unknown;

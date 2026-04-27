@@ -383,6 +383,30 @@ describe("signing primitive — failure modes", () => {
             expect((e as SigningError).code).toBe("INVALID_SIDECAR");
         }
     });
+
+    test("R1: oversize sidecar (>1 MiB) → INVALID_SIDECAR before parse", () => {
+        // Sidecars are JSON envelopes <1 KB in practice. A multi-MiB
+        // sidecar is hostile — refuse before readFileSync allocates the
+        // buffer and JSON.parse traverses it. Mirrors the
+        // KEYRING_MAX_BYTES guard in setup/keyring.ts.
+        const { archivePath } = packedArchive();
+        const sidecarPath = `${archivePath}.sig`;
+        // 2 MiB of valid-looking JSON whitespace padding around an
+        // otherwise-real envelope. Whitespace keeps the file parseable
+        // if the cap were ever bypassed; we want to assert the SIZE
+        // gate fires, not that the content was malformed.
+        const padding = " ".repeat(2 * 1024 * 1024);
+        writeFileSync(sidecarPath, `{${padding}"x":1}`, "utf8");
+
+        try {
+            verifySetupArchive(archivePath);
+            throw new Error("expected throw");
+        } catch (e) {
+            expect(e).toBeInstanceOf(SigningError);
+            expect((e as SigningError).code).toBe("INVALID_SIDECAR");
+            expect((e as SigningError).message).toContain("exceeds");
+        }
+    });
 });
 
 describe("Q2a — N=2 generation window", () => {

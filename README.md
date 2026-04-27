@@ -38,10 +38,45 @@ kindly setup templates                   # list curated starting points
 kindly plugin list                       # browse the curated bundled-plugin catalog
 kindly plugin describe <name>            # full entry with references and curation opinion
 
+# Preview (requires Docker)
+kindly preview --output preview.png      # render kindly.yaml as a Kindle-screen PNG
+
 # Automation
 kindly serve                             # long-running JSON-IPC over stdin/stdout
 kindly watch                             # tail -f .kindly/history.jsonl as JSON
 ```
+
+## Install
+
+**Compiled binary (recommended for most users)** — download one file
+from the latest [GitHub release](https://github.com/busuyoc/kindly/releases),
+chmod +x, and run. No Bun, no Docker, no clone required.
+
+```bash
+# macOS (Apple Silicon)
+curl -L -o kindly https://github.com/busuyoc/kindly/releases/latest/download/kindly-darwin-arm64
+chmod +x kindly && ./kindly --help
+
+# macOS (Intel) → kindly-darwin-x64
+# Linux x86_64 → kindly-linux-x64
+# Windows x86_64 → kindly-windows-x64.exe   (best-effort cross-compile, untested)
+```
+
+macOS gatekeeper warns the first time — right-click → Open. No
+auto-update; re-download from releases for new versions.
+
+**From source** (contributors, or if you want `kindly preview` /
+the harness):
+
+```bash
+git clone https://github.com/busuyoc/kindly && cd kindly
+bun install
+bun run src/cli.ts --help
+bun test                                 # 1800+ tests
+```
+
+`kindly preview` additionally needs Docker. Build the harness image
+once with `harness/koreader/build.sh`.
 
 ## How it works
 
@@ -156,23 +191,25 @@ Regenerate the schema with `bun run scripts/extract-schema.ts <koreader-root>`.
 
 ## Status
 
-v0.13 in progress (v0.12.0 last released). Kindle-only. Solo project.
-1700+ tests covering: byte-identical round-trip on a real 180-key
-`settings.reader.lua`, tar create/extract/list, full
-snapshot → mutate → restore → rollback coverage, Setup manifest
-export/import/verify/trust across lean and fat formats, compat gating
-(version window + device family) at the import boundary with `--force`
-override, schema validation (typo + type-mismatch detection) against
-557 KOReader settings keys, and a 12-gate policy layer covering
-SENSITIVE-key consent, code-exec-adjacent paths, control-byte
-rejection, destructive-shape protection, and Ed25519 signature
-verification with a built-in keyring + local trust roster.
+v0.14.0 released. Kindle-only. Solo project. 1800+ tests covering:
+byte-identical round-trip on a real 180-key `settings.reader.lua`,
+tar create/extract/list, full snapshot → mutate → restore → rollback
+coverage, Setup manifest export/import/verify/trust across lean and
+fat formats, compat gating (version window + device family) at the
+import boundary with `--force` override, schema validation (typo +
+type-mismatch detection) against 557 KOReader settings keys, and a
+18-gate policy layer covering SENSITIVE-key consent,
+code-exec-adjacent paths, control-byte rejection, destructive-shape
+protection, and Ed25519 signature verification with a built-in
+keyring + local trust roster.
 
 Other substrate added since v0.5: `kindly serve` (JSON-IPC for a future
 GUI), `kindly watch` (history streaming), `kindly history` /
 `kindly rollback` (git-style mutation log), `doctor --repair` for
 interrupted-apply recovery, mount fingerprinting for cross-Kindle
-protection, and a hash-bound bundled-plugin catalog.
+protection, a hash-bound bundled-plugin catalog, a
+KOReader-in-Docker preview harness behind `kindly preview`, and
+single-binary distribution via `bun build --compile`.
 
 See `docs/` for design notes — `docs/security/` for the threat model
 and red-team hardening log, `docs/infra/` for the roadmap and hub

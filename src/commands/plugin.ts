@@ -47,23 +47,21 @@ function readDeviceDisabledOrNull(env: CliEnv): Set<string> | null {
 }
 
 function loadCatalogPath(env: CliEnv): { catalog: PluginCatalog; path: string } {
-    const path = resolve(env.cwd, "data/catalog/plugins.bundled.v1.json");
-    // The resolve() here lets tests drop a fixture under their tmpdir/cwd;
-    // when that file is absent, fall through to the default (repo artifact).
-    if (exists(path, "derived-from-cwd")) {
-        return { catalog: loadPluginCatalog(path), path };
+    // Round-5 S2081 closure: production always uses the bundled-relative
+    // path resolved by loadPluginCatalog(). The previous cwd hatch
+    // (`<cwd>/data/catalog/plugins.bundled.v1.json`) let an attacker who
+    // controlled the user's CWD swap the catalog out from under
+    // `kindly plugin list/describe`. Tests now inject via env.catalogPath.
+    if (env.catalogPath) {
+        return { catalog: loadPluginCatalog(env.catalogPath), path: env.catalogPath };
     }
-    // Default (installed binary / normal run): resolve relative to the module.
-    const defaultCatalog = loadPluginCatalog();
-    // Reconstruct the absolute path for display. loadPluginCatalog caches on
-    // default path; we just report the same constant here.
     const defaultPath = resolve(
         import.meta.dir,
         "..",
         "..",
         "data/catalog/plugins.bundled.v1.json",
     );
-    return { catalog: defaultCatalog, path: defaultPath };
+    return { catalog: loadPluginCatalog(), path: defaultPath };
 }
 
 // ---- `kindly plugin list` -------------------------------------------------

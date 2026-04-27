@@ -10,11 +10,12 @@ import { reloadPluginCatalog } from "../../src/catalog/reader.ts";
 
 const FIXTURE_CATALOG = join(import.meta.dir, "..", "fixtures", "catalog", "plugins.bundled.v1.json");
 
-function makeWorkdir(): string {
+function makeWorkdir(): { root: string; catalogPath: string } {
     const root = mkdtempSync(join(tmpdir(), "kindly-plist-"));
     mkdirSync(join(root, "data", "catalog"), { recursive: true });
-    copyFileSync(FIXTURE_CATALOG, join(root, "data", "catalog", "plugins.bundled.v1.json"));
-    return root;
+    const catalogPath = join(root, "data", "catalog", "plugins.bundled.v1.json");
+    copyFileSync(FIXTURE_CATALOG, catalogPath);
+    return { root, catalogPath };
 }
 
 function makeFakeKindle(initialData: LuaTable): string {
@@ -34,13 +35,16 @@ function makeNonKindle(): string {
 }
 
 let workdir: string;
+let catalogPath: string;
 let stdout: StringWriter;
 let stderr: StringWriter;
 let env: CliEnv;
 
 beforeEach(() => {
     reloadPluginCatalog();
-    workdir = makeWorkdir();
+    const w = makeWorkdir();
+    workdir = w.root;
+    catalogPath = w.catalogPath;
     stdout = new StringWriter();
     stderr = new StringWriter();
     env = {
@@ -50,6 +54,7 @@ beforeEach(() => {
         color: false,
         mountOverride: makeNonKindle(),
         now: () => new Date("2026-04-22T12:00:00Z"),
+        catalogPath,
     };
 });
 

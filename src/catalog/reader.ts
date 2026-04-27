@@ -9,16 +9,29 @@
 // unification in diff/inspect) all consume the catalog. Centralizing the
 // load + Zod validation means the GUI and CLI go through the same path.
 //
-// Schema is strict on the required fields (curation contract) and
-// `.passthrough()` on unknowns so we can evolve the file without
-// retro-breaking older code.
+// Schema is strict on the required fields (curation contract). Unknown
+// keys are silently dropped (Zod v4 default — `.strip`). Round-5 S2082
+// closure: previously `.passthrough()` × 3 let attacker-injected fields
+// in a swapped catalog (with S2081's cwd hatch) round-trip into the
+// `plugin:list` / `plugin:describe` JSON envelope. Strip protects the
+// envelope without forcing the schema to enumerate every future field.
 
 import { exists, readText } from "../fs/safeRead.ts";
+import { statSync } from "node:fs";
 import { resolve } from "node:path";
 import { z } from "zod";
 
 import type { LuaValue } from "../lua/writer.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
+
+// Round-5 S2083 (partial): size cap before parse, mirroring
+// `src/setup/builtinKeyring.ts` MAX_KEYRING_BYTES discipline. The
+// production catalog ships at ~50-150 KiB; 1 MiB is generous for any
+// realistic curation set. A packager swapping the file for a multi-MiB
+// crafted JSON now hits this short-circuit before `JSON.parse` runs.
+// Full hash-binding (mirroring BUILTIN_KEYRING_HASH) is the v0.14
+// follow-up; size cap closes the most-DoS-amplifying half of the gap.
+export const MAX_CATALOG_BYTES = 1024 * 1024;
 
 export const CurationOpinionSchema = z.enum(["recommended", "debloat", "niche"]);
 export type CurationOpinion = z.infer<typeof CurationOpinionSchema>;
@@ -29,7 +42,7 @@ export type ShipDefault = z.infer<typeof ShipDefaultSchema>;
 export const DeprecatedSchema = z.object({
     kind: z.string(),
     detail: z.string(),
-}).passthrough();
+});
 
 /** W32 (89 §2): per-file SHA256 of a plugin's known-good files, keyed by
  *  path relative to the plugin folder (e.g. `"main.lua"`). Used by the
@@ -75,7 +88,7 @@ export const PluginEntrySchema = z.object({
      *  `null` when the extractor couldn't hash (predates W32 or failed to
      *  walk the directory). Omitted on entries that predate the field. */
     known_hashes: KnownHashesSchema.nullable().optional(),
-}).passthrough();
+});
 
 export type PluginEntry = z.infer<typeof PluginEntrySchema>;
 
@@ -91,7 +104,7 @@ export const PluginCatalogSchema = z.object({
     koreader_hash_version: z.string().nullable().optional(),
     plugin_count: z.number().int().nonnegative(),
     plugins: z.array(PluginEntrySchema),
-}).passthrough();
+});
 
 export type PluginCatalog = z.infer<typeof PluginCatalogSchema>;
 
@@ -118,6 +131,14 @@ export function loadPluginCatalog(path?: string): PluginCatalog {
                     text: "The catalog is committed at data/catalog/plugins.bundled.v1.json. If you're working from a fresh clone, check that the file is present.",
                 },
             ],
+        );
+    }
+    const stat = statSync(p);
+    if (stat.size > MAX_CATALOG_BYTES) {
+        throw new KindlyError(
+            ErrorCodes.CATALOG_MALFORMED,
+            `plugin catalog at ${p} is ${stat.size} bytes (max ${MAX_CATALOG_BYTES}); install may be tampered`,
+            [{ text: "Reinstall kindly from a trusted source." }],
         );
     }
     const raw = JSON.parse(readText(p, "derived-from-cwd"));

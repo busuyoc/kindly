@@ -83,6 +83,14 @@ export type CliEnv = {
      * per invocation. Opt-in for Claudiu's own self-dogfooding; not
      * telemetry. defaultEnv() reads `KINDLY_TRACE=1` from process.env. */
     trace?: boolean;
+    /** Test-only override for the plugin catalog path. Production runs
+     * always resolve the bundled catalog relative to the module — there
+     * is no cwd hatch (round-5 S2081 closure: previously
+     * `commands/plugin.ts` would honour `<cwd>/data/catalog/...` if
+     * present, letting an attacker drop a hostile catalog under any
+     * directory the user happened to run `kindly plugin list/describe`
+     * from). Tests inject a fixture path here. */
+    catalogPath?: string;
 };
 
 export function resolveSetupsDir(env: CliEnv): string {

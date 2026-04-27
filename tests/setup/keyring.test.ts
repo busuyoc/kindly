@@ -1,8 +1,8 @@
 // W39 step 2 — local trust roster: load/save/add/remove + path resolution.
 
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import {
-    existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync,
+    chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -42,6 +42,10 @@ beforeEach(() => {
     home = mkdtempSync(join(tmpdir(), "kindly-keyring-"));
     env = makeEnv(home);
     now = new Date("2026-04-26T12:00:00Z");
+});
+
+afterEach(() => {
+    rmSync(home, { recursive: true, force: true });
 });
 
 // ---- Path resolution + initial state --------------------------------------
@@ -226,7 +230,7 @@ describe("removeKey", () => {
 describe("KEYRING_CORRUPT", () => {
     function corruptWith(content: string): void {
         const dir = join(home, ".kindly");
-        mkdirSync(dir, { recursive: true });
+        mkdirSync(dir, { recursive: true, mode: 0o700 });
         writeFileSync(keyringPath(env), content);
     }
 
@@ -307,13 +311,13 @@ describe("findKey", () => {
 describe("loadKeyring round-3 hardening", () => {
     function writeRoster(content: unknown): void {
         const path = keyringPath(env);
-        mkdirSync(join(home, ".kindly"), { recursive: true });
+        mkdirSync(join(home, ".kindly"), { recursive: true, mode: 0o700 });
         writeFileSync(path, JSON.stringify(content));
     }
 
     test("rejects oversize roster (> KEYRING_MAX_BYTES)", () => {
         const path = keyringPath(env);
-        mkdirSync(join(home, ".kindly"), { recursive: true });
+        mkdirSync(join(home, ".kindly"), { recursive: true, mode: 0o700 });
         // 5 MiB blob — over the 4 MiB cap.
         writeFileSync(path, "x".repeat(5 * 1024 * 1024));
         try {
@@ -361,6 +365,57 @@ describe("loadKeyring round-3 hardening", () => {
             expect((e as KeyringError).code).toBe("KEYRING_CORRUPT");
             expect((e as KeyringError).message).toContain("duplicate key_id");
         }
+    });
+});
+
+// ---- R2 (review hardening): parent-dir mode check --------------------------
+
+const skipIfWindows = process.platform === "win32" ? describe.skip : describe;
+
+skipIfWindows("R2: keyring parent-dir mode", () => {
+    test("loadKeyring rejects ~/.kindly with group/other perms", () => {
+        // Save once to populate the file, then loosen the parent dir
+        // and try to reload. This is the upgrade-from-old-version path
+        // we care about: an existing user whose ~/.kindly was created
+        // by an older kindly with default umask.
+        const { publicPem } = genEd25519Pem();
+        const { file } = addKey(loadKeyring(env), { publicKeyPem: publicPem, now });
+        saveKeyring(env, file);
+
+        const dir = join(home, ".kindly");
+        chmodSync(dir, 0o755);
+
+        try {
+            loadKeyring(env);
+            throw new Error("should have thrown");
+        } catch (e) {
+            expect(e).toBeInstanceOf(KeyringError);
+            expect((e as KeyringError).code).toBe("KEYRING_DIR_INSECURE");
+            expect((e as KeyringError).message).toContain("chmod 700");
+        }
+    });
+
+    test("saveKeyring creates ~/.kindly with mode 0o700", () => {
+        saveKeyring(env, { kindly_trust: "v1", keys: [] });
+        const dir = join(home, ".kindly");
+        const mode = statSync(dir).mode & 0o777;
+        expect(mode).toBe(0o700);
+    });
+
+    test("loadKeyring accepts ~/.kindly with mode 0o700", () => {
+        const { publicPem } = genEd25519Pem();
+        const { file } = addKey(loadKeyring(env), { publicKeyPem: publicPem, now });
+        saveKeyring(env, file);
+        // Default-saved dir is 0o700; reload must succeed.
+        const reloaded = loadKeyring(env);
+        expect(reloaded.keys.length).toBe(1);
+    });
+
+    test("missing ~/.kindly (first-run) does not throw on load", () => {
+        // No save yet; ~/.kindly doesn't exist; loadKeyring returns
+        // empty roster without invoking the dir-mode check.
+        const file = loadKeyring(env);
+        expect(file).toEqual({ kindly_trust: "v1", keys: [] });
     });
 });
 

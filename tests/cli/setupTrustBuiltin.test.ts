@@ -193,9 +193,11 @@ describe("setup verify — built-in registry", () => {
         const keys = mkKeyPair();
         installBuiltinPublisher(keys.keyId, keys.pubB64, "from-builtin");
 
-        const { mkdirSync: mkdir, writeFileSync: write } = await import("node:fs");
-        mkdir(join(home, ".kindly"), { recursive: true });
-        write(join(home, ".kindly", "trusted-keys.json"), JSON.stringify({
+        const { mkdirSync: mkdir, chmodSync: chmod, writeFileSync: write } = await import("node:fs");
+        const dotKindly = join(home, ".kindly");
+        mkdir(dotKindly, { recursive: true });
+        if (process.platform !== "win32") chmod(dotKindly, 0o700);
+        write(join(dotKindly, "trusted-keys.json"), JSON.stringify({
             kindly_trust: "v1",
             keys: [{
                 key_id: keys.keyId,

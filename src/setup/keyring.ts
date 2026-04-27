@@ -24,7 +24,7 @@
 //     list because there's no global roster.
 
 import {
-    closeSync, existsSync, fsyncSync, mkdirSync, openSync,
+    chmodSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync,
     readFileSync, renameSync, statSync, writeSync,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -80,7 +80,8 @@ export type KeyringErrorCode =
     | "KEYRING_DUP_KEY"
     | "KEYRING_INVALID_KEY"
     | "KEYRING_PREFIX_TOO_SHORT"
-    | "KEYRING_TOO_LARGE";
+    | "KEYRING_TOO_LARGE"
+    | "KEYRING_DIR_INSECURE";
 
 /** Round 3 keyring MED: cap the on-disk roster before readFileSync.
  *  Each entry is <300 bytes (key_id + b64 pubkey + label + iso ts). A
@@ -109,6 +110,35 @@ export function keyringLockPath(env: KeyringEnv): string {
     return join(home, ".kindly", "keyring.lock");
 }
 
+/** R2 (review hardening): refuse to load the trust roster if its parent
+ *  directory permits group/other access. The Zod-validated
+ *  trusted-keys.json is consulted by signerTrust during apply/import —
+ *  if ~/.kindly is world-writable, an attacker who lands a single
+ *  filesystem write can swap publisher trust decisions between
+ *  kindly invocations.
+ *
+ *  Returns silently on first-run (dir doesn't exist; saveKeyring will
+ *  create it 0o700). Throws on existing dir with looser bits. Windows
+ *  is skipped — POSIX mode bits carry no meaning under NTFS ACLs. */
+function assertKeyringDirSafe(env: KeyringEnv): void {
+    if (process.platform === "win32") return;
+    const dir = dirname(keyringPath(env));
+    let st;
+    try {
+        st = statSync(dir);
+    } catch {
+        return; // first-run state; saveKeyring creates 0o700 below
+    }
+    const mode = st.mode & 0o777;
+    if ((mode & 0o077) !== 0) {
+        throw new KeyringError(
+            `keyring directory ${dir} has insecure permissions ${mode.toString(8)} ` +
+            `(allows group/other access). Run: chmod 700 ${dir}`,
+            "KEYRING_DIR_INSECURE",
+        );
+    }
+}
+
 // ---- Load / save ----------------------------------------------------------
 
 /** Read and validate the keyring. Returns an empty roster if the file
@@ -118,6 +148,7 @@ export function loadKeyring(env: KeyringEnv): TrustedKeysFile {
     if (!existsSync(path)) {
         return { kindly_trust: "v1", keys: [] };
     }
+    assertKeyringDirSafe(env);
     let raw: string;
     try {
         const st = statSync(path);
@@ -215,7 +246,16 @@ export function loadKeyring(env: KeyringEnv): TrustedKeysFile {
 export function saveKeyring(env: KeyringEnv, file: TrustedKeysFile): void {
     const path = keyringPath(env);
     const dir = dirname(path);
+    // R2: create ~/.kindly with 0o700 so a fresh install starts safe.
+    // mkdirSync's `mode` is masked by the process umask, and the lockfile
+    // module may have created the dir already with default perms, so a
+    // post-mkdir chmod is the only way to guarantee 0o700. Idempotent on
+    // POSIX. Skip on Windows — POSIX mode bits carry no meaning under NTFS.
     mkdirSync(dir, { recursive: true });
+    if (process.platform !== "win32") {
+        chmodSync(dir, 0o700);
+    }
+    assertKeyringDirSafe(env);
 
     const tmp = `${path}.tmp.${process.pid}.${randomBytes(4).toString("hex")}`;
     const content = JSON.stringify(file, null, 2) + "\n";

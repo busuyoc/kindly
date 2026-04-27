@@ -5,7 +5,7 @@
 
 import { describe, test, expect, beforeEach } from "bun:test";
 import {
-    mkdirSync, mkdtempSync, writeFileSync,
+    chmodSync, mkdirSync, mkdtempSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -175,6 +175,7 @@ describe("setup verify — corrupt roster", () => {
         // crypto answer is independent of trust state.
         const dotKindly = join(home, ".kindly");
         mkdirSync(dotKindly, { recursive: true });
+        if (process.platform !== "win32") chmodSync(dotKindly, 0o700);
         writeFileSync(join(dotKindly, "trusted-keys.json"), "{ not json", "utf8");
 
         const { env, out, err } = makeEnv(home);
@@ -190,6 +191,7 @@ describe("setup verify — corrupt roster", () => {
 
         const dotKindly = join(home, ".kindly");
         mkdirSync(dotKindly, { recursive: true });
+        if (process.platform !== "win32") chmodSync(dotKindly, 0o700);
         writeFileSync(join(dotKindly, "trusted-keys.json"), "{ not json", "utf8");
 
         const { env, out } = makeEnv(home);

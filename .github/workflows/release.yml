@@ -49,7 +49,9 @@ jobs:
           cp tests/fixtures/kindle/redacted/settings.reader.lua "$FAKE/koreader/"
           ( cd "$(mktemp -d)" && "$GITHUB_WORKSPACE/$BIN" doctor --json --mount="$FAKE" ) | tee /tmp/doctor.json
           grep -q '"settings_parseable"' /tmp/doctor.json
-          grep -q '"180 keys"' /tmp/doctor.json
+          # 180 keys appears inside a label string — `"... parseable (180 keys)"`
+          # — so we match the parenthesized form, not a quoted standalone.
+          grep -q '(180 keys)' /tmp/doctor.json
 
       - uses: actions/upload-artifact@v4
         with:

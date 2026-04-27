@@ -60,7 +60,7 @@ interface ClassifyData {
     curated_at: string;
     keys: Record<string, KeyEntry>;
     rules: Rule[];
-    code_exec_adjacent?: string[];
+    code_exec_adjacent: string[];
 }
 
 const DATA_PATH = resolve(import.meta.dir, "../../data/classify/settings.v1.json");
@@ -96,6 +96,19 @@ const DATA: ClassifyData = (() => {
             throw new Error("classify data: rule must have either suffix or regex");
         }
         validateEntry(rule.suffix ?? rule.regex ?? "?", rule.set);
+    }
+    // Round-5 S2022 closure: previously `code_exec_adjacent ?? []`
+    // silently defaulted the CODE_EXEC_ADJACENT_REQUIRES_ACK gate's
+    // denylist to empty when the field was missing — a corrupt or
+    // truncated curation ship would disable the gate. Require the
+    // field; require it's a string array. Maintainer-side guard.
+    if (!Array.isArray(raw.code_exec_adjacent)) {
+        throw new Error("classify data: missing or non-array `code_exec_adjacent`");
+    }
+    for (const k of raw.code_exec_adjacent) {
+        if (typeof k !== "string") {
+            throw new Error(`classify data: code_exec_adjacent entry must be a string (got ${typeof k})`);
+        }
     }
     return raw;
 })();
@@ -204,9 +217,7 @@ export function isSensitiveKeyName(name: string): boolean {
  *  (bypass: --accept-code-exec), which fires independently of the
  *  SENSITIVE_REQUIRES_ACK gate because the mental model is different
  *  (code-exec consent vs data-flow consent). */
-const CODE_EXEC_ADJACENT: ReadonlySet<string> = new Set(
-    DATA.code_exec_adjacent ?? [],
-);
+const CODE_EXEC_ADJACENT: ReadonlySet<string> = new Set(DATA.code_exec_adjacent);
 
 /** Is the value at this key interpolated into a KOReader shell / os.remove /
  *  os.execute call? */

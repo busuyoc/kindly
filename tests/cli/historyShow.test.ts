@@ -20,6 +20,7 @@ import { join } from "node:path";
 import { main } from "../../src/cli.ts";
 import { StringWriter, type CliEnv } from "../../src/cli/env.ts";
 import { historyPath } from "../../src/history/writer.ts";
+import { dumpSettingsFile, type LuaTable } from "../../src/lua/writer.ts";
 
 function makeEnv(cwd: string, opts?: { jsonMode?: boolean }): {
     env: CliEnv; out: StringWriter; err: StringWriter;
@@ -51,6 +52,11 @@ function writeLua(path: string, table: Record<string, string | number | boolean>
     lines.push("}");
     lines.push("");
     writeFileSync(path, lines.join("\n"));
+}
+
+function writeLuaTable(path: string, table: LuaTable): void {
+    mkdirSync(join(path, ".."), { recursive: true });
+    writeFileSync(path, dumpSettingsFile(table, "./settings.reader.lua"));
 }
 
 let workdir: string;
@@ -331,5 +337,53 @@ describe("history show — robustness", () => {
         const payload = JSON.parse(out.value);
         expect(payload.data.diff).toBeUndefined();
         expect(payload.data.diffUnavailable).toMatch(/did not parse to a settings table/);
+    });
+
+    test("S2027: removed nested-secret subtree must not leak via diff payload", async () => {
+        // Round-5 S2027 closure: when a nested table holding secrets
+        // (e.g. kosync.userkey) is removed between two backups, the
+        // pre-fix code emitted a `removed` Change whose `prev` carried
+        // the full subtree — secret values reached the JSON envelope.
+        // Fix: filterForYaml(before, "full") strips secrets BEFORE
+        // diffing, so they never enter the diff payload.
+        const backupA = join(workdir, ".kindly", "backups", "a", "settings.reader.lua");
+        writeLuaTable(backupA, {
+            kosync: { userkey: "SUPER_SECRET_VALUE_2027", username: "alice" },
+            home_dir: "/mnt/books",
+        });
+        const backupB = join(workdir, ".kindly", "backups", "b", "settings.reader.lua");
+        writeLuaTable(backupB, { home_dir: "/mnt/books" });
+
+        seedHistory(workdir, [
+            { ts: "2026-04-22T12:00:00.000Z", cmd: "apply", kindly_version: "0.3.0",
+              index: 1, summary: { backup_path: backupA } },
+            { ts: "2026-04-22T12:05:00.000Z", cmd: "apply", kindly_version: "0.3.0",
+              index: 2, summary: { backup_path: backupB } },
+        ]);
+        const { env, out } = makeEnv(workdir, { jsonMode: true });
+        await main(["history", "show", "1", "--json"], env);
+        expect(out.value).not.toContain("SUPER_SECRET_VALUE_2027");
+    });
+
+    test("S2027: removed top-level secret key must not leak via diff payload", async () => {
+        // Even a top-level exfil=secret key (e.g. device_id) being
+        // removed between snapshots must not leak through history show.
+        const backupA = join(workdir, ".kindly", "backups", "a", "settings.reader.lua");
+        writeLuaTable(backupA, {
+            device_id: "DEVICE_ID_SECRET_2027",
+            home_dir: "/mnt/books",
+        });
+        const backupB = join(workdir, ".kindly", "backups", "b", "settings.reader.lua");
+        writeLuaTable(backupB, { home_dir: "/mnt/books" });
+
+        seedHistory(workdir, [
+            { ts: "2026-04-22T12:00:00.000Z", cmd: "apply", kindly_version: "0.3.0",
+              index: 1, summary: { backup_path: backupA } },
+            { ts: "2026-04-22T12:05:00.000Z", cmd: "apply", kindly_version: "0.3.0",
+              index: 2, summary: { backup_path: backupB } },
+        ]);
+        const { env, out } = makeEnv(workdir, { jsonMode: true });
+        await main(["history", "show", "1", "--json"], env);
+        expect(out.value).not.toContain("DEVICE_ID_SECRET_2027");
     });
 });

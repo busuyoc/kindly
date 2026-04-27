@@ -31,6 +31,7 @@ import type { HistoryCommand } from "../history/writer.ts";
 import { parseSettingsFile } from "../lua/reader.ts";
 import type { LuaValue } from "../lua/writer.ts";
 import { computeChanges, type Change } from "../schema/diff.ts";
+import { filterForYaml } from "../schema/classify.ts";
 import { groupChanges } from "../taxonomy/group.ts";
 import type { HistoryResult, HistoryShowResult } from "../types/results.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
@@ -225,8 +226,16 @@ export function executeHistoryShow(index: number, env: CliEnv): HistoryShowResul
         result.diffUnavailable = `pre-state file did not parse to a settings table: ${fromPath}`;
         return result;
     }
-    const before = beforeRaw as Record<string, LuaValue>;
-    const after = afterRaw as Record<string, LuaValue>;
+    // Round-5 S2027 closure: scrub SECRETs from both pre-states before
+    // diffing. The pre-fix code emitted `removed` Changes whose `prev`
+    // carried whole subtrees from the device backup — kosync.userkey,
+    // device_id, calibre_wireless_password etc. landed in the JSON
+    // envelope. filterForYaml(data, "full") drops top-level secret
+    // keys and nested secret children while preserving everything else
+    // (ephemerals included). Secret VALUES are gone; structural facts
+    // about non-secret siblings remain visible.
+    const before = filterForYaml(beforeRaw, "full").kept as Record<string, LuaValue>;
+    const after = filterForYaml(afterRaw, "full").kept as Record<string, LuaValue>;
 
     // computeChanges iterates keys in `after` (it's designed for apply's
     // additive semantics). Pick up additions + changes from it, then

@@ -44,7 +44,9 @@ jobs:
           # of those didn't survive bun --compile, this returns an
           # ENOENT-flavored envelope and the grep below fails.
           FAKE=$(mktemp -d) && mkdir -p "$FAKE/koreader"
-          cp tests/fixtures/kindle/settings.reader.lua "$FAKE/koreader/"
+          # The unredacted fixture is gitignored (real-device secrets); CI
+          # only has the redacted copy. Both parse to 180 keys.
+          cp tests/fixtures/kindle/redacted/settings.reader.lua "$FAKE/koreader/"
           ( cd "$(mktemp -d)" && "$GITHUB_WORKSPACE/$BIN" doctor --json --mount="$FAKE" ) | tee /tmp/doctor.json
           grep -q '"settings_parseable"' /tmp/doctor.json
           grep -q '"180 keys"' /tmp/doctor.json

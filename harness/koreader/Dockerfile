@@ -21,7 +21,7 @@ ARG DEBIAN_BASE=trixie-slim
 # === Stage 1: builder ========================================================
 FROM debian:${DEBIAN_BASE} AS builder
 
-ARG KOREADER_REF=master
+ARG KOREADER_REF=v2025.10
 
 ENV DEBIAN_FRONTEND=noninteractive
 

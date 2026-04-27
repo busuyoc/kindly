@@ -152,6 +152,63 @@ describe("safeRead — extracted-archive symlinks are rejected", () => {
     });
 });
 
+describe("safeRead — container-output symlinks are rejected (W46-S1)", () => {
+    // The harness writes preview.png into a host tmpdir via a Docker bind
+    // mount. A hostile image (or future settings-driven RCE inside the
+    // container) can replace preview.png with a symlink → host-readable
+    // file; a bare copyFileSync would follow it on the host.
+
+    test("readText throws on container-output symlink", () => {
+        const target = join(workdir, "secret.txt");
+        const link = join(workdir, "preview.png");
+        writeFileSync(target, "id_rsa-bytes");
+        symlinkSync(target, link);
+        expect(() => readText(link, "container-output")).toThrow(SafeReadError);
+    });
+
+    test("copyFile rejects container-output symlink source", () => {
+        const target = join(workdir, "secret.txt");
+        const link = join(workdir, "preview.png");
+        const dst = join(workdir, "out.png");
+        writeFileSync(target, "id_rsa-bytes");
+        symlinkSync(target, link);
+        expect(() =>
+            copyFile(link, "container-output", dst, "user-provided"),
+        ).toThrow(SafeReadError);
+    });
+
+    test("error carries container-output provenance and UNTRUSTED_SYMLINK code", () => {
+        const target = join(workdir, "secret.txt");
+        const link = join(workdir, "preview.png");
+        writeFileSync(target, "x");
+        symlinkSync(target, link);
+        try {
+            readText(link, "container-output");
+            throw new Error("should have thrown");
+        } catch (e) {
+            expect(e).toBeInstanceOf(SafeReadError);
+            const sre = e as SafeReadError;
+            expect(sre.code).toBe("UNTRUSTED_SYMLINK");
+            expect(sre.provenance).toBe("container-output");
+            expect(sre.message).toContain("container-output");
+        }
+    });
+
+    test("regular files (non-symlinks) read normally", () => {
+        const path = join(workdir, "preview.png");
+        writeFileSync(path, "fakepng");
+        expect(readText(path, "container-output")).toBe("fakepng");
+    });
+
+    test("copyFile passes through regular file from container-output", () => {
+        const src = join(workdir, "preview.png");
+        const dst = join(workdir, "out.png");
+        writeFileSync(src, "real-png-bytes");
+        copyFile(src, "container-output", dst, "user-provided");
+        expect(readText(dst, "user-provided")).toBe("real-png-bytes");
+    });
+});
+
 describe("safeRead — exists preserves existsSync semantics", () => {
     test("returns false for broken symlink (user-provided)", () => {
         const link = join(workdir, "dangling");

@@ -5,7 +5,7 @@
 // Argument-validation paths run unconditionally.
 
 import { describe, test, expect, beforeEach } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -70,6 +70,68 @@ describe("executePreview — argument validation", () => {
         } catch (e) { err = e as ArgError; }
         expect(err).not.toBeNull();
         expect(err!.message).toContain("--delay");
+    });
+
+    // S348/S610-class: an empty `--file=` would silently override the default
+    // (kindly.yaml) and resolve to cwd, causing an EISDIR deep in readText.
+    // Reject at the CLI seam.
+    test("runPreview rejects empty --file= (silent cwd resolution class)", async () => {
+        let err: ArgError | null = null;
+        try {
+            await runPreview(
+                ["--output=out.png", "--file=", "--mount="],
+                env,
+            );
+        } catch (e) { err = e as ArgError; }
+        expect(err).not.toBeNull();
+        expect(err!.message).toContain("--file");
+    });
+
+    // Defense-in-depth at the lib seam: serve.ts and the future GUI can
+    // construct PreviewOptions directly without going through runPreview's
+    // CLI-side checks. Mirror the empty-string rejection here.
+    test("executePreview rejects empty opts.output (non-CLI caller path)", async () => {
+        writeFileSync(join(workdir, "kindly.yaml"), "font_size: 22\n");
+        let err: KindlyError | null = null;
+        try {
+            await executePreview({ output: "", mount: "" }, env);
+        } catch (e) { err = e as KindlyError; }
+        expect(err).not.toBeNull();
+        expect(err!.code).toBe("ARG_INVALID");
+        expect(err!.message).toContain("output");
+    });
+
+    test("executePreview rejects empty opts.file (non-CLI caller path)", async () => {
+        writeFileSync(join(workdir, "kindly.yaml"), "font_size: 22\n");
+        let err: KindlyError | null = null;
+        try {
+            await executePreview(
+                { file: "", output: join(workdir, "out.png"), mount: "" },
+                env,
+            );
+        } catch (e) { err = e as KindlyError; }
+        expect(err).not.toBeNull();
+        expect(err!.code).toBe("ARG_INVALID");
+        expect(err!.message).toContain("file");
+    });
+
+    // Output-path symlink-clobber gate: pre-planted symlink at the target
+    // would let copyFileSync write PNG bytes through to the symlink target.
+    // Refuse fail-fast (before the docker run) so the bad path is surfaced
+    // without spending 30s in the harness.
+    test("executePreview refuses symlink at outputPath (clobber gate)", async () => {
+        writeFileSync(join(workdir, "kindly.yaml"), "font_size: 22\n");
+        const target = join(workdir, "real-target.txt");
+        const link = join(workdir, "preview.png");
+        writeFileSync(target, "important-pre-existing-bytes");
+        symlinkSync(target, link);
+
+        let err: KindlyError | null = null;
+        try {
+            await executePreview({ output: link, mount: "" }, env);
+        } catch (e) { err = e as KindlyError; }
+        expect(err).not.toBeNull();
+        expect(err!.code).toBe("OUTPUT_IS_SYMLINK");
     });
 });
 

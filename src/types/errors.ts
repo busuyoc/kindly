@@ -106,6 +106,8 @@ export const ErrorCodes = {
     GATE_CONTEXT_INVALID: "GATE_CONTEXT_INVALID",
     HARNESS_DOCKER_MISSING: "HARNESS_DOCKER_MISSING",
     HARNESS_RUN_FAILED:    "HARNESS_RUN_FAILED",
+    HARNESS_OUTPUT_TAINTED: "HARNESS_OUTPUT_TAINTED",
+    OUTPUT_IS_SYMLINK:     "OUTPUT_IS_SYMLINK",
 } as const;
 
 export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];

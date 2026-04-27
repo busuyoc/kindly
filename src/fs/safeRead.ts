@@ -29,6 +29,18 @@
 //                          them (consolidates the checks previously
 //                          inlined in src/setup/unpack.ts).
 //
+//   "container-output"   — path under a host tmpdir that an opaque
+//                          process inside a Docker container just
+//                          wrote to via a bind mount. The container
+//                          is sandboxed (--network=none, ephemeral
+//                          KO_HOME), but the bind mount is the one
+//                          channel out. A planted symlink in
+//                          /work/out/preview.png pointing at, e.g.,
+//                          ~/.ssh/id_rsa would be followed by a
+//                          host-side copyFileSync, exfiltrating the
+//                          target through the user's --output PNG
+//                          (W46-S1). REJECT.
+//
 // Rejection uses `lstatSync` at the boundary; SafeReadError with code
 // "UNTRUSTED_SYMLINK" is thrown before the read proceeds. `exists()`
 // is deliberately permissive — reporting "does this path resolve to
@@ -48,10 +60,13 @@ export type PathProvenance =
     | "user-provided"       // argv, --mount, --file, positional — user consented
     | "derived-from-mount"  // join(mount.root, ...)            — UNTRUSTED
     | "derived-from-cwd"    // .kindly/ local tree              — host is TCB
-    | "extracted-archive";  // tmpdir post tar-extract          — UNTRUSTED
+    | "extracted-archive"   // tmpdir post tar-extract          — UNTRUSTED
+    | "container-output";   // tmpdir written by a container    — UNTRUSTED
 
 function isUntrusted(prov: PathProvenance): boolean {
-    return prov === "extracted-archive" || prov === "derived-from-mount";
+    return prov === "extracted-archive"
+        || prov === "derived-from-mount"
+        || prov === "container-output";
 }
 
 export class SafeReadError extends Error {
@@ -68,9 +83,9 @@ export class SafeReadError extends Error {
 }
 
 function symlinkOriginLabel(prov: PathProvenance): string {
-    return prov === "extracted-archive"
-        ? "inside extracted archive"
-        : "at mount-derived path";
+    if (prov === "extracted-archive") return "inside extracted archive";
+    if (prov === "container-output") return "in container-output bind mount";
+    return "at mount-derived path";
 }
 
 /**

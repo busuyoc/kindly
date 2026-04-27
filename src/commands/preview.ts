@@ -38,6 +38,14 @@ export async function runPreview(argv: readonly string[], env: CliEnv): Promise<
     if (!flags.output) {
         throw new ArgError("preview requires --output <path>");
     }
+    // S348/S610-class: `--file=` (empty value) silently overrode the default
+    // and resolved to cwd, yielding an EISDIR deep inside the lib. Reject at
+    // the CLI seam with a clear message instead. (`--mount=` is intentionally
+    // empty-allowed: documented opt-out from device baseline. `--delay=`
+    // empty falls through to the default and is fine.)
+    if (flags.file === "") {
+        throw new ArgError("--file expects a non-empty path");
+    }
 
     const opts: PreviewOptions = {
         file: flags.file,

@@ -11,20 +11,37 @@ KOReader is powerful but fragile. Factory reset, firmware update, or device swap
 One YAML file describes your setup. One command backs it up. One command restores it.
 
 ```bash
+# Device state
 kindly pull                              # device → kindly.yaml
 kindly apply                             # kindly.yaml → device
 kindly diff                              # what's different?
+
+# Bootstrap & health
 kindly init minimal                      # start from a curated preset
 kindly doctor                            # sanity check
+kindly doctor --repair                   # recover an interrupted apply
+
+# Safety net
 kindly snapshot                          # tarball of plugins/patches/history
 kindly restore <archive>                 # extract a snapshot back to device
+kindly rollback --to <N>                 # revert to a per-import safety snapshot
+kindly history                           # list mutations from .kindly/history.jsonl
 
+# Shareable Setups
 kindly setup export my-config            # make a shareable Setup manifest
-kindly setup import my-config.kset.yaml  # apply someone's Setup to your device
+kindly setup import my-config.kset       # apply someone's Setup to your device
+kindly setup verify my-config.kset       # check signature against your trust roster
+kindly setup trust add publisher.pub     # trust a publisher's ed25519 key
 kindly setup templates                   # list curated starting points
-```
 
-v0.3 adds shareable Setups (see below). SimpleUI typed schemas still come later.
+# Plugin catalog
+kindly plugin list                       # browse the curated bundled-plugin catalog
+kindly plugin describe <name>            # full entry with references and curation opinion
+
+# Automation
+kindly serve                             # long-running JSON-IPC over stdin/stdout
+kindly watch                             # tail -f .kindly/history.jsonl as JSON
+```
 
 ## How it works
 
@@ -139,10 +156,24 @@ Regenerate the schema with `bun run scripts/extract-schema.ts <koreader-root>`.
 
 ## Status
 
-v0.5 in progress. Kindle-only. Solo project. 523 tests: byte-identical
-round-trip on a real 180-key `settings.reader.lua`, tar create/extract/list,
-full snapshot→mutate→restore→rollback coverage, Setup manifest
-export/import/templates across lean and fat formats, compat gating
+v0.13 in progress (v0.12.0 last released). Kindle-only. Solo project.
+1700+ tests covering: byte-identical round-trip on a real 180-key
+`settings.reader.lua`, tar create/extract/list, full
+snapshot → mutate → restore → rollback coverage, Setup manifest
+export/import/verify/trust across lean and fat formats, compat gating
 (version window + device family) at the import boundary with `--force`
-override, and schema validation (typo + type-mismatch detection) against
-557 KOReader settings keys. See `docs/` for design notes.
+override, schema validation (typo + type-mismatch detection) against
+557 KOReader settings keys, and a 12-gate policy layer covering
+SENSITIVE-key consent, code-exec-adjacent paths, control-byte
+rejection, destructive-shape protection, and Ed25519 signature
+verification with a built-in keyring + local trust roster.
+
+Other substrate added since v0.5: `kindly serve` (JSON-IPC for a future
+GUI), `kindly watch` (history streaming), `kindly history` /
+`kindly rollback` (git-style mutation log), `doctor --repair` for
+interrupted-apply recovery, mount fingerprinting for cross-Kindle
+protection, and a hash-bound bundled-plugin catalog.
+
+See `docs/` for design notes — `docs/security/` for the threat model
+and red-team hardening log, `docs/infra/` for the roadmap and hub
+strategy.

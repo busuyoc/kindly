@@ -81,8 +81,21 @@ export type CliEnv = {
     jsonMode?: boolean;
     /** When true, the dispatcher appends a line to `.kindly/trace.jsonl`
      * per invocation. Opt-in for Claudiu's own self-dogfooding; not
-     * telemetry. defaultEnv() reads `KINDLY_TRACE=1` from process.env. */
+     * telemetry. defaultEnv() reads `KINDLY_TRACE=1` from process.env.
+     *
+     * R9: superseded in resolve order by `traceMode` — set ONLY for
+     * tests that pre-date the tri-state. New code should set
+     * `traceMode` directly. */
     trace?: boolean;
+    /** R9 (review hardening): tri-state tracing default. Resolution at
+     *  startup:
+     *    - KINDLY_TRACE=0    → "off"
+     *    - KINDLY_TRACE=1    → "all"
+     *    - (unset / default) → "mutations"
+     *  When "mutations", only commands declared mutating in cli.ts's
+     *  COMMANDS table emit a trace line. The opt-in maximalist behavior
+     *  (KINDLY_TRACE=1) is preserved for users already using it. */
+    traceMode?: "off" | "mutations" | "all";
     /** Test-only override for the plugin catalog path. Production runs
      * always resolve the bundled catalog relative to the module — there
      * is no cwd hatch (round-5 S2081 closure: previously
@@ -108,9 +121,19 @@ export function defaultEnv(): CliEnv {
         stderr: new StreamWriter(process.stderr),
         color: process.stdout.isTTY ?? false,
         now: () => new Date(),
+        // R9: legacy `trace` flag kept truthy iff KINDLY_TRACE=1 to avoid
+        // breaking callers that read `env.trace`. The new `traceMode`
+        // field is the source of truth for the dispatcher.
         trace: process.env.KINDLY_TRACE === "1",
+        traceMode: resolveTraceMode(process.env.KINDLY_TRACE),
         tty: process.stdin.isTTY ?? false,
     };
+}
+
+function resolveTraceMode(raw: string | undefined): "off" | "mutations" | "all" {
+    if (raw === "0") return "off";
+    if (raw === "1") return "all";
+    return "mutations";
 }
 
 // Resolve the mount to operate against. Throws a user-readable error if not

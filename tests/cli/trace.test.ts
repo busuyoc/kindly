@@ -60,15 +60,48 @@ beforeEach(() => {
     };
 });
 
-describe("trace: off by default", () => {
-    test("no .kindly/trace.jsonl created when env.trace is unset", async () => {
-        await main(["pull"], env);
+// R9 (review hardening): tri-state default. Pre-R9, trace was off
+// unless env.trace was explicitly true. Post-R9, mutating commands
+// trace by default ("mutations" mode), with "off"/"all" reachable via
+// KINDLY_TRACE=0 / KINDLY_TRACE=1 respectively. The two tests below
+// pin pre-R9 behavior under explicit `traceMode: "off"`.
+describe("trace: off when explicitly disabled", () => {
+    test("no .kindly/trace.jsonl created when traceMode is 'off'", async () => {
+        await main(["pull"], { ...env, traceMode: "off" });
         expect(existsSync(join(workdir, ".kindly", "trace.jsonl"))).toBe(false);
     });
 
-    test("no trace written even on successful --json invocation", async () => {
-        await main(["pull", "--json"], env);
+    test("no trace written even on successful --json invocation when off", async () => {
+        await main(["pull", "--json"], { ...env, traceMode: "off" });
         expect(existsSync(join(workdir, ".kindly", "trace.jsonl"))).toBe(false);
+    });
+});
+
+describe("R9: tri-state trace mode (mutations by default)", () => {
+    test("mutating command (pull) traces by default", async () => {
+        // No KINDLY_TRACE env, no explicit traceMode → defaults to
+        // 'mutations' in defaultEnv, which traces pull (mutating: true).
+        // The test env doesn't go through defaultEnv, so we set
+        // traceMode explicitly to mirror what defaultEnv would set.
+        await main(["pull"], { ...env, traceMode: "mutations" });
+        expect(existsSync(join(workdir, ".kindly", "trace.jsonl"))).toBe(true);
+    });
+
+    test("read-only command (diff) does NOT trace under 'mutations'", async () => {
+        // Pre-populate kindly.yaml so diff doesn't fail.
+        await main(["pull"], { ...env, traceMode: "off" });
+        // Now diff with mutations mode — should not write a trace line.
+        const beforeDiff = existsSync(join(workdir, ".kindly", "trace.jsonl"));
+        await main(["diff"], { ...env, traceMode: "mutations" });
+        const afterDiff = existsSync(join(workdir, ".kindly", "trace.jsonl"));
+        expect(beforeDiff).toBe(false);
+        expect(afterDiff).toBe(false);
+    });
+
+    test("'all' mode traces read-only commands too", async () => {
+        await main(["pull"], { ...env, traceMode: "off" });
+        await main(["diff"], { ...env, traceMode: "all" });
+        expect(existsSync(join(workdir, ".kindly", "trace.jsonl"))).toBe(true);
     });
 });
 

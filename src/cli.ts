@@ -31,22 +31,30 @@ const VERSION: string = pkg.version;
 type Command = {
     run: (argv: readonly string[], env: CliEnv) => Promise<number>;
     help: string;
+    /** R9: whether this command writes anywhere (device or local FS).
+     *  Drives the default trace-on-mutations policy. `setup`, `doctor`
+     *  and `plugin` have mixed read/write subcommands; we treat the
+     *  top-level command as mutating so a `setup import` is traced.
+     *  False positives (`setup list`, `doctor` with no --repair) cost
+     *  one extra trace line per invocation; cheaper than under-tracing
+     *  the actual mutations. */
+    mutating: boolean;
 };
 
 const COMMANDS: Record<string, Command> = {
-    pull:     { run: runPull,     help: pullHelp },
-    apply:    { run: runApply,    help: applyHelp },
-    diff:     { run: runDiff,     help: diffHelp },
-    init:     { run: runInit,     help: initHelp },
-    doctor:   { run: runDoctor,   help: doctorHelp },
-    snapshot: { run: runSnapshot, help: snapshotHelp },
-    restore:  { run: runRestore,  help: restoreHelp },
-    rollback: { run: runRollback, help: rollbackHelp },
-    history:  { run: runHistory,  help: historyHelp },
-    setup:    { run: runSetup,    help: setupHelp },
-    plugin:   { run: runPlugin,   help: pluginHelp },
-    serve:    { run: runServe,    help: serveHelp },
-    watch:    { run: runWatch,    help: watchHelp },
+    pull:     { run: runPull,     help: pullHelp,     mutating: true  }, // writes kindly.yaml
+    apply:    { run: runApply,    help: applyHelp,    mutating: true  }, // writes device
+    diff:     { run: runDiff,     help: diffHelp,     mutating: false },
+    init:     { run: runInit,     help: initHelp,     mutating: true  }, // writes starter YAML
+    doctor:   { run: runDoctor,   help: doctorHelp,   mutating: true  }, // --repair writes
+    snapshot: { run: runSnapshot, help: snapshotHelp, mutating: true  }, // writes archive
+    restore:  { run: runRestore,  help: restoreHelp,  mutating: true  }, // writes device
+    rollback: { run: runRollback, help: rollbackHelp, mutating: true  }, // writes device
+    history:  { run: runHistory,  help: historyHelp,  mutating: false },
+    setup:    { run: runSetup,    help: setupHelp,    mutating: true  }, // import/export/trust mutate
+    plugin:   { run: runPlugin,   help: pluginHelp,   mutating: false },
+    serve:    { run: runServe,    help: serveHelp,    mutating: false },
+    watch:    { run: runWatch,    help: watchHelp,    mutating: false },
 };
 
 const TOP_HELP = `
@@ -100,10 +108,10 @@ Run \`kindly <command> --help\` (or \`kindly help <command>\`) for per-command o
 export async function main(argv: readonly string[], env: CliEnv = defaultEnv()): Promise<number> {
     const startMs = Date.now();
     const code = await runMain(argv, env);
-    // Trace every invocation (including --help, --version, unknown command)
-    // so self-dogfooding counts reflect reality. Gated on env.trace; swallows
-    // its own failures in writeTraceEntry.
-    if (env.trace) {
+    // R9: tri-state trace mode. Default (mutations) writes a line iff
+    // the dispatched command is declared mutating. Legacy `env.trace`
+    // (truthy → trace everything) preserved for tests that still use it.
+    if (shouldTrace(env, argv)) {
         writeTraceEntry(env, {
             ts: env.now().toISOString(),
             cmd: argv[0] ?? "",
@@ -114,6 +122,19 @@ export async function main(argv: readonly string[], env: CliEnv = defaultEnv()):
         });
     }
     return code;
+}
+
+/** R9: decide whether the current invocation should write a trace line.
+ *  Resolution order: env.traceMode (new) > env.trace (legacy) > default. */
+function shouldTrace(env: CliEnv, argv: readonly string[]): boolean {
+    const mode = env.traceMode ?? (env.trace ? "all" : "mutations");
+    if (mode === "off") return false;
+    if (mode === "all") return true;
+    // "mutations": only mutating commands. Unknown commands and
+    // --help/--version don't have a `mutating` bit; leave them untraced.
+    const cmdName = argv[0] ?? "";
+    const cmd = COMMANDS[cmdName];
+    return cmd?.mutating === true;
 }
 
 async function runMain(argv: readonly string[], env: CliEnv): Promise<number> {

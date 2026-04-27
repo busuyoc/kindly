@@ -9,6 +9,7 @@
 // /Volumes/Kindle would fool that check.
 
 import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import { statFollow } from "../fs/safeRead.ts";
 
 export type KindleMount = {
@@ -22,15 +23,50 @@ export type KindleMount = {
 const CANDIDATES_DARWIN = ["/Volumes/Kindle"];
 const CANDIDATES_LINUX = ["/mnt/us"];
 
+// R3 (review hardening): per-candidate stat timeout. A statSync against a
+// stuck NFS share or dead FUSE provider at /Volumes/Kindle would block
+// the main thread indefinitely; setTimeout() can't preempt a blocked
+// syscall because libuv timers run on the same thread. Forking a
+// `test -d` subprocess lets the kernel's SIGTERM-after-timeout enforce
+// a bound. 3s is generous for a healthy USB-mounted Kindle (typical
+// statSync is sub-millisecond) and bounds total mount-detection time
+// at ~3s × 1 candidate per platform.
+const STAT_TIMEOUT_MS = 3000;
+
 export function candidateMounts(platform: NodeJS.Platform = process.platform): string[] {
     if (platform === "darwin") return CANDIDATES_DARWIN;
     if (platform === "linux") return CANDIDATES_LINUX;
     return [];
 }
 
+/** R3: subprocess-bounded liveness probe. Confirms the kernel can stat
+ *  `<root>/koreader` within STAT_TIMEOUT_MS — a guard against stuck NFS
+ *  or dead FUSE providers that would otherwise hang `statSync` on the
+ *  main thread.
+ *
+ *  Why subprocess: setTimeout-based watchdogs can't fire while the main
+ *  thread is in a blocking syscall (libuv timers run on the same thread),
+ *  so the only way to enforce a bound on a sync stat is to delegate to a
+ *  child process the kernel can SIGTERM. Windows has no POSIX `test`
+ *  builtin and kindly doesn't officially support Windows hosts in v0.x;
+ *  fall through to the sync statFollow there. */
+function probeReachable(path: string): boolean {
+    if (process.platform === "win32") return true;
+    const r = spawnSync("test", ["-e", path], { timeout: STAT_TIMEOUT_MS });
+    return !r.signal && r.status === 0;
+}
+
 export function isKindleMount(root: string): boolean {
+    const koreader = join(root, "koreader");
+    // Subprocess probes for kernel liveness. If it times out or the path
+    // doesn't exist, no Kindle. If it returns successfully, the kernel
+    // is responsive and the subsequent statFollow won't hang.
+    if (!probeReachable(koreader)) return false;
     try {
-        const koreader = join(root, "koreader");
+        // statFollow applies "derived-from-mount" symlink rejection so a
+        // planted symlink at <mount>/koreader doesn't trigger a false
+        // positive here. (Reads downstream go through readText which
+        // applies the same rule.)
         return statFollow(koreader, "derived-from-mount").isDirectory();
     } catch {
         return false;

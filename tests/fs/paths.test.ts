@@ -100,7 +100,13 @@ describe("isSafeRelativePath", () => {
         expect(isSafeRelativePath("a".repeat(256))).toBe(false);
         // 255-char segment is allowed (boundary).
         expect(isSafeRelativePath("a".repeat(255))).toBe(true);
-        // 1025-char total path (multiple segments, all individually fine).
+        // Exactly 1024-char total path passes (boundary). Pins the `>` vs
+        // `>=` direction of the cap so a future refactor flipping it gets
+        // caught. 5 × 204 + 4 separators = 1024.
+        const exactlyMaxPath = Array.from({ length: 5 }, () => "a".repeat(204)).join("/");
+        expect(exactlyMaxPath.length).toBe(1024);
+        expect(isSafeRelativePath(exactlyMaxPath)).toBe(true);
+        // 1027-char total path (multiple segments, all individually fine).
         const longPath = Array.from({ length: 9 }, () => "a".repeat(113)).join("/") + "/x";
         expect(longPath.length).toBeGreaterThan(1024);
         expect(isSafeRelativePath(longPath)).toBe(false);

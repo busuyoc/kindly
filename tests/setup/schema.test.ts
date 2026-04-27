@@ -316,6 +316,36 @@ describe("duplicate paths in file lists", () => {
         expect(() => parseManifest(raw)).toThrow(/duplicate/);
     });
 
+    // S2200: case-folded duplicates collapse to the same on-disk file on
+    // FAT32 (Kindle's filesystem). The wipe-set in setup/files.ts:171-175
+    // uses byte-equality, so two case-conflicting top-level dirs would
+    // both pass byte-uniqueness, both wipe (one is a no-op on FAT32),
+    // then both write — second clobbers first. Reject at parse for
+    // cross-platform-portable archives.
+    test("rejects case-folded duplicate paths in plugins.files (S2200)", () => {
+        const raw = {
+            ...(minimal() as object),
+            plugins: {
+                files: [
+                    { path: "Plugins.koplugin/main.lua", hash: hashA, bytes: 1 },
+                    { path: "plugins.koplugin/main.lua", hash: hashB, bytes: 2 },
+                ],
+            },
+        };
+        expect(() => parseManifest(raw)).toThrow(/case-folded/);
+    });
+
+    test("rejects case-folded duplicate paths in patches (S2200)", () => {
+        const raw = {
+            ...(minimal() as object),
+            patches: [
+                { path: "001-Fix.lua", hash: hashA, bytes: 1 },
+                { path: "001-fix.lua", hash: hashB, bytes: 2 },
+            ],
+        };
+        expect(() => parseManifest(raw)).toThrow(/case-folded/);
+    });
+
     test("plugins.files and patches with identical paths is allowed (different namespaces)", () => {
         // A path "x.lua" under plugins.files and patches isn't really a
         // collision — they extract to different trees. Duplicates are only

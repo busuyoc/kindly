@@ -98,9 +98,32 @@ function uniqueByPath(files: readonly { path: string }[]): boolean {
     return true;
 }
 
+// S2200: reject case-folded path collisions for cross-platform .kset
+// portability. FAT32 (Kindle's filesystem) is case-insensitive, so a
+// manifest with both `Plugins.koplugin/main.lua` and
+// `plugins.koplugin/main.lua` would silently collapse on-device — the
+// second `installPluginFiles` write clobbers the first while the wipe-
+// set in `setup/files.ts` treats them as two separate buckets. The
+// underlying threat is publisher-controlled bytes either way (no
+// privilege gain), but it's a hygiene gap that lets a manifest hide one
+// of the colliding files from `setup describe`'s pretty output while
+// it still lands. Reject at parse for portable archives.
+function uniqueByCaseFoldedPath(files: readonly { path: string }[]): boolean {
+    const seen = new Set<string>();
+    for (const f of files) {
+        const folded = f.path.toLowerCase();
+        if (seen.has(folded)) return false;
+        seen.add(folded);
+    }
+    return true;
+}
+
 const EmbeddedFileArraySchema = z
     .array(EmbeddedFileSchema)
-    .refine(uniqueByPath, { message: "duplicate path in file list" });
+    .refine(uniqueByPath, { message: "duplicate path in file list" })
+    .refine(uniqueByCaseFoldedPath, {
+        message: "case-folded duplicate path (FAT32 portability)",
+    });
 
 // ---- Top-level blocks ------------------------------------------------------
 

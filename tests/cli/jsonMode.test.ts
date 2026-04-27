@@ -250,3 +250,76 @@ describe("--json mode suppresses text rendering", () => {
         expect(stdout.value).not.toContain("change(s)");
     });
 });
+
+// R5 (review hardening): cross-cutting CLI test. A device with a
+// corrupt settings.reader.lua containing a SECRET-like token must not
+// surface the token through pull/diff text mode or --json envelope.
+// This pins the constructor-level guarantee at the system boundary.
+describe("R5: LuaParseError snippet does not reach CLI surfaces", () => {
+    test("pull on corrupt settings.reader.lua — secret bytes never in stderr/stdout", async () => {
+        // Plant a corrupt settings file with a secret-looking token
+        // close to where the parser will fail. If R5 ever regresses,
+        // the snippet would surface to stderr.
+        const corruptKindle = mkdtempSync(join(tmpdir(), "kindly-r5-corrupt-"));
+        mkdirSync(join(corruptKindle, "koreader"));
+        const corrupt =
+            'return {\n' +
+            '  ["passcode"] = "TOPSECRETPINxxxxxxxx",\n' +
+            '  ["broken"] = "no closing quote\n' +
+            '}\n';
+        writeFileSync(join(corruptKindle, "koreader", "settings.reader.lua"), corrupt);
+
+        const localOut = new StringWriter();
+        const localErr = new StringWriter();
+        const localEnv: CliEnv = {
+            cwd: workdir,
+            stdout: localOut,
+            stderr: localErr,
+            color: false,
+            mountOverride: corruptKindle,
+            now: () => new Date("2026-04-22T12:00:00Z"),
+        };
+
+        const code = await main(["pull"], localEnv);
+        expect(code).toBe(1);
+        // The combined output must not leak the secret token, the key
+        // name, or the surrounding "x" filler.
+        const combined = localOut.value + localErr.value;
+        expect(combined).not.toContain("TOPSECRETPIN");
+        expect(combined).not.toContain("xxxxxxxx");
+        // But the parse-failure error code must surface so the user
+        // can act on the failure.
+        expect(localErr.value).toContain("settings.reader.lua failed to parse");
+    });
+
+    test("pull --json on corrupt file — secret bytes never in JSON envelope", async () => {
+        const corruptKindle = mkdtempSync(join(tmpdir(), "kindly-r5-json-"));
+        mkdirSync(join(corruptKindle, "koreader"));
+        const corrupt =
+            'return {\n' +
+            '  ["passcode"] = "TOPSECRETPINxxxxxxxx",\n' +
+            '  ["broken"] = "no closing quote\n' +
+            '}\n';
+        writeFileSync(join(corruptKindle, "koreader", "settings.reader.lua"), corrupt);
+
+        const localOut = new StringWriter();
+        const localErr = new StringWriter();
+        const localEnv: CliEnv = {
+            cwd: workdir,
+            stdout: localOut,
+            stderr: localErr,
+            color: false,
+            mountOverride: corruptKindle,
+            now: () => new Date("2026-04-22T12:00:00Z"),
+        };
+
+        await main(["pull", "--json"], localEnv);
+        // --json envelope lands on stderr for errors.
+        const envelope = JSON.parse(localErr.value);
+        expect(envelope.status).toBe("error");
+        // The error envelope must not carry source bytes anywhere.
+        const serialized = JSON.stringify(envelope);
+        expect(serialized).not.toContain("TOPSECRETPIN");
+        expect(serialized).not.toContain("xxxxxxxx");
+    });
+});

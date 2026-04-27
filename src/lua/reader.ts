@@ -15,13 +15,46 @@
 import type { LuaTable, LuaValue } from "./writer.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
 
+/** Failure of the recursive-descent Lua parser.
+ *
+ *  R5 (review hardening): `.message` deliberately omits the surrounding
+ *  bytes. Pre-fix, the constructor embedded a 40-byte JSON-stringified
+ *  window via `src.slice(pos-20, pos+20)`. That window leaked plaintext
+ *  whenever the error reached a user-facing surface (CLI text, --json
+ *  envelope, log lines) — `safeWrite` redacted, but every other catch
+ *  site rendered `.message` raw. By keeping the message free of source
+ *  bytes by construction, downstream rendering can't accidentally leak.
+ *
+ *  The bytes around the failure are still useful for debugging — call
+ *  `detailedMessage()` to get a snippet-bearing form. That accessor is
+ *  the explicit, audited path; production code never invokes it. Tests
+ *  and a future `kindly doctor --inspect` (with explicit user consent)
+ *  may consume it.
+ *
+ *  `pos` is the byte offset; `src` is the *full* parse input (kept on
+ *  the object so `detailedMessage()` can compute the window on demand).
+ *  Treat `src` as sensitive — never log or serialize it. */
 export class LuaParseError extends KindlyError {
-    constructor(msg: string, public pos: number, public src: string) {
+    constructor(public reason: string, public pos: number, public src: string) {
         super(
             ErrorCodes.LUA_PARSE_FAILED,
-            `${msg} at pos ${pos}: ${JSON.stringify(src.slice(Math.max(0, pos - 20), pos + 20))}`,
+            `${reason} at pos ${pos}`,
         );
         this.name = "LuaParseError";
+    }
+
+    /** Snippet-bearing form for tests / debug archives only. The 40-byte
+     *  window around the failure point is the original pre-R5 message. */
+    detailedMessage(): string {
+        const window = this.src.slice(Math.max(0, this.pos - 20), this.pos + 20);
+        return `${this.reason} at pos ${this.pos}: ${JSON.stringify(window)}`;
+    }
+
+    /** Just the byte window, without surrounding text. Used by tests
+     *  asserting that snippet-bearing output never appears in production
+     *  code paths. */
+    snippetBytes(): string {
+        return this.src.slice(Math.max(0, this.pos - 20), this.pos + 20);
     }
 }
 

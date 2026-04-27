@@ -159,20 +159,14 @@ export function safeWrite(
                 renameSync(oldPath, path);
             } catch {}
         }
-        // Round 3 rollback gate-parity F4 (Angle V S862 sibling): the
-        // raw LuaParseError carries a 40-byte snippet of bytes-on-disk
-        // (`JSON.stringify(src.slice(pos-20, pos+20))`). Those bytes are
-        // whatever we just wrote — a tampered snapshot or a YAML carrying
-        // a secret could position the parse error mid-string and leak
-        // up to ~27 plaintext bytes of a SECRET (PIN/password) past the
-        // sanitize layer (which only filters control bytes, not
-        // string content). Rethrow as a snippet-free KindlyError; the
-        // byte position is enough for diagnosis without leaking content.
+        // R5: LuaParseError.message is now snippet-free by construction
+        // (see src/lua/reader.ts), so the previous inline redaction is
+        // no longer needed. We still rewrap with a clearer message that
+        // mentions the rollback path and bytes-on-disk position.
         if (verifyErr instanceof LuaParseError) {
             throw new KindlyError(
                 ErrorCodes.LUA_PARSE_FAILED,
-                `post-write verify-reparse failed at byte ${verifyErr.pos} of ${path} ` +
-                `(snippet redacted to avoid leaking secrets in settings.reader.lua); ` +
+                `post-write verify-reparse failed at byte ${verifyErr.pos} of ${path}; ` +
                 `device rolled back to .old`,
             );
         }

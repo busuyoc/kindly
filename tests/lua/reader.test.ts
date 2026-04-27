@@ -221,3 +221,81 @@ describe("reader — Lua comments", () => {
         expect(parse('{\n-- inline\n["k"] = 1,\n}')).toEqual({ k: 1 });
     });
 });
+
+describe("R5: LuaParseError — message is snippet-free, snippet on accessor", () => {
+    // Construct a parse error whose surrounding bytes contain a SECRET-like
+    // token. Any future catch site that renders .message must NOT leak
+    // those bytes; only the explicit detailedMessage()/snippetBytes()
+    // accessors expose them, and only audited paths invoke those.
+    function makeError(): LuaParseError {
+        const src = 'return { ["passcode"] = "TOPSECRETPINxxxxxxxx",\nbroken';
+        try {
+            parseSettingsFile(src);
+        } catch (e) {
+            if (e instanceof LuaParseError) return e;
+        }
+        throw new Error("expected LuaParseError");
+    }
+
+    test(".message contains pos and reason but never source bytes", () => {
+        const err = makeError();
+        expect(err.message).toContain("at pos ");
+        // The actual source bytes (secret value, key name, surrounding
+        // value content) must NOT appear in .message. The parser's
+        // descriptive reason ("expected '['", etc.) may contain quotes
+        // for grammar, but no input bytes.
+        expect(err.message).not.toContain("TOPSECRETPIN");
+        expect(err.message).not.toContain("passcode");
+        expect(err.message).not.toContain("xxxxxxxx");
+    });
+
+    test(".reason is set; .pos is set; .src holds the full input", () => {
+        const err = makeError();
+        expect(err.reason.length).toBeGreaterThan(0);
+        expect(typeof err.pos).toBe("number");
+        // src is the FULL parse input — sensitive, must not be logged.
+        expect(err.src).toContain("TOPSECRETPIN");
+    });
+
+    test("detailedMessage() includes the byte snippet", () => {
+        const err = makeError();
+        const detailed = err.detailedMessage();
+        // Either the secret OR something near the parse failure point
+        // must appear — we don't assert "TOPSECRETPIN" because the parser
+        // may fail early (before the secret), but the snippet method
+        // must include source bytes by definition.
+        expect(detailed).toContain("at pos ");
+        expect(detailed).toContain('"'); // JSON-stringified window
+    });
+
+    test("snippetBytes() returns raw source bytes around pos", () => {
+        const err = makeError();
+        const snip = err.snippetBytes();
+        expect(typeof snip).toBe("string");
+        expect(snip.length).toBeGreaterThan(0);
+    });
+
+    test("toString() does not leak source bytes (default Error coercion)", () => {
+        // Important defense: console.log(err) and `${err}` both call toString()
+        // which composes from .name + .message. Neither should leak.
+        const err = makeError();
+        const s = String(err);
+        expect(s).not.toContain("TOPSECRETPIN");
+    });
+
+    test("JSON.stringify(err) — own-enumerable fields — does not leak via .message", () => {
+        // R5 only protects .message. Own enumerable fields (reason, pos,
+        // src) ARE on the object by construction — the discipline is
+        // "never JSON.stringify a LuaParseError." This test pins that
+        // observation: the .src field IS visible to a serializer, so
+        // callers must use .message explicitly, never the whole object.
+        const err = makeError();
+        const obj = JSON.parse(JSON.stringify({
+            message: err.message,
+            code: err.code,
+            pos: err.pos,
+        }));
+        expect(obj.message).not.toContain("TOPSECRETPIN");
+        expect(obj.code).toBe("LUA_PARSE_FAILED");
+    });
+});

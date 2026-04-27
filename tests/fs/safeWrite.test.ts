@@ -118,14 +118,16 @@ describe("safeWrite — verify step", () => {
         expect(readFileSync(path, "utf8")).toBe("hello world\n");
     });
 
-    // Round 3 rollback gate-parity F4 (Angle V S862 sibling): when the
-    // post-write reparse fails mid-string, the LuaParseError surfaces a
-    // 40-byte window around the parse position. Those bytes are whatever
-    // we just wrote — a tampered snapshot or a YAML carrying a SECRET
-    // could position the failure inside a string value and leak up to
-    // ~27 bytes of the secret to stderr (and to the --json envelope).
-    // The fix rethrows the verify-step parse error as a snippet-free
-    // KindlyError; the byte position remains for diagnosis.
+    // R5 (review hardening, post-Round-3 F4 / Angle V S862 sibling):
+    // when post-write reparse fails mid-string, the LuaParseError used
+    // to embed a 40-byte window around the parse position into .message.
+    // Those bytes were whatever we just wrote — a tampered snapshot or
+    // a YAML carrying a SECRET could position the failure inside a
+    // string value and leak up to ~27 bytes of the secret to stderr and
+    // to the --json envelope. R5 stops embedding the snippet at
+    // construction time, so .message is snippet-free unconditionally.
+    // safeWrite still rewraps with a clearer message that names the
+    // path and rollback path.
     test("verify-reparse failure does not leak the on-disk snippet", () => {
         const path = join(workdir, "settings.reader.lua");
         // Construct a file that's almost-Lua but unparseable mid-string.
@@ -146,8 +148,8 @@ describe("safeWrite — verify step", () => {
         }
         expect(caught).not.toBeNull();
         expect(caught!.message).not.toContain("TOPSECRETPIN");
-        expect(caught!.message).toContain("snippet redacted");
         expect(caught!.message).toContain("post-write verify-reparse failed at byte ");
+        expect(caught!.message).toContain("rolled back to .old");
     });
 });
 

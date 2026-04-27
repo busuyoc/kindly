@@ -313,6 +313,9 @@ describe("S2123: producer throw still emits gate-event log entry", () => {
             errorCode: "SETUP_SIGNATURE_INVALID",
             check: () => ({ kind: "pass" }),
         };
+        // R6 changed the rethrow shape: producer crashes now surface as
+        // KindlyError(GATE_PRODUCER_FAILED). The original message is
+        // preserved verbatim inside the wrapped message.
         expect(() =>
             runGates("import", ctx(), {
                 registry: [gate],
@@ -326,6 +329,78 @@ describe("S2123: producer throw still emits gate-event log entry", () => {
         ).toThrow(/simulated producer crash/);
         // Logger saw a synthetic block entry before the rethrow.
         expect(fired).toEqual([{ id: "REQUIRES_BLOWUP", kind: "block" }]);
+    });
+});
+
+describe("R6 (review hardening): producer crash surfaces as typed KindlyError", () => {
+    test("raw Error from producer becomes KindlyError(GATE_PRODUCER_FAILED)", async () => {
+        const { KindlyError, ErrorCodes } = await import("../../src/types/errors.ts");
+        const blowup: Producer<unknown> = () => {
+            throw new Error("filesystem unreadable: EACCES");
+        };
+        const gate: GateDefinition = {
+            id: "GATE_X",
+            category: "TRUST",
+            appliesAt: ["import"],
+            requires: ["blowup"],
+            firesIn: "always",
+            bypassFlags: [],
+            errorCode: "SETUP_SIGNATURE_INVALID",
+            check: () => ({ kind: "pass" }),
+        };
+
+        let caught: unknown = null;
+        try {
+            runGates("import", ctx(), {
+                registry: [gate],
+                producers: { blowup },
+            });
+        } catch (e) {
+            caught = e;
+        }
+        expect(caught).toBeInstanceOf(KindlyError);
+        expect((caught as InstanceType<typeof KindlyError>).code).toBe(
+            ErrorCodes.GATE_PRODUCER_FAILED,
+        );
+        // The producer name is in the wrapped message for diagnosis.
+        expect((caught as Error).message).toContain("blowup");
+        // The original cause is preserved verbatim.
+        expect((caught as Error).message).toContain("filesystem unreadable: EACCES");
+    });
+
+    test("KindlyError from producer is preserved unwrapped (granular code survives)", async () => {
+        // Producers may intentionally throw a structured KindlyError to
+        // signal a specific failure mode (e.g. signerTrust →
+        // SETUP_SIGNATURE_INVALID for a tampered sidecar). R6 preserves
+        // the original KindlyError so callers can branch on its code —
+        // wrapping it would erase the policy-grade signal.
+        const { KindlyError } = await import("../../src/types/errors.ts");
+        const failing: Producer<unknown> = () => {
+            throw new KindlyError("KEYRING_CORRUPT", "keyring is not valid JSON");
+        };
+        const gate: GateDefinition = {
+            id: "GATE_Y",
+            category: "TRUST",
+            appliesAt: ["import"],
+            requires: ["failing"],
+            firesIn: "always",
+            bypassFlags: [],
+            errorCode: "SETUP_SIGNATURE_INVALID",
+            check: () => ({ kind: "pass" }),
+        };
+
+        let caught: unknown = null;
+        try {
+            runGates("import", ctx(), {
+                registry: [gate],
+                producers: { failing },
+            });
+        } catch (e) {
+            caught = e;
+        }
+        expect(caught).toBeInstanceOf(KindlyError);
+        expect((caught as InstanceType<typeof KindlyError>).code).toBe("KEYRING_CORRUPT");
+        expect((caught as Error).message).toBe("keyring is not valid JSON");
     });
 });
 

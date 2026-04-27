@@ -14,6 +14,7 @@
 import { GATES } from "./registry.ts";
 import { PRODUCERS } from "./producers/index.ts";
 import { KindlyError, ErrorCodes } from "../types/errors.ts";
+import { validateContextOpts } from "./contextSchema.ts";
 import type {
     GateBoundary,
     GateContext,
@@ -109,6 +110,16 @@ function isFlagActive(flag: string, ctx: GateContext): boolean {
  * run. One call per producer; results land in ctx.producers by name. A
  * required producer missing from the map is a registry misconfiguration
  * — throw so the bug surfaces immediately.
+ *
+ * R6 (review hardening): each producer call is wrapped in try/catch.
+ * An exception from a producer (e.g. signerTrust on a malformed sidecar,
+ * or a side-effecting producer hitting an unexpected I/O failure) used
+ * to propagate as a raw `Error` and crash the apply with an unstructured
+ * stderr line. Now it's typed as `KindlyError(GATE_PRODUCER_FAILED, ...)`
+ * carrying the producer name and original message — `kindly doctor` and
+ * the --json envelope can act on it predictably. The pre-existing S2123
+ * synthetic block-log logging in `runGates` remains intact for the audit
+ * trail.
  */
 function materializeProducers(
     gates: ReadonlyArray<GateDefinition>,
@@ -120,12 +131,36 @@ function materializeProducers(
     for (const name of needed) {
         const prod = producers[name];
         if (!prod) {
+            // Registry misconfiguration is still a hard throw — it's a
+            // build-time bug, not a runtime input.
             throw new Error(
                 `gates orchestrator: gate requires unknown producer "${name}". ` +
                 "Producer must be registered in src/gates/producers/index.ts.",
             );
         }
-        ctx.producers[name] = prod(ctx);
+        try {
+            ctx.producers[name] = prod(ctx);
+        } catch (e) {
+            // R6 (review hardening): producers that already throw
+            // KindlyError carry an intentional, granular code (e.g.
+            // signerTrust → SETUP_SIGNATURE_INVALID for a tampered
+            // sidecar). Preserve those — wrapping them in
+            // GATE_PRODUCER_FAILED would erase the policy-grade
+            // signal callers branch on. Only raw `Error` / non-
+            // KindlyError throws (an unhandled producer bug) get
+            // wrapped, since those have no stable code to surface.
+            if (e instanceof KindlyError) throw e;
+            const err = e as Error;
+            throw new KindlyError(
+                ErrorCodes.GATE_PRODUCER_FAILED,
+                `gate context unavailable: producer ${name} failed: ${err.message ?? String(e)}`,
+                [{
+                    text: `producer "${name}" threw an untyped error while ` +
+                          `materializing gate context. This is a kindly bug — ` +
+                          `please file an issue with --json output if reproducible.`,
+                }],
+            );
+        }
     }
 }
 
@@ -238,6 +273,10 @@ export function runPhase(input: {
     /** Step 14: observability hook. Called for bypass/block events. */
     logger?: GateEventLogger;
 }): GateReport {
+    // R7 (review hardening): per-boundary contract check. Catches the
+    // boundary-dispatcher-forgot-a-field class of bug before producers
+    // materialize and gates fire. See gates/contextSchema.ts.
+    validateContextOpts(input.boundary, input.opts);
     const ctx: GateContext = {
         boundary: input.boundary,
         dryRun: input.dryRun,

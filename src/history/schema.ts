@@ -27,6 +27,7 @@ export const historyCommandSchema = z.enum([
     "rollback",
     "setup:import",
     "setup:export",
+    "doctor:repair",
 ]);
 
 export const mountFingerprintSchema = z.object({
@@ -81,6 +82,14 @@ export const historySummarySchema = z.object({
      *  Optional for backward-compat with pre-round-3 history entries
      *  (which have no hash and bypass the check). */
     snapshot_sha256: z.string().regex(/^sha256:[a-f0-9]{64}$/, "snapshot_sha256 must be sha256:<64 lowercase hex>").optional(),
+    /** Round-6 S2122 / S2114 (`doctor:repair`). Bound `recovered_from`
+     *  the same way as `snapshot_dir` (PATH_MAX_BYTES), `recovered_sha256`
+     *  to the canonical sha256 form, and `settings_recovery` to the
+     *  three valid recovery verbs. Strict envelope keeps unknown summary
+     *  shapes in the malformed bucket. */
+    recovered_from: z.string().max(PATH_MAX_BYTES).optional(),
+    recovered_sha256: z.string().regex(/^sha256:[a-f0-9]{64}$/, "recovered_sha256 must be sha256:<64 lowercase hex>").optional(),
+    settings_recovery: z.enum(["promoted-tmp", "restored-old", "none"]).optional(),
 }).strict();
 
 // Round 3 history-rendering F3 (S362 sibling): ts is also used for

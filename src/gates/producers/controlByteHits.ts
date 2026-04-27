@@ -155,3 +155,14 @@ export const controlByteHits: Producer<ControlByteReport> = (ctx: GateContext) =
     walk(data, "", "", hits);
     return { hits };
 };
+
+/** Public helper: walk a settings dict and report control-byte hits at
+ *  SECRET / SENSITIVE / code-exec paths. Same logic as the gate
+ *  producer, callable without a GateContext. Used by `doctor --repair`
+ *  (round-6 S2113) to refuse adopting `.old` / `.tmp` bytes that carry
+ *  the renderer-injection chains the producer was built to close. */
+export function findControlByteHits(data: unknown): ControlByteHit[] {
+    const hits: ControlByteHit[] = [];
+    walk(data, "", "", hits);
+    return hits;
+}

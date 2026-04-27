@@ -648,12 +648,22 @@ function runDiskChecks(env: CliEnv, mount: KindleMount): DoctorCheck[] {
     // if the probe fails — apply will not succeed.
     let mountWritable = false;
     let mountWritableDetail: string | undefined;
+    // Round-6 S2118: a SIGINT (or any throw between mkdtempSync's return
+    // and the rmSync call) leaks the probe dir under koreader/. The
+    // `--repair` sweeper only matches `<settingsBase>.tmp.*`, so leaked
+    // probes accumulate forever. Wrap the cleanup in `finally` so it
+    // runs on every code path; `--repair` independently sweeps any
+    // surviving `.doctor-*` prefix from prior crashed runs.
+    let probe: string | null = null;
     try {
-        const probe = mkdtempSync(join(mount.koreaderRoot, ".doctor-mw-"));
-        try { rmSync(probe, { recursive: true, force: true }); } catch { /* best-effort */ }
+        probe = mkdtempSync(join(mount.koreaderRoot, ".doctor-mw-"));
         mountWritable = true;
     } catch (e) {
         mountWritableDetail = (e as Error).message;
+    } finally {
+        if (probe !== null) {
+            try { rmSync(probe, { recursive: true, force: true }); } catch { /* best-effort */ }
+        }
     }
     out.push({
         id: "disk.mount_writable",

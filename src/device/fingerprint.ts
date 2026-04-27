@@ -125,3 +125,17 @@ export function isFingerprintEmpty(f: MountFingerprint): boolean {
         && f.koreader_version === null
         && f.anchor_mtime_iso === null;
 }
+
+/** True when every fingerprint field carries signal. Round-6 S2123:
+ *  `compareFingerprints` treats any null on either side as "no signal"
+ *  and is permissive for partial fingerprints. A forged marker carrying
+ *  a single matching field with the rest null silently passes the gate
+ *  even when the device differs. Callers (today: doctor --repair) gate
+ *  on `isFingerprintFull(recorded) && isFingerprintFull(current)` so the
+ *  cross-device check is only trusted when both sides have all three
+ *  anchors; otherwise they require explicit override. */
+export function isFingerprintFull(f: MountFingerprint): boolean {
+    return f.device_version !== null
+        && f.koreader_version !== null
+        && f.anchor_mtime_iso !== null;
+}

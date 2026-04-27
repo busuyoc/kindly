@@ -124,9 +124,12 @@ describe("C10b: step-4 interruption surfaces SETTINGS_INTERRUPTED_APPLY", () => 
 });
 
 describe("C10c: doctor --repair recovers step-4 state", () => {
-    test("no markers, no tmps: restores .old → main", () => {
+    test("no markers, no tmps, --accept-old: restores .old → main", () => {
+        // Round-6 S2126: missing-marker path now requires --accept-old.
+        // The legitimate "I trust this .old" recovery still works behind
+        // the explicit opt-in.
         induceStep4Interruption(fakeKindle);
-        const r = executeDoctorRepair({}, env);
+        const r = executeDoctorRepair({ acceptOld: true }, env);
         expect(r.mode).toBe("repaired");
         expect(r.settingsRecovery).toBe("restored-old");
         expect(existsSync(settingsPath)).toBe(true);
@@ -201,12 +204,12 @@ describe("C10c: doctor --repair recovers step-4 state", () => {
         expect(r.clearedMarkers).toHaveLength(1);
     });
 
-    test("non-matching tmp: falls through to .old restoration and sweeps the tmp", () => {
+    test("non-matching tmp + --accept-old: falls through to .old restoration and sweeps the tmp", () => {
         induceStep4Interruption(fakeKindle);
         const tmpPath = settingsPath + ".tmp." + process.pid + ".cafef00d";
         writeFileSync(tmpPath, "garbage that does not match any marker");
 
-        const r = executeDoctorRepair({}, env);
+        const r = executeDoctorRepair({ acceptOld: true }, env);
         expect(r.settingsRecovery).toBe("restored-old");
         expect(r.sweptTmps).toContain(tmpPath);
         expect(existsSync(tmpPath)).toBe(false);
@@ -214,7 +217,7 @@ describe("C10c: doctor --repair recovers step-4 state", () => {
 
     test("dry-run reports the plan without writing", () => {
         induceStep4Interruption(fakeKindle);
-        const r = executeDoctorRepair({ dryRun: true }, env);
+        const r = executeDoctorRepair({ dryRun: true, acceptOld: true }, env);
         expect(r.mode).toBe("dry-run");
         expect(r.settingsRecovery).toBe("restored-old");
         // .old is still on disk; main is still absent.
@@ -262,5 +265,179 @@ describe("C10c: doctor --repair recovers step-4 state", () => {
         const r = executeDoctorRepair({ forceMount: true }, env);
         expect(r.mode).toBe("repaired");
         expect(r.settingsRecovery).toBe("restored-old");
+    });
+});
+
+// Round-6 GG closures. Each fix gets a focused test that exercises the
+// attack vector pre-fix and asserts the new gate fires.
+describe("round 6 GG: doctor --repair hardening", () => {
+    test("S2126: missing marker without --accept-old refuses with DOCTOR_REPAIR_REJECTED", () => {
+        // Fresh-install plant attack: attacker drops a single .old file
+        // on a device that never had main+marker. Pre-fix `--repair`
+        // adopted it as canonical settings.
+        induceStep4Interruption(fakeKindle);
+        let err: KindlyError | null = null;
+        try { executeDoctorRepair({}, env); } catch (e) { err = e as KindlyError; }
+        expect(err).toBeInstanceOf(KindlyError);
+        expect(err!.code).toBe("DOCTOR_REPAIR_REJECTED");
+        // .old still on disk; main still absent. No mutation occurred.
+        expect(existsSync(settingsPath)).toBe(false);
+        expect(existsSync(oldPath)).toBe(true);
+    });
+
+    test("S2126: marker referencing settingsPath allows repair without --accept-old", () => {
+        // Provenance signal: a kindly apply wrote a marker before the
+        // SIGKILL that produced step-4 state. Repair adopts the .old
+        // because the marker proves it came from an interrupted apply.
+        induceStep4Interruption(fakeKindle);
+        const markerDir = join(workdir, ".kindly", "in-progress");
+        mkdirSync(markerDir, { recursive: true });
+        writeFileSync(join(markerDir, "apply-7-z.json"), JSON.stringify({
+            cmd: "apply",
+            started_at: "2026-04-25T11:00:00Z",
+            pid: 7,
+            settings_path: settingsPath,
+        }));
+        const r = executeDoctorRepair({}, env);
+        expect(r.mode).toBe("repaired");
+        expect(r.settingsRecovery).toBe("restored-old");
+    });
+
+    test("S2112: malformed-Lua .old refuses adoption with DOCTOR_REPAIR_REJECTED", () => {
+        // Attacker stages bytes that aren't parseable Lua at .old. The
+        // missing-marker gate already protects this case; pass --accept-old
+        // to reach the parse gate underneath.
+        induceStep4Interruption(fakeKindle);
+        writeFileSync(oldPath, "-- ATTACKER_PAYLOAD_NOT_LUA\nthis_is_not_valid_lua\x00");
+        let err: KindlyError | null = null;
+        try { executeDoctorRepair({ acceptOld: true }, env); } catch (e) { err = e as KindlyError; }
+        expect(err).toBeInstanceOf(KindlyError);
+        expect(err!.code).toBe("DOCTOR_REPAIR_REJECTED");
+        // No mutation: main still absent.
+        expect(existsSync(settingsPath)).toBe(false);
+        expect(existsSync(oldPath)).toBe(true);
+    });
+
+    test("S2113: control-byte-laden SECRET in .old refuses adoption", () => {
+        // .old parses as Lua but `kosync.username` (SECRET) carries a
+        // CR byte — same renderer-injection chain the apply-side gate
+        // refuses. Pre-fix repair restored these bytes verbatim onto
+        // settings.reader.lua.
+        induceStep4Interruption(fakeKindle);
+        writeFileSync(oldPath,
+            'return {\n' +
+            '  ["kosync"] = { ["username"] = "alice\\rinjected" },\n' +
+            '  ["avoid_flashing_ui"] = true,\n' +
+            '}\n');
+        let err: KindlyError | null = null;
+        try { executeDoctorRepair({ acceptOld: true }, env); } catch (e) { err = e as KindlyError; }
+        expect(err).toBeInstanceOf(KindlyError);
+        expect(err!.code).toBe("DOCTOR_REPAIR_REJECTED");
+        expect(err!.message).toContain("control bytes");
+    });
+
+    test("S2125: --promote-tmp validates parsed bytes; malformed tmp refuses", () => {
+        // Hash match alone proved only that the bytes match the marker's
+        // claim — not that they parse. Pre-fix repair promoted any bytes
+        // that hashed against a forged marker.
+        induceStep4Interruption(fakeKindle);
+        const evilBytes = "\x00\x01\x02malformed not lua at all" + "x".repeat(50);
+        const tmpPath = settingsPath + ".tmp." + process.pid + ".cafef00d";
+        writeFileSync(tmpPath, evilBytes);
+        const wantHash = createHash("sha256").update(evilBytes).digest("hex");
+        const markerDir = join(workdir, ".kindly", "in-progress");
+        mkdirSync(markerDir, { recursive: true });
+        writeFileSync(join(markerDir, "evil.json"), JSON.stringify({
+            cmd: "apply",
+            pid: 4242,
+            started_at: "2026-04-25T11:00:00Z",
+            settings_path: settingsPath,
+            intended_sha256: wantHash,
+        }));
+        let err: KindlyError | null = null;
+        try {
+            executeDoctorRepair({ promoteTmp: true }, env);
+        } catch (e) { err = e as KindlyError; }
+        expect(err).toBeInstanceOf(KindlyError);
+        expect(err!.code).toBe("DOCTOR_REPAIR_REJECTED");
+        // tmp still on disk: gate fired before any rename.
+        expect(existsSync(tmpPath)).toBe(true);
+    });
+
+    test("S2123: partial-fingerprint marker rejected even when the one set field matches", () => {
+        // Forged marker mount has only device_version (matching the
+        // fake), the other two anchors null. Pre-fix
+        // `compareFingerprints` treated nulls as "no signal" and the
+        // gate let it through. Post-fix: partial fingerprints require
+        // --force-mount.
+        induceStep4Interruption(fakeKindle);
+        const markerDir = join(workdir, ".kindly", "in-progress");
+        mkdirSync(markerDir, { recursive: true });
+        writeFileSync(join(markerDir, "forged.json"), JSON.stringify({
+            cmd: "apply",
+            pid: 9999,
+            started_at: "2026-04-25T11:00:00Z",
+            settings_path: settingsPath,
+            mount: {
+                device_version: "Kindle 5.16.2.1",  // matches the fake
+                koreader_version: null,
+                anchor_mtime_iso: null,
+            },
+        }));
+        let err: KindlyError | null = null;
+        try { executeDoctorRepair({}, env); } catch (e) { err = e as KindlyError; }
+        expect(err).toBeInstanceOf(KindlyError);
+        expect(err!.code).toBe("MOUNT_FINGERPRINT_MISMATCH");
+        // --force-mount still gives an explicit override.
+        const r = executeDoctorRepair({ forceMount: true }, env);
+        expect(r.mode).toBe("repaired");
+    });
+
+    test("S2122/S2114: history entry uses cmd 'doctor:repair' with recovered_from + recovered_sha256", () => {
+        induceStep4Interruption(fakeKindle);
+        const markerDir = join(workdir, ".kindly", "in-progress");
+        mkdirSync(markerDir, { recursive: true });
+        writeFileSync(join(markerDir, "apply-7-z.json"), JSON.stringify({
+            cmd: "apply",
+            started_at: "2026-04-25T11:00:00Z",
+            pid: 7,
+            settings_path: settingsPath,
+        }));
+        const oldBytes = readFileSync(oldPath);
+        const expectedSha = createHash("sha256").update(oldBytes).digest("hex");
+        const r = executeDoctorRepair({}, env);
+        expect(r.settingsRecovery).toBe("restored-old");
+
+        const histLines = readFileSync(
+            join(workdir, ".kindly", "history.jsonl"),
+            "utf8",
+        ).split("\n").filter(Boolean);
+        const entry = JSON.parse(histLines[0]!);
+        expect(entry.cmd).toBe("doctor:repair");
+        expect(entry.summary.recovered_from).toBe(oldPath);
+        expect(entry.summary.recovered_sha256).toBe(`sha256:${expectedSha}`);
+        expect(entry.summary.settings_recovery).toBe("restored-old");
+        // Old shape (snapshot_dir = settings.lua) must be gone — it was
+        // a misuse of the rollback summary that broke `rollback --to N`.
+        expect(entry.summary.snapshot_dir).toBeUndefined();
+    });
+
+    test("S2118: --repair sweeps stale .doctor-mw-* / .doctor-probe-* leftovers", () => {
+        // Simulate prior doctor invocations that crashed between
+        // mkdtempSync and rmSync, leaving probe dirs on the mount.
+        const koreader = join(fakeKindle, "koreader");
+        const leftovers = [
+            join(koreader, ".doctor-mw-AAAAAA"),
+            join(koreader, ".doctor-mw-BBBBBB"),
+            join(koreader, ".doctor-probe-CCCC"),
+        ];
+        for (const p of leftovers) mkdirSync(p);
+
+        const r = executeDoctorRepair({}, env);
+        expect(r.mode).toBe("repaired");
+        for (const p of leftovers) {
+            expect(existsSync(p)).toBe(false);
+            expect(r.sweptTmps).toContain(p);
+        }
     });
 });

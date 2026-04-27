@@ -66,6 +66,16 @@ const FLAGS = {
             "promotion is a privesc primitive. Prefer re-running apply " +
             "(deterministic from the same YAML) over passing this flag.",
     },
+    "accept-old": {
+        type: "boolean",
+        default: false,
+        description:
+            "with --repair, opt in to adopting settings.reader.lua.old when " +
+            "no in-progress marker references the path. Off by default to " +
+            "block fresh-install plant attacks (USB write of a single " +
+            ".old file). Use only if you know the .old came from a SIGKILL " +
+            "during a pre-marker era apply or a third-party tool.",
+    },
 } as const satisfies FlagSpecs;
 
 function severityMark(env: CliEnv, s: DoctorSeverity): string {
@@ -128,6 +138,7 @@ export async function runDoctor(argv: readonly string[], env: CliEnv): Promise<n
             dryRun: flags["dry-run"],
             forceMount: flags["force-mount"],
             promoteTmp: flags["promote-tmp"],
+            acceptOld: flags["accept-old"],
         }, env);
         if (env.jsonMode) emitJson(env, "doctor:repair", result);
         else renderDoctorRepair(result, env);
@@ -188,7 +199,7 @@ kindly doctor — check that kindly can read and trust the device's state.
 
 usage: kindly doctor [--mount <path>]
        kindly doctor --repair [--dry-run] [--force-mount] [--promote-tmp]
-                              [--mount <path>]
+                              [--accept-old] [--mount <path>]
 
 Read-only by default. Emits findings grouped by category (mount, settings,
 schema, catalog, plugins, disk, secrets) — see 90-w34-doctor-output-spec.md.
@@ -223,4 +234,10 @@ so you can rescue them to a password manager before a factory reset.
   pair would land arbitrary bytes onto the device. Off by default.
   Prefer re-running \`kindly apply <yaml>\` — same YAML reproduces the
   same intended bytes deterministically.
+
+  --accept-old opts in to adopting a .old sibling when no in-progress
+  marker references the canonical path. Off by default to block
+  fresh-install attacks where USB write of a single .old file would
+  pre-fix have been adopted as authoritative settings. Use only if
+  you trust the .old's provenance; otherwise re-run apply.
 `.trim();

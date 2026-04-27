@@ -8,7 +8,7 @@
 // Shape: one JSON object per line, newest last. Fields:
 //   - ts              ISO 8601 UTC
 //   - cmd             "apply" | "snapshot" | "restore" | "rollback"
-//                   | "setup:import" | "setup:export"
+//                   | "setup:import" | "setup:export" | "doctor:repair"
 //   - label?          W14 user-provided name (advisory; collisions allowed)
 //   - kindly_version  package.json version at emit time
 //   - index           1-based monotonic counter. Stable across rotation —
@@ -78,7 +78,8 @@ export type HistoryCommand =
     | "restore"
     | "rollback"
     | "setup:import"
-    | "setup:export";
+    | "setup:export"
+    | "doctor:repair";
 
 export interface HistorySummary {
     /** # of settings keys changed (apply, setup:import). */
@@ -118,6 +119,26 @@ export interface HistorySummary {
      *  SNAPSHOT_HASH_MISMATCH. Format: `sha256:<64 lowercase hex>`.
      *  Optional for backward-compat with pre-round-3 entries. */
     snapshot_sha256?: string;
+    /** Round-6 S2122/S2114 (`doctor:repair`): absolute path of the
+     *  on-disk artifact that was promoted/restored onto
+     *  settings.reader.lua. For `restored-old` recoveries this is the
+     *  former `.old` sibling; for `promoted-tmp` recoveries it's the
+     *  `.tmp.<pid>.<rand>` file. Lets the audit trail distinguish
+     *  "we restored bytes we wrote" from any future cmd that mutates
+     *  the same path. */
+    recovered_from?: string;
+    /** Round-6 S2114 (`doctor:repair`): sha256 of the bytes written
+     *  to settings.reader.lua as a result of the recovery, computed
+     *  before the rename. Format: `sha256:<64 lowercase hex>`. Lets a
+     *  later operator verify the bytes still match what the repair
+     *  actually committed. */
+    recovered_sha256?: string;
+    /** Round-6 S2122 (`doctor:repair`): which step the repair took —
+     *  mirrors `DoctorRepairResult.settingsRecovery`. Captured in
+     *  history so consumers can render "doctor restored prior bytes"
+     *  vs. "doctor promoted intended bytes" without re-reading the
+     *  device state. */
+    settings_recovery?: "promoted-tmp" | "restored-old" | "none";
 }
 
 export interface HistoryEntry {

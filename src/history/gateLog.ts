@@ -21,7 +21,9 @@
 // Consumed by kindly doctor (Step 15) to surface "N gates bypassed in
 // the last 30 days" as a warning if N exceeds a threshold.
 
-import { closeSync, fsyncSync, mkdirSync, openSync, writeSync } from "node:fs";
+import {
+    closeSync, fsyncSync, lstatSync, mkdirSync, openSync, writeSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 
 import type { FiredGate } from "../gates/orchestrator.ts";
@@ -84,6 +86,20 @@ export function appendGateEvent(
     const p = gateLogPath(env.cwd);
     try {
         mkdirSync(dirname(p), { recursive: true });
+        // Round 6 S2139: refuse to append through a pre-staged symlink at
+        // .kindly/gate-events.jsonl. Pre-fix `openSync(p, "a")` followed
+        // the symlink, giving an attacker who pre-positioned the link a
+        // write primitive into arbitrary files (gate-event JSON lines
+        // include attacker-influenceable bypass-flag values). Bring this
+        // log up to history.jsonl posture: lstat-then-refuse on symlink.
+        try {
+            const st = lstatSync(p);
+            if (st.isSymbolicLink()) return;
+        } catch {
+            // ENOENT: first append. Any other lstat failure: best-effort
+            // observability — fall through and let openSync surface or
+            // silently swallow at the outer catch.
+        }
         const line = JSON.stringify({ ts: env.now().toISOString(), ...event }) + "\n";
         const fd = openSync(p, "a");
         try {

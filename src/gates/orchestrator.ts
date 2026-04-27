@@ -157,7 +157,31 @@ export function runGates(
         shouldFire(g, boundary, dryRun, strictImports),
     );
 
-    materializeProducers(firing, producers, ctx);
+    // Round 6 S2123: a producer that throws (e.g. signerTrust on a
+    // malformed sidecar) used to propagate before any logger.call —
+    // .kindly/gate-events.jsonl recorded nothing about the failure,
+    // and `kindly doctor` reported zero recent bypasses for an event
+    // the user just witnessed. Emit a synthetic block-log entry for
+    // every gate that requires the failed producer, so the audit
+    // trail captures what blocked the run, then re-throw.
+    try {
+        materializeProducers(firing, producers, ctx);
+    } catch (e) {
+        if (opts.logger) {
+            for (const gate of firing) {
+                if (!gate.requires.length) continue;
+                opts.logger({
+                    id: gate.id,
+                    boundary,
+                    result: {
+                        kind: "block",
+                        message: `producer failed: ${(e as Error).message}`,
+                    },
+                });
+            }
+        }
+        throw e;
+    }
 
     const fired: FiredGate[] = [];
     const blockingGates: string[] = [];

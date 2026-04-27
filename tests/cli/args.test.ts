@@ -59,4 +59,22 @@ describe("parseArgs", () => {
     test("boolean flag with non-bool value is an error", () => {
         expect(() => parseArgs(["--verbose=maybe"], spec)).toThrow(ArgError);
     });
+
+    test("S2120: duplicate string flag → ArgError", () => {
+        // Pre-fix `--output=A --output=B` silently kept B and dropped A.
+        // For acceptance flags like --accept-key this collapsed multi-key
+        // consent into a single key without warning.
+        expect(() => parseArgs(["--output=a", "--output=b"], spec)).toThrow(ArgError);
+        expect(() => parseArgs(["--output=a", "--output", "b"], spec)).toThrow(ArgError);
+        expect(() => parseArgs(["--output", "a", "--output=b"], spec)).toThrow(ArgError);
+    });
+
+    test("S2120: duplicate boolean flag is fine (idempotent / --no- override)", () => {
+        // Booleans are documented as overridable: `--verbose --no-verbose`
+        // is the deliberate "override defaults" pattern.
+        const a = parseArgs(["--verbose", "--verbose"], spec);
+        expect(a.flags.verbose).toBe(true);
+        const b = parseArgs(["--verbose", "--no-verbose"], spec);
+        expect(b.flags.verbose).toBe(false);
+    });
 });

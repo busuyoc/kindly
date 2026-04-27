@@ -42,6 +42,22 @@ export function parseArgs<F extends FlagSpecs>(
     const flags: Record<string, string | boolean | undefined> = {};
     const positional: string[] = [];
 
+    // Round 6 S2120: track which STRING flags the user explicitly passed,
+    // so a second occurrence throws instead of silently overwriting. Boolean
+    // flags can repeat (`--accept-sensitive --no-accept-sensitive` is the
+    // documented override pattern); string flags repeating is always a
+    // user error — pre-fix `--accept-key=A --accept-key=B` silently dropped
+    // A from the per-key acceptance Set, narrowing consent without warning.
+    const stringFlagSeen = new Set<string>();
+    const noteStringFlag = (name: string): void => {
+        if (stringFlagSeen.has(name)) {
+            throw new ArgError(
+                `--${name} passed multiple times — pass values once as a comma-separated list`,
+            );
+        }
+        stringFlagSeen.add(name);
+    };
+
     // Initialize defaults.
     for (const [name, s] of Object.entries(spec)) {
         flags[name] = s.default !== undefined
@@ -82,6 +98,7 @@ export function parseArgs<F extends FlagSpecs>(
                 else if (value === "false") flags[name] = false;
                 else throw new ArgError(`boolean flag --${name} expects 'true' or 'false', got ${JSON.stringify(value)}`);
             } else {
+                noteStringFlag(name);
                 flags[name] = value;
             }
             i++;
@@ -100,6 +117,7 @@ export function parseArgs<F extends FlagSpecs>(
             if (next === undefined || next.startsWith("--")) {
                 throw new ArgError(`--${name} expects a value`);
             }
+            noteStringFlag(name);
             flags[name] = next;
             i += 2;
         }

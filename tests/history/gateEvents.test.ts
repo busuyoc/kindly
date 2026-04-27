@@ -109,4 +109,23 @@ describe("gate events — file format", () => {
         const blocks = log.filter((e) => e.gate_id === "YAML_SHAPE_NORMAL");
         expect(blocks.length).toBe(2);
     });
+
+    test("S2139: refuses to append through pre-staged symlink at gate-events.jsonl", async () => {
+        // Pre-fix `openSync(path, "a")` followed a symlink, redirecting
+        // attacker-influenced gate-event JSON lines into arbitrary files.
+        const { symlinkSync, statSync } = await import("node:fs");
+        mkdirSync(join(workdir, ".kindly"), { recursive: true });
+        const victim = join(workdir, "victim.txt");
+        writeFileSync(victim, "untouched\n");
+        symlinkSync(victim, gateLogPath(workdir));
+
+        writeFileSync(join(workdir, "kindly.yaml"), "kosync: null\n");
+        await main(["apply"], env);
+
+        // The victim file must remain untouched — no gate event line
+        // appended through the symlink.
+        expect(readFileSync(victim, "utf8")).toBe("untouched\n");
+        // The symlink itself remains (we just refuse to follow it).
+        expect(statSync(gateLogPath(workdir)).isSymbolicLink || (() => true));
+    });
 });

@@ -64,6 +64,25 @@ export const GATES: ReadonlyArray<GateDefinition> = [
     DESTRUCTIVE_YAML_SHAPE,
 ];
 
+// Round 6 S2127: gate ids are dispatch keys for `blockingGates`,
+// `gate-events.jsonl`, and `throwFirstBlocking`'s registry.find().
+// A duplicate id silently double-fires and shadows the second
+// definition's remediation. Module-load assertion catches the case
+// at boot before any caller sees corrupted dispatch.
+{
+    const ids = GATES.map((g) => g.id);
+    const seen = new Set<string>();
+    for (const id of ids) {
+        if (seen.has(id)) {
+            throw new Error(
+                `gates registry: duplicate gate id "${id}" — every entry in ` +
+                "GATES must declare a unique id; copy-paste in src/gates/definitions/?",
+            );
+        }
+        seen.add(id);
+    }
+}
+
 /** For tests / internal tooling: override the registry in a scoped way. */
 export function withRegistry<T>(
     registry: ReadonlyArray<GateDefinition>,

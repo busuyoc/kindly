@@ -296,3 +296,43 @@ describe("runGates — producer materialization", () => {
         }).toThrow(/unknown producer/);
     });
 });
+
+describe("S2123: producer throw still emits gate-event log entry", () => {
+    test("throwing producer fires logger before re-throw", () => {
+        const fired: Array<{ id: string; kind: string }> = [];
+        const blowingUp: Producer<unknown> = () => {
+            throw new Error("simulated producer crash (e.g. malformed sidecar)");
+        };
+        const gate: GateDefinition = {
+            id: "REQUIRES_BLOWUP",
+            category: "TRUST",
+            appliesAt: ["import"],
+            requires: ["blowup"],
+            firesIn: "always",
+            bypassFlags: [],
+            errorCode: "SETUP_SIGNATURE_INVALID",
+            check: () => ({ kind: "pass" }),
+        };
+        expect(() =>
+            runGates("import", ctx(), {
+                registry: [gate],
+                producers: { blowup: blowingUp },
+                logger: (entry) => {
+                    if (entry.result.kind === "block") {
+                        fired.push({ id: entry.id, kind: entry.result.kind });
+                    }
+                },
+            })
+        ).toThrow(/simulated producer crash/);
+        // Logger saw a synthetic block entry before the rethrow.
+        expect(fired).toEqual([{ id: "REQUIRES_BLOWUP", kind: "block" }]);
+    });
+});
+
+describe("S2127: GATES registry must have unique ids (arch test)", () => {
+    test("all gate ids in src/gates/registry.ts are unique", async () => {
+        const { GATES } = await import("../../src/gates/registry.ts");
+        const ids = GATES.map((g) => g.id);
+        expect(new Set(ids).size).toBe(ids.length);
+    });
+});

@@ -68,6 +68,61 @@ describe("R7: validateContextOpts — boundary contract", () => {
     });
 });
 
+// R11 (red-team round-7 review followup): null-vs-undefined blind spot
+// and unknown-boundary silent-pass.
+describe("R11: null and unknown-boundary tightening", () => {
+    test("validateContextOpts rejects `changes: null` (silent gate-skip primitive)", () => {
+        // Pre-R11, `opts[f] === undefined` accepted null. Gates do
+        // `(ctx.opts.changes as Change[] | undefined) ?? []` →
+        // `null ?? []` → `[]`, silently passing when caller intent was
+        // unclear/malicious. Now we reject null at the contract layer.
+        try {
+            validateContextOpts("apply", { changes: null });
+            throw new Error("expected throw");
+        } catch (e) {
+            expect(e).toBeInstanceOf(KindlyError);
+            expect((e as KindlyError).code).toBe("GATE_CONTEXT_INVALID");
+            expect((e as KindlyError).message).toContain("changes");
+        }
+    });
+
+    test("validateContextOpts rejects unknown boundary string", () => {
+        // Pre-R11, `REQUIRED_FIELDS[boundary] ?? []` returned [] for
+        // typos. A caller passing `boundary: "appli"` (typo of "apply")
+        // skipped all gate validation. Now we explicitly reject.
+        try {
+            // @ts-expect-error — testing runtime behavior on bad input
+            validateContextOpts("appli", { changes: [] });
+            throw new Error("expected throw");
+        } catch (e) {
+            expect(e).toBeInstanceOf(KindlyError);
+            expect((e as KindlyError).code).toBe("GATE_CONTEXT_INVALID");
+            expect((e as KindlyError).message).toContain("unknown gate boundary");
+            expect((e as KindlyError).message).toContain("appli");
+            // Error lists the valid set so the typo is fixable.
+            expect((e as KindlyError).message).toContain("apply");
+        }
+    });
+
+    test("validateContextOpts still rejects undefined (R7 base behavior preserved)", () => {
+        try {
+            validateContextOpts("apply", { changes: undefined });
+            throw new Error("expected throw");
+        } catch (e) {
+            expect(e).toBeInstanceOf(KindlyError);
+            expect((e as KindlyError).code).toBe("GATE_CONTEXT_INVALID");
+        }
+    });
+
+    test("isFieldRequired returns false for unknown boundary (no crash)", () => {
+        // The accessor is exposed for tests; a typo there should not
+        // crash, just report "not required" so callers don't take
+        // action on garbage.
+        // @ts-expect-error — testing runtime safety
+        expect(isFieldRequired("appli", "changes")).toBe(false);
+    });
+});
+
 describe("R7: runPhase enforces the contract", () => {
     test("apply boundary without changes → GATE_CONTEXT_INVALID before gate.check fires", () => {
         let checkRan = false;

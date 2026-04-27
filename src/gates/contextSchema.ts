@@ -43,27 +43,51 @@ const REQUIRED_FIELDS: Record<GateBoundary, ReadonlyArray<string>> = {
 
 /** True if the boundary requires the field. Exposed for tests. */
 export function isFieldRequired(boundary: GateBoundary, field: string): boolean {
-    return (REQUIRED_FIELDS[boundary] ?? []).includes(field);
+    if (!(boundary in REQUIRED_FIELDS)) return false;
+    return REQUIRED_FIELDS[boundary].includes(field);
 }
 
 /**
  * Throws `KindlyError(GATE_CONTEXT_INVALID)` if any required field for
- * `boundary` is absent (===undefined) on `opts`. Called by `runPhase`
+ * `boundary` is missing OR explicitly null on `opts`. Called by `runPhase`
  * before producers materialize.
  *
- * Note: presence is checked, not type. The `as` casts in gates already
- * narrow type, and a wrong-typed value would surface as a different
- * downstream error. The R7 invariant is "the field exists" — that's
- * what catches the boundary-dispatch bug.
+ * R11 (red-team round-7 review followup): two blind spots closed.
+ *   1. Pre-fix `opts[f] === undefined` accepted `null`. Gates downstream
+ *      do `(ctx.opts.changes as Change[] | undefined) ?? []` and
+ *      `null ?? []` → `[]`, so a malicious `{changes: null}` opts
+ *      would silently make gates see no changes and pass. Now both
+ *      undefined and null fail the contract.
+ *   2. `REQUIRED_FIELDS[boundary] ?? []` accepted typo'd boundaries —
+ *      a caller passing `boundary: "appli"` got an empty required list
+ *      and skipped all gate validation. Now an unknown boundary throws
+ *      GATE_CONTEXT_INVALID with the valid set.
+ *
+ * Note: per-field type validation is still NOT done here. Wrong-typed
+ * values (`changes: 42`) surface downstream as TypeError → wrapped
+ * GATE_PRODUCER_FAILED via R6's catch. Adding a typed shape registry
+ * is the R11 follow-up; this commit closes the silent-pass cases.
  */
 export function validateContextOpts(
     boundary: GateBoundary,
     opts: Record<string, unknown>,
 ): void {
-    const required = REQUIRED_FIELDS[boundary] ?? [];
+    if (!(boundary in REQUIRED_FIELDS)) {
+        const valid = Object.keys(REQUIRED_FIELDS).join(", ");
+        throw new KindlyError(
+            ErrorCodes.GATE_CONTEXT_INVALID,
+            `unknown gate boundary "${boundary}" — must be one of: ${valid}`,
+            [{
+                text: "this is a kindly bug — caller code passed an unrecognized " +
+                      "boundary string. gate validation would have been skipped silently.",
+            }],
+        );
+    }
+    const required = REQUIRED_FIELDS[boundary];
     const missing: string[] = [];
     for (const f of required) {
-        if (opts[f] === undefined) missing.push(f);
+        const v = opts[f];
+        if (v === undefined || v === null) missing.push(f);
     }
     if (missing.length > 0) {
         throw new KindlyError(

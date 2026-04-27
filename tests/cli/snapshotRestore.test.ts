@@ -276,6 +276,43 @@ describe("restore", () => {
         expect(code).toBe(0);
     });
 
+    // S1301 (Round 4 narrow audit, 2026-04-26 evening): EXTRA_PLUGIN_PATHS_DUAL
+    // (W31a) was previously appliesAt: ["import"], so restore skipped the gate
+    // entirely. --accept-sensitive alone cleared an archive whose
+    // settings.reader.lua introduced extra_plugin_paths, collapsing the
+    // W31a "AND" contract to one flag at the restore boundary. Closure
+    // widened appliesAt + added the gate to restore's registry.
+    test("blocks extra_plugin_paths with --accept-sensitive alone (S1301 W31a closure)", async () => {
+        const stage = mkdtempSync(join(tmpdir(), "kindly-w31a-stage-"));
+        writeFileSync(join(stage, "settings.reader.lua"),
+            `return {\n    ["extra_plugin_paths"] = "/tmp/attacker-plugins",\n}\n`);
+        const archive = join(workdir, "evil-extra.tar.gz");
+        spawnSync("tar", ["-czf", archive, "-C", stage,
+            "settings.reader.lua"], { encoding: "utf8" });
+
+        const code = await main(["restore", archive, "--accept-sensitive"], env);
+        expect(code).toBe(3);
+        expect(stderr.value).toContain("extra_plugin_paths");
+        expect(stderr.value).toContain("--accept-plugins");
+    });
+
+    test("--accept-sensitive + --accept-plugins lets the extra_plugin_paths restore proceed", async () => {
+        const stage = mkdtempSync(join(tmpdir(), "kindly-w31a-stage-"));
+        writeFileSync(join(stage, "settings.reader.lua"),
+            `return {\n    ["extra_plugin_paths"] = "/tmp/attacker-plugins",\n}\n`);
+        const archive = join(workdir, "ok-extra.tar.gz");
+        spawnSync("tar", ["-czf", archive, "-C", stage,
+            "settings.reader.lua"], { encoding: "utf8" });
+
+        const code = await main(
+            ["restore", archive, "--accept-sensitive", "--accept-plugins"],
+            env,
+        );
+        expect(code).toBe(0);
+        const settingsPath = join(fakeKindle, "koreader", "settings.reader.lua");
+        expect(readFileSync(settingsPath, "utf8")).toContain("/tmp/attacker-plugins");
+    });
+
     test("archive whose settings.reader.lua is unparseable → gate skipped, restore proceeds", async () => {
         // The reader is strict about KOReader's dump format. Archives
         // produced by tooling outside that grammar must not be blocked

@@ -31,7 +31,7 @@ import {
     PATH_CONTENT_HEURISTIC,
     SCHEMA_FINDINGS_WARN,
 } from "../gates/definitions/shape.ts";
-import { CODE_EXEC_ADJACENT_REQUIRES_ACK } from "../gates/definitions/dual.ts";
+import { CODE_EXEC_ADJACENT_REQUIRES_ACK, EXTRA_PLUGIN_PATHS_DUAL } from "../gates/definitions/dual.ts";
 import { SENSITIVE_REQUIRES_ACK } from "../gates/definitions/consent.ts";
 import { DESTRUCTIVE_YAML_SHAPE } from "../gates/definitions/destruction.ts";
 import { appendGateEvent, gateEventFromFiredGate } from "../history/gateLog.ts";
@@ -56,6 +56,13 @@ export interface ApplyOptions {
     acceptKey?: Set<string>;
     /** Bypass DESTRUCTIVE_YAML_SHAPE. */
     acceptDestructive?: boolean;
+    /**
+     * Bypass EXTRA_PLUGIN_PATHS_DUAL (W31a's code-exec consent half).
+     * --accept-sensitive consents to data flow; --accept-plugins consents
+     * to KOReader loading and executing Lua from those paths. Both are
+     * required to apply a YAML setting `extra_plugin_paths`.
+     */
+    acceptPlugins?: boolean;
 }
 
 export function executeApply(opts: ApplyOptions, env: CliEnv): ApplyResult {
@@ -159,6 +166,10 @@ function executeApplyLocked(opts: ApplyOptions, env: CliEnv): ApplyResult {
         SCHEMA_FINDINGS_WARN,
         CODE_EXEC_ADJACENT_REQUIRES_ACK,
         SENSITIVE_REQUIRES_ACK,
+        // S1300 (Round 4): W31a's --accept-plugins half of the AND.
+        // Without this, --accept-sensitive alone cleared extra_plugin_paths
+        // at apply, collapsing the dual-gate to one flag.
+        EXTRA_PLUGIN_PATHS_DUAL,
         DESTRUCTIVE_YAML_SHAPE,
     ];
 
@@ -175,6 +186,7 @@ function executeApplyLocked(opts: ApplyOptions, env: CliEnv): ApplyResult {
             acceptSensitive: !!opts.acceptSensitive,
             acceptKey: opts.acceptKey ?? new Set<string>(),
             acceptDestructive: !!opts.acceptDestructive,
+            acceptPlugins: !!opts.acceptPlugins,
         },
         logger: (fired) => {
             const event = gateEventFromFiredGate(fired);

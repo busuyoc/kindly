@@ -33,7 +33,7 @@ import type { LuaValue } from "../lua/writer.ts";
 import type { GateWarning } from "../types/results.ts";
 import { computeChanges } from "../schema/diff.ts";
 import { runPhase, collectWarnings } from "../gates/orchestrator.ts";
-import { CODE_EXEC_ADJACENT_REQUIRES_ACK } from "../gates/definitions/dual.ts";
+import { CODE_EXEC_ADJACENT_REQUIRES_ACK, EXTRA_PLUGIN_PATHS_DUAL } from "../gates/definitions/dual.ts";
 import { CONTROL_BYTES_IN_VALUE, PATH_CONTENT_HEURISTIC } from "../gates/definitions/shape.ts";
 import { SENSITIVE_REQUIRES_ACK } from "../gates/definitions/consent.ts";
 import { DESTRUCTIVE_YAML_SHAPE } from "../gates/definitions/destruction.ts";
@@ -77,6 +77,14 @@ const FLAGS = {
         default: false,
         description: "consent to mass-removal of USER keys (≥5) implied by the archive",
     },
+    "accept-plugins": {
+        type: "boolean",
+        default: false,
+        description:
+            "consent to KOReader loading Lua plugins from any extra_plugin_paths " +
+            "the archive's settings.reader.lua introduces (W31a's code-exec consent — " +
+            "required ALONGSIDE --accept-sensitive)",
+    },
 } as const satisfies FlagSpecs;
 
 const SAFETY_PATHS = [
@@ -105,6 +113,13 @@ export interface RestoreOptions {
     acceptKey?: Set<string>;
     /** Bypass DESTRUCTIVE_YAML_SHAPE. */
     acceptDestructive?: boolean;
+    /**
+     * Bypass EXTRA_PLUGIN_PATHS_DUAL (W31a's code-exec consent half).
+     * --accept-sensitive consents to data flow; --accept-plugins consents
+     * to KOReader loading and executing Lua from those paths. Both are
+     * required at restore when the archive introduces extra_plugin_paths.
+     */
+    acceptPlugins?: boolean;
 }
 
 export function executeRestore(opts: RestoreOptions, env: CliEnv): RestoreResult {
@@ -282,6 +297,7 @@ export async function runRestore(argv: readonly string[], env: CliEnv): Promise<
         acceptSensitive: flags["accept-sensitive"],
         acceptKey,
         acceptDestructive: flags["accept-destructive"],
+        acceptPlugins: flags["accept-plugins"],
     }, env);
 
     if (env.jsonMode) emitJson(env, "restore", result);
@@ -346,6 +362,10 @@ function runRestoreGates(
             CONTROL_BYTES_IN_VALUE,
             PATH_CONTENT_HEURISTIC,
             SENSITIVE_REQUIRES_ACK,
+            // S1301 (Round 4): W31a's --accept-plugins half of the AND.
+            // Without this, --accept-sensitive alone cleared extra_plugin_paths
+            // at restore, collapsing the dual-gate to one flag.
+            EXTRA_PLUGIN_PATHS_DUAL,
             DESTRUCTIVE_YAML_SHAPE,
         ],
         dryRun: opts.dryRun ?? false,
@@ -357,6 +377,7 @@ function runRestoreGates(
             acceptSensitive: !!opts.acceptSensitive,
             acceptKey: opts.acceptKey ?? new Set<string>(),
             acceptDestructive: !!opts.acceptDestructive,
+            acceptPlugins: !!opts.acceptPlugins,
         },
         logger: (fired) => {
             const event = gateEventFromFiredGate(fired);

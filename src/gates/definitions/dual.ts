@@ -28,10 +28,20 @@ import { sensitiveDomain } from "../../schema/classify.ts";
  *
  * Two flags, two distinct mental models — don't collapse them into one.
  */
+// S1300/S1301 (Round 4 narrow audit, 2026-04-26 evening): widened
+// appliesAt from ["import"] to ["import", "apply", "restore"] to match
+// SENSITIVE_REQUIRES_ACK's boundaries. Apply and restore previously
+// skipped this gate entirely, so a `kindly apply <yaml> --accept-
+// sensitive` (or `kindly restore <archive> --accept-sensitive`) where
+// the input set extra_plugin_paths cleared SENSITIVE_REQUIRES_ACK alone
+// — collapsing the W31a "AND" contract into a single flag and giving
+// the user code-exec on KOReader without --accept-plugins consent.
+// Rollback is intentionally excluded, matching SENSITIVE_REQUIRES_ACK's
+// Lead-7 design (rollback restores device's own previous bytes).
 export const EXTRA_PLUGIN_PATHS_DUAL: GateDefinition = {
     id: "EXTRA_PLUGIN_PATHS_DUAL",
     category: "DUAL",
-    appliesAt: ["import"],
+    appliesAt: ["import", "apply", "restore"],
     requires: ["sensitiveHits"],
     firesIn: "non-dry-run",
     bypassFlags: ["--accept-plugins"],

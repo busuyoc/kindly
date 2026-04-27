@@ -64,6 +64,14 @@ const FLAGS = {
         default: false,
         description: "consent to mass-removal of USER keys (≥5)",
     },
+    "accept-plugins": {
+        type: "boolean",
+        default: false,
+        description:
+            "consent to KOReader loading Lua plugins from extra_plugin_paths " +
+            "(W31a's code-exec consent — required alongside --accept-sensitive " +
+            "for any YAML setting extra_plugin_paths)",
+    },
 } as const satisfies FlagSpecs;
 
 export function renderApply(result: ApplyResult, env: CliEnv): void {
@@ -110,6 +118,7 @@ export async function runApply(argv: readonly string[], env: CliEnv): Promise<nu
         acceptSensitive: flags["accept-sensitive"],
         acceptKey,
         acceptDestructive: flags["accept-destructive"],
+        acceptPlugins: flags["accept-plugins"],
     }, env);
 
     if (env.jsonMode) emitJson(env, "apply", result);
@@ -141,6 +150,7 @@ kindly apply — merge kindly.yaml into the device's settings.reader.lua.
 usage: kindly apply [--file <path>] [--dry-run] [--mount <path>] [--backup-dir <path>]
                     [--accept-code-exec]
                     [--accept-sensitive | --accept-key=<a,b>] [--accept-destructive]
+                    [--accept-plugins]
 
   --file <path>        YAML to apply (default: kindly.yaml)
   --dry-run            show changes without writing
@@ -153,6 +163,9 @@ usage: kindly apply [--file <path>] [--dry-run] [--mount <path>] [--backup-dir <
   --accept-sensitive   blanket consent for SENSITIVE-class changes
   --accept-key=<a,b>   per-key SENSITIVE consent (comma-separated paths)
   --accept-destructive consent to mass USER-key removal (≥5 top-level)
+  --accept-plugins     consent to KOReader loading Lua plugins from any
+                       extra_plugin_paths value in the YAML (W31a code-exec
+                       half — required ALONGSIDE --accept-sensitive)
 
 Apply is non-destructive: on-device keys not present in YAML are preserved
 (this is how secrets and ephemerals survive round-tripping through YAML).

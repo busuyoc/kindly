@@ -223,6 +223,65 @@ describe("apply — SENSITIVE_REQUIRES_ACK on apply (always-on)", () => {
     });
 });
 
+// ============================================================================
+// S1300 (Round 4 narrow audit, 2026-04-26 evening): EXTRA_PLUGIN_PATHS_DUAL
+// (W31a) was previously appliesAt: ["import"], so apply skipped the gate
+// entirely. --accept-sensitive alone cleared a `kindly apply` setting
+// extra_plugin_paths, collapsing the W31a "AND" contract to one flag.
+// Closure widened appliesAt to ["import", "apply", "restore"] and added
+// the gate to apply's registry. Both --accept-sensitive AND
+// --accept-plugins are now required at apply.
+// ============================================================================
+
+describe("apply — EXTRA_PLUGIN_PATHS_DUAL (W31a) (S1300 closure)", () => {
+    test("blocks by default", async () => {
+        writeYaml("extra_plugin_paths: [\"/tmp/attacker-plugins\"]\n");
+        const code = await main(["apply"], env);
+        expect(code).toBe(3);
+    });
+
+    test("--accept-sensitive ALONE still blocks (W31a AND-contract)", async () => {
+        writeYaml("extra_plugin_paths: [\"/tmp/attacker-plugins\"]\n");
+        const code = await main(["apply", "--accept-sensitive"], env);
+        expect(code).toBe(3);
+        expect(err.value).toContain("extra_plugin_paths");
+        expect(err.value).toContain("--accept-plugins");
+    });
+
+    test("--accept-plugins ALONE still blocks (SENSITIVE half not cleared)", async () => {
+        writeYaml("extra_plugin_paths: [\"/tmp/attacker-plugins\"]\n");
+        const code = await main(["apply", "--accept-plugins"], env);
+        expect(code).toBe(3);
+    });
+
+    test("--accept-sensitive + --accept-plugins lets it through", async () => {
+        writeYaml("extra_plugin_paths: [\"/tmp/attacker-plugins\"]\n");
+        const code = await main(
+            ["apply", "--accept-sensitive", "--accept-plugins"],
+            env,
+        );
+        expect(code).toBe(0);
+        const after = readFileSync(kindle.settingsPath, "utf8");
+        expect(after).toContain("/tmp/attacker-plugins");
+    });
+
+    test("--accept-key=extra_plugin_paths + --accept-plugins also lets it through", async () => {
+        // Per-key SENSITIVE consent + plugins consent = same AND result.
+        writeYaml("extra_plugin_paths: [\"/tmp/attacker-plugins\"]\n");
+        const code = await main(
+            ["apply", "--accept-key=extra_plugin_paths", "--accept-plugins"],
+            env,
+        );
+        expect(code).toBe(0);
+    });
+
+    test("--dry-run does not enforce DUAL (firesIn: non-dry-run)", async () => {
+        writeYaml("extra_plugin_paths: [\"/tmp/attacker-plugins\"]\n");
+        const code = await main(["apply", "--dry-run", "--accept-sensitive"], env);
+        expect(code).toBe(0);
+    });
+});
+
 describe("apply — DESTRUCTIVE_YAML_SHAPE (always-on)", () => {
     test("does NOT fire on a small change", async () => {
         writeYaml("refresh_rate: 5\n");

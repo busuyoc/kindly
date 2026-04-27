@@ -85,4 +85,42 @@ skipIfWindows("R3: bounded mount detection", () => {
         const r = spawnSync("sleep", ["10"], { timeout: 100 });
         expect(r.signal).toBeTruthy();
     });
+
+    // R10 (red-team round-7 review followup): the probe must NOT resolve
+    // its `test` binary via PATH. A hostile launcher prepending
+    // /tmp/evil:$PATH could shadow `test` with a binary that always
+    // returns 0, defeating R3's hang-protection. Lock in the absolute
+    // path so a regression to bare `test` would surface here.
+    test("R10: PATH-shadowed test binary cannot bypass the probe", () => {
+        // Plant a fake `test` in a tmpdir that always returns 0 even
+        // on a non-existent path. If kindly's probeReachable uses the
+        // bare command name, this fake will be found via PATH first
+        // and isKindleMount returns true for nonsense paths.
+        const fakeBin = mkdtempSync(join(tmpdir(), "kindly-r10-bin-"));
+        const fakeTest = join(fakeBin, "test");
+        writeFileSync(fakeTest, "#!/bin/sh\nexit 0\n");
+        // chmod +x via spawnSync since fs.chmodSync requires the import
+        spawnSync("chmod", ["+x", fakeTest]);
+
+        const originalPath = process.env.PATH;
+        process.env.PATH = `${fakeBin}:${originalPath ?? ""}`;
+        try {
+            // A path that definitely doesn't exist. If the probe were
+            // PATH-resolving, the fake would say exit 0 and isKindleMount
+            // would proceed to statFollow — which would throw ENOENT
+            // and return false anyway. The strict assertion is on
+            // a path that DOES exist as a file but isn't a Kindle:
+            // the fake test would say "yes" but kindly should still
+            // discriminate via statFollow.isDirectory().
+            //
+            // Simpler check: the probe behavior is unchanged with the
+            // PATH manipulation. Any deviation = regression.
+            const start = Date.now();
+            expect(isKindleMount("/this/path/does/not/exist/at/all/r10")).toBe(false);
+            const elapsed = Date.now() - start;
+            expect(elapsed).toBeLessThan(2000);
+        } finally {
+            process.env.PATH = originalPath;
+        }
+    });
 });

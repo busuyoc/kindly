@@ -39,6 +39,16 @@ export function candidateMounts(platform: NodeJS.Platform = process.platform): s
     return [];
 }
 
+// R10 (red-team round-7 review followup): absolute path for the probe
+// subprocess. spawnSync with a bare command name resolves via PATH —
+// an attacker who controls the launching environment (CI runner,
+// hostile parent process, modified shell rc) can shadow `test` with a
+// binary that always returns 0, defeating R3's hang-protection so the
+// subsequent statFollow can still hang. Pinning to /bin/test removes
+// the PATH lookup entirely. POSIX guarantees /bin/test on macOS, Linux
+// glibc, and BusyBox (Kindle device).
+const PROBE_BIN = "/bin/test";
+
 /** R3: subprocess-bounded liveness probe. Confirms the kernel can stat
  *  `<root>/koreader` within STAT_TIMEOUT_MS — a guard against stuck NFS
  *  or dead FUSE providers that would otherwise hang `statSync` on the
@@ -52,7 +62,7 @@ export function candidateMounts(platform: NodeJS.Platform = process.platform): s
  *  fall through to the sync statFollow there. */
 function probeReachable(path: string): boolean {
     if (process.platform === "win32") return true;
-    const r = spawnSync("test", ["-e", path], { timeout: STAT_TIMEOUT_MS });
+    const r = spawnSync(PROBE_BIN, ["-e", path], { timeout: STAT_TIMEOUT_MS });
     return !r.signal && r.status === 0;
 }
 

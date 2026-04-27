@@ -739,6 +739,15 @@ function executeSetupImportLocked(
             }
             try {
                 appendHistoryEntry(env, "setup:import", {
+                    // S1320 (Round 4): the failure path previously omitted
+                    // settings_delta_n even when safeWrite already
+                    // committed N keys to disk before the install threw.
+                    // Audit-of-record undercounted partial mutations:
+                    // `kindly history show` couldn't tell "wrote N keys
+                    // then failed" from "wrote 0 keys then failed". The
+                    // success path emits this field already; mirror it
+                    // here so failure rows are equally informative.
+                    settings_delta_n: baseResult.changes.length,
                     plugins_delta: {
                         installed_files: 0,
                         installed_patches: 0,

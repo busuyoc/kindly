@@ -181,14 +181,30 @@ describe("setup trust remove", () => {
         expect(out.value).toContain("was labeled: alice");
     });
 
-    test("remove by short prefix → resolves uniquely", async () => {
+    test("remove by 15+ char prefix → resolves uniquely", async () => {
+        const { env: e1, out: out1 } = makeEnv(home);
+        await main(["setup", "trust", "add", pubPath, "--label", "alice"], e1);
+        // Pull out the first 16 chars of the key id (sha256: + 9 hex = 16 chars).
+        const m = out1.value.match(/sha256:[a-f0-9]{9,}/);
+        if (!m) throw new Error(`no key id in: ${out1.value}`);
+        const shortPrefix = m[0].slice(0, 16);
+
+        const { env, out } = makeEnv(home);
+        const code = await main(["setup", "trust", "remove", shortPrefix], env);
+        expect(code).toBe(0);
+        expect(out.value).toContain("removed key");
+    });
+
+    test("S2007: remove by <15 char prefix → KEYRING_PREFIX_TOO_SHORT", async () => {
+        // Pre-fix a 1-char prefix could mass-remove keys in a single-entry
+        // roster. Now require sha256: + 8 hex (15 chars) before lookup.
         const { env: e1 } = makeEnv(home);
         await main(["setup", "trust", "add", pubPath, "--label", "alice"], e1);
 
-        const { env, out } = makeEnv(home);
+        const { env, err } = makeEnv(home);
         const code = await main(["setup", "trust", "remove", "sha256:"], env);
-        expect(code).toBe(0);
-        expect(out.value).toContain("removed key");
+        expect(code).not.toBe(0);
+        expect(err.value).toMatch(/too short|at least 15/);
     });
 
     test("remove with no match → KEYRING_KEY_NOT_FOUND error", async () => {

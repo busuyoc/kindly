@@ -409,6 +409,17 @@ export function verifySetupArchive(archivePath: string): VerifyResult {
     };
 }
 
+// Round-5 S2001/S2003 closure: filter_version is publisher-supplied
+// and is echoed verbatim into UNSUPPORTED_FILTER_VERSION error
+// messages. Pre-fix: any string was accepted (1 MiB payloads, embedded
+// `\n`, control bytes) until the membership check rejected the value
+// downstream. Sanitize-at-write is the last line of defence; this is
+// the first. The shape regex matches `vX.Y.Z` plus an optional
+// `-<pre>` segment (semver pre-release) — wider than today's
+// ACCEPTED_FILTER_VERSIONS so future bumps don't have to update both.
+const FILTER_VERSION_MAX_LEN = 32;
+const FILTER_VERSION_RE = /^v\d{1,5}\.\d{1,5}\.\d{1,5}(-[A-Za-z0-9.]+)?$/;
+
 function parseSidecar(raw: string): SidecarSignature {
     let obj: unknown;
     try {
@@ -432,10 +443,23 @@ function parseSidecar(raw: string): SidecarSignature {
             throw new SigningError(`sidecar missing string field: ${k}`, "INVALID_SIDECAR");
         }
     }
+    const filterVersion = o.filter_version as string;
+    if (filterVersion.length > FILTER_VERSION_MAX_LEN) {
+        throw new SigningError(
+            `sidecar filter_version is ${filterVersion.length} chars (max ${FILTER_VERSION_MAX_LEN})`,
+            "INVALID_SIDECAR",
+        );
+    }
+    if (!FILTER_VERSION_RE.test(filterVersion)) {
+        throw new SigningError(
+            "sidecar filter_version does not match vX.Y.Z[-<pre>] shape",
+            "INVALID_SIDECAR",
+        );
+    }
     return {
         kindly_sig: o.kindly_sig as "v1",
         alg: o.alg as "ed25519",
-        filter_version: o.filter_version as string,
+        filter_version: filterVersion,
         manifest_hash: o.manifest_hash as string,
         signer_public_key: o.signer_public_key as string,
         signer_key_id: o.signer_key_id as string,

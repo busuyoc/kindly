@@ -182,20 +182,41 @@ describe("removeKey", () => {
         // Force two keys whose key_id share a common prefix by handcrafting
         // a roster (since real key_ids are sha256, true collision in the
         // first N hex chars is statistically negligible — bypass via direct
-        // construction).
+        // construction). Use 8 hex chars after `sha256:` to clear the
+        // 15-char minimum imposed by S2007 fix.
         const file: TrustedKeysFile = {
             kindly_trust: "v1",
             keys: [
-                { key_id: "sha256:" + "ab".padEnd(64, "0"), public_key_b64: "A".repeat(43) + "=", added_at: "2026-04-26T12:00:00Z" },
-                { key_id: "sha256:" + "ab".padEnd(64, "1"), public_key_b64: "B".repeat(43) + "=", added_at: "2026-04-26T12:00:00Z" },
+                { key_id: "sha256:" + "abcdef01".padEnd(64, "0"), public_key_b64: "A".repeat(43) + "=", added_at: "2026-04-26T12:00:00Z" },
+                { key_id: "sha256:" + "abcdef01".padEnd(64, "1"), public_key_b64: "B".repeat(43) + "=", added_at: "2026-04-26T12:00:00Z" },
             ],
         };
         try {
-            removeKey(file, "sha256:ab");
+            removeKey(file, "sha256:abcdef01");
             throw new Error("expected throw");
         } catch (e) {
             expect((e as KeyringError).code).toBe("KEYRING_KEY_AMBIGUOUS");
             expect((e as KeyringError).message).toContain("matches 2 keys");
+        }
+    });
+
+    test("S2007: short prefix (<15 chars) → KEYRING_PREFIX_TOO_SHORT", () => {
+        // Pre-fix a 1-char prefix could mass-remove keys (e.g. only key in a
+        // single-entry roster). Now require at least sha256: + 8 hex chars
+        // before any roster lookup happens.
+        const file: TrustedKeysFile = {
+            kindly_trust: "v1",
+            keys: [
+                { key_id: "sha256:" + "a".padEnd(64, "0"), public_key_b64: "A".repeat(43) + "=", added_at: "2026-04-26T12:00:00Z" },
+            ],
+        };
+        for (const tooShort of ["a", "sha256:", "sha256:a", "sha256:abcdef"]) {
+            try {
+                removeKey(file, tooShort);
+                throw new Error(`expected throw for prefix "${tooShort}"`);
+            } catch (e) {
+                expect((e as KeyringError).code).toBe("KEYRING_PREFIX_TOO_SHORT");
+            }
         }
     });
 });

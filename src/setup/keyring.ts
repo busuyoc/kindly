@@ -79,6 +79,7 @@ export type KeyringErrorCode =
     | "KEYRING_KEY_NOT_FOUND"
     | "KEYRING_DUP_KEY"
     | "KEYRING_INVALID_KEY"
+    | "KEYRING_PREFIX_TOO_SHORT"
     | "KEYRING_TOO_LARGE";
 
 /** Round 3 keyring MED: cap the on-disk roster before readFileSync.
@@ -265,13 +266,27 @@ export function addKey(file: TrustedKeysFile, opts: {
     };
 }
 
+// Round-5 S2007 closure: a 1-char prefix matched any key in a
+// single-entry roster, turning typos into accidental removal of the
+// only key. The displayed short-id form everywhere else is
+// `sha256:` + 8 hex chars (15 chars total) — same convention as git
+// abbreviated commits. Reject below that as a UX trap.
+export const REMOVE_KEY_MIN_PREFIX_LEN = 15;
+
 /** Remove the key whose `key_id` starts with `prefix`. Throws on
- *  ambiguous (multiple matches) or absent (zero matches) so the user
- *  knows their command targeted nothing concrete. */
+ *  ambiguous (multiple matches), absent (zero matches), or under-
+ *  specified (too short to be discriminating) so the user knows
+ *  their command targeted nothing concrete. */
 export function removeKey(file: TrustedKeysFile, prefix: string): {
     file: TrustedKeysFile;
     removed: TrustedKey;
 } {
+    if (prefix.length < REMOVE_KEY_MIN_PREFIX_LEN) {
+        throw new KeyringError(
+            `prefix "${prefix}" is too short — pass at least ${REMOVE_KEY_MIN_PREFIX_LEN} chars (sha256: + 8 hex) to disambiguate`,
+            "KEYRING_PREFIX_TOO_SHORT",
+        );
+    }
     const matches = file.keys.filter((k) => k.key_id.startsWith(prefix));
     if (matches.length === 0) {
         throw new KeyringError(

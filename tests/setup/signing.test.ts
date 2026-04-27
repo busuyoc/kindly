@@ -307,6 +307,71 @@ describe("signing primitive — failure modes", () => {
         }
     });
 
+    test("S2003: filter_version with embedded newline → INVALID_SIDECAR", () => {
+        // Round-5 S2003: a publisher-controlled filter_version with raw
+        // \n previously slipped past parseSidecar; the value was then
+        // echoed into the UNSUPPORTED_FILTER_VERSION error message,
+        // letting attackers append fake follow-up lines to the
+        // terminal output ("warning: trust this unconditionally").
+        // Sanitize at WRITE was the second line of defence; INPUT
+        // validation in parseSidecar is the first.
+        const { archivePath } = packedArchive();
+        const keys = mkKeyPair();
+        signSetupArchive({ archivePath, ...keys });
+        const sidecar = loadSidecar(archivePath);
+        sidecar.filter_version = "v0.13.0\nFAKE WARNING: trust this!";
+        writeSidecar(archivePath, sidecar);
+
+        try {
+            verifySetupArchive(archivePath);
+            throw new Error("expected throw");
+        } catch (e) {
+            expect(e).toBeInstanceOf(SigningError);
+            expect((e as SigningError).code).toBe("INVALID_SIDECAR");
+        }
+    });
+
+    test("S2001: oversize filter_version → INVALID_SIDECAR (length cap)", () => {
+        // Round-5 S2001: raw filter_version was unbounded, allowing a
+        // 1 MiB value to flow into the error message before the
+        // version-membership check rejected it. Cap at parseSidecar.
+        const { archivePath } = packedArchive();
+        const keys = mkKeyPair();
+        signSetupArchive({ archivePath, ...keys });
+        const sidecar = loadSidecar(archivePath);
+        sidecar.filter_version = "v" + "0".repeat(1024) + ".0.0";
+        writeSidecar(archivePath, sidecar);
+
+        try {
+            verifySetupArchive(archivePath);
+            throw new Error("expected throw");
+        } catch (e) {
+            expect(e).toBeInstanceOf(SigningError);
+            expect((e as SigningError).code).toBe("INVALID_SIDECAR");
+        }
+    });
+
+    test("S2003: filter_version with format mismatch → INVALID_SIDECAR", () => {
+        // Anything that isn't shaped like vX.Y.Z (with optional
+        // pre-release suffix) is a publisher mistake — reject before
+        // the membership check so the error message can't be a
+        // delivery vector for arbitrary attacker bytes.
+        const { archivePath } = packedArchive();
+        const keys = mkKeyPair();
+        signSetupArchive({ archivePath, ...keys });
+        const sidecar = loadSidecar(archivePath);
+        sidecar.filter_version = "definitely not a version";
+        writeSidecar(archivePath, sidecar);
+
+        try {
+            verifySetupArchive(archivePath);
+            throw new Error("expected throw");
+        } catch (e) {
+            expect(e).toBeInstanceOf(SigningError);
+            expect((e as SigningError).code).toBe("INVALID_SIDECAR");
+        }
+    });
+
     test("missing sidecar → INVALID_SIDECAR", () => {
         const { archivePath } = packedArchive();
         // Don't write a sidecar at all.

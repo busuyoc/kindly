@@ -963,7 +963,7 @@ async function runSetupTrustRemove(argv: readonly string[], env: CliEnv): Promis
             throw new KindlyError(
                 ErrorCodes.SETUP_SIGNATURE_INVALID,
                 e.message,
-                e.code === "KEYRING_KEY_AMBIGUOUS"
+                e.code === "KEYRING_KEY_AMBIGUOUS" || e.code === "KEYRING_PREFIX_TOO_SHORT"
                     ? [{ text: "Pass a longer prefix that uniquely identifies the key." }]
                     : [{ text: "Run `kindly setup trust list` to see trusted key ids." }],
             );

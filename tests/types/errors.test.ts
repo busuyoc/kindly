@@ -2,9 +2,9 @@
 // Also covers end-to-end rendering through the CLI dispatcher, so we know
 // "code exists in the class" and "code surfaces in stderr" are both true.
 
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import {
-    mkdirSync, mkdtempSync, writeFileSync,
+    mkdirSync, mkdtempSync, rmSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -114,6 +114,12 @@ describe("dispatcher renders remediation lines", () => {
             mountOverride: fakeKindle,
             now: () => new Date("2026-04-22T12:00:00Z"),
         };
+    });
+
+    afterEach(() => {
+        // R4: clean up the per-test tmpdirs (fakeKindle + workdir).
+        rmSync(fakeKindle, { recursive: true, force: true });
+        rmSync(workdir, { recursive: true, force: true });
     });
 
     test("OUTPUT_EXISTS prints hint and try lines", async () => {

@@ -1,7 +1,7 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
-    existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync,
+    existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -50,6 +50,14 @@ beforeEach(() => {
     fakeKindle = makeFakeKindle();
     workdir = mkdtempSync(join(tmpdir(), "kindly-snap-w-"));
     ({ env, out: stdout, err: stderr } = makeEnv(workdir, fakeKindle));
+});
+
+afterEach(() => {
+    // R4: clean up the per-test tmpdirs. Inline `stage = mkdtempSync(...)`
+    // calls inside individual tests below remain self-cleaning via OS
+    // tmpdir reaping; sweep them in a follow-up if needed.
+    rmSync(fakeKindle, { recursive: true, force: true });
+    rmSync(workdir, { recursive: true, force: true });
 });
 
 describe("snapshot", () => {

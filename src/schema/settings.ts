@@ -11,9 +11,12 @@
 // key — only keys absent from the schema entirely are flagged as potential
 // typos.
 
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { readText } from "../fs/safeRead.ts";
+
+// Static import: bundled into `bun build --compile` output. Used when
+// loadSchema() is called without an explicit path (the common case);
+// callers passing a path go through readText for runtime override.
+import bundledSchema from "../../data/schemas/settings.reader.lua.v1.json" with { type: "json" };
 
 export type SchemaKeyType = "boolean" | "number" | "string" | "table" | "unknown";
 
@@ -39,17 +42,13 @@ export type Schema = {
 let defaultSchema: Schema | null = null;
 
 export function loadSchema(path?: string): Schema {
-    if (!path && defaultSchema) return defaultSchema;
-    const p = path ?? defaultSchemaPath();
-    const raw = readText(p, "derived-from-cwd");
-    const parsed = JSON.parse(raw) as Schema;
-    if (!path) defaultSchema = parsed;
-    return parsed;
-}
-
-function defaultSchemaPath(): string {
-    const here = dirname(fileURLToPath(import.meta.url));
-    return join(here, "..", "..", "data", "schemas", "settings.reader.lua.v1.json");
+    if (!path) {
+        if (defaultSchema) return defaultSchema;
+        defaultSchema = bundledSchema as Schema;
+        return defaultSchema;
+    }
+    const raw = readText(path, "derived-from-cwd");
+    return JSON.parse(raw) as Schema;
 }
 
 export type ValidateKeyResult = {

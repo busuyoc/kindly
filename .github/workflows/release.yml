@@ -1,0 +1,98 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: build (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-arm64
+            os: macos-latest
+          - target: darwin-x64
+            os: macos-latest
+          - target: linux-x64
+            os: ubuntu-latest
+          - target: windows-x64
+            os: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+
+      - run: bun install --frozen-lockfile
+
+      - name: Build ${{ matrix.target }}
+        run: ./scripts/build-binary.sh ${{ matrix.target }}
+
+      - name: Smoke test (host-arch only)
+        if: matrix.target == 'darwin-arm64' || matrix.target == 'linux-x64'
+        run: |
+          set -eu
+          BIN="dist/kindly-${{ matrix.target }}"
+          # Sanity: --help exits 0 from a clean cwd outside the repo.
+          ( cd "$(mktemp -d)" && "$GITHUB_WORKSPACE/$BIN" --help ) > /dev/null
+          # Asset embedding: doctor reads schema/taxonomy/classify; if any
+          # of those didn't survive bun --compile, this returns an
+          # ENOENT-flavored envelope and the grep below fails.
+          FAKE=$(mktemp -d) && mkdir -p "$FAKE/koreader"
+          cp tests/fixtures/kindle/settings.reader.lua "$FAKE/koreader/"
+          ( cd "$(mktemp -d)" && "$GITHUB_WORKSPACE/$BIN" doctor --json --mount="$FAKE" ) | tee /tmp/doctor.json
+          grep -q '"settings_parseable"' /tmp/doctor.json
+          grep -q '"180 keys"' /tmp/doctor.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kindly-${{ matrix.target }}
+          path: dist/kindly-${{ matrix.target }}*
+          if-no-files-found: error
+
+  release:
+    name: GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -lh dist/
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/kindly-*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            ## Compiled binaries
+
+            Pick the binary for your platform, `chmod +x`, and run:
+
+            | Platform              | Binary                        |
+            |-----------------------|-------------------------------|
+            | macOS (Apple Silicon) | `kindly-darwin-arm64`         |
+            | macOS (Intel)         | `kindly-darwin-x64`           |
+            | Linux (x86_64)        | `kindly-linux-x64`            |
+            | Windows (x86_64)      | `kindly-windows-x64.exe`      |
+
+            **macOS gatekeeper:** binaries are not code-signed. First run:
+            right-click → Open, or `xattr -d com.apple.quarantine kindly-darwin-*`.
+
+            **Windows:** unsupported best-effort cross-compile; please file
+            an issue if it doesn't work.
+
+            **No auto-update:** re-download from releases when you want a
+            newer version.

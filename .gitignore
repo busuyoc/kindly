@@ -6,6 +6,11 @@ out
 dist
 *.tgz
 
+# `bun build --compile` writes per-target stub files at the repo root
+# (~63 MB each). Phase 2 build artifacts ship via `dist/` and GitHub
+# Releases, never via the working tree.
+.*.bun-build
+
 # code coverage
 coverage
 *.lcov

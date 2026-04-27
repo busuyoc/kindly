@@ -16,10 +16,13 @@
 // is preserved as a compat projection via classifyKey(). See docs/infra/
 // 99-gates-refactor-plan.md §Step 3 for the migration rationale.
 
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import type { Change } from "./diff.ts";
 import type { LuaValue } from "../lua/writer.ts";
+
+// Static import: bundled into `bun build --compile` output (the
+// import.meta.dir + readFileSync pattern resolves to /data/... inside
+// the compiled binary's $bunfs/root and ENOENTs).
+import classifyData from "../../data/classify/settings.v1.json" with { type: "json" };
 
 // ---- axis types ---------------------------------------------------------
 
@@ -63,8 +66,6 @@ interface ClassifyData {
     code_exec_adjacent: string[];
 }
 
-const DATA_PATH = resolve(import.meta.dir, "../../data/classify/settings.v1.json");
-
 const VALID_EXFIL: ReadonlySet<string> = new Set(["secret", "normal"]);
 const VALID_CHANGE: ReadonlySet<string> = new Set([
     "none", "sensitive-network", "sensitive-ssh",
@@ -86,7 +87,7 @@ function validateEntry(label: string, e: Partial<KeyEntry>): void {
 }
 
 const DATA: ClassifyData = (() => {
-    const raw = JSON.parse(readFileSync(DATA_PATH, "utf8")) as ClassifyData;
+    const raw = classifyData as ClassifyData;
     if (raw.$schema_version !== 1) {
         throw new Error(`classify data: unsupported $schema_version=${raw.$schema_version}`);
     }

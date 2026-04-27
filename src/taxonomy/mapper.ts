@@ -20,8 +20,12 @@
 // plugin runs at all; mis-pushing them can brick a plugin the user relies on.
 // Once W19-W24 plugin catalog adds per-plugin severity, we'll refine this.
 
-import { resolve } from "node:path";
 import { readText } from "../fs/safeRead.ts";
+
+// Static import: bundled into `bun build --compile` output. Used when
+// loadTaxonomy() is called without an explicit path; callers passing
+// a path go through readText for runtime override.
+import bundledTaxonomy from "../../data/taxonomy/settings.v1.json" with { type: "json" };
 
 export type ControlHint = "toggle" | "number" | "text" | "enum" | "color" | "structured";
 
@@ -63,11 +67,12 @@ let cached: Taxonomy | undefined;
 // Load the built taxonomy JSON. Default path points at the repo artifact.
 // Cached module-level after first read; `reloadTaxonomy()` resets for tests.
 export function loadTaxonomy(path?: string): Taxonomy {
-    if (cached && !path) return cached;
-    const p = path ?? resolve(import.meta.dir, "..", "..", "data/taxonomy/settings.v1.json");
-    const parsed = JSON.parse(readText(p, "derived-from-cwd")) as Taxonomy;
-    if (!path) cached = parsed;
-    return parsed;
+    if (!path) {
+        if (cached) return cached;
+        cached = bundledTaxonomy as Taxonomy;
+        return cached;
+    }
+    return JSON.parse(readText(path, "derived-from-cwd")) as Taxonomy;
 }
 
 export function reloadTaxonomy(): void {

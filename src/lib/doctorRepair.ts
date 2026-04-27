@@ -43,7 +43,7 @@
 
 import { createHash } from "node:crypto";
 import {
-    readdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync,
+    readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, unlinkSync,
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { type CliEnv, resolveMount } from "../cli/env.ts";
@@ -100,6 +100,31 @@ export interface DoctorRepairOptions {
      *  from a SIGKILL during a pre-marker era apply (or a third-party
      *  tool) and they want kindly to adopt it anyway. */
     acceptOld?: boolean;
+}
+
+/** S2127 (red-team round-7 review followup): canonicalize a path for
+ *  marker comparison. realpathSync resolves symlinks and (on
+ *  case-insensitive filesystems like macOS HFS+/APFS default) returns
+ *  the actual on-disk casing. Both sides of the comparison must run
+ *  through this so a marker written when /Volumes/Kindle was the
+ *  resolved target matches a runtime resolve through /private/var/...
+ *  or with case-variant components.
+ *
+ *  realpath fails when the path doesn't exist (the canonical
+ *  settings.reader.lua is exactly that during interrupted apply).
+ *  Resolve the parent directory instead and re-attach the basename —
+ *  parent always exists in the interrupted state. Last fallback is
+ *  the normalized input string itself. */
+function canonicalizePath(p: string): string {
+    try {
+        return realpathSync(p);
+    } catch {
+        try {
+            return join(realpathSync(dirname(p)), basename(p));
+        } catch {
+            return p;
+        }
+    }
 }
 
 export function executeDoctorRepair(
@@ -205,9 +230,21 @@ function executeDoctorRepairLocked(
     // with --accept-old (the override exists for pre-marker era applies
     // and third-party tools that left the device in step-4 shape).
     if (interrupted && !opts.acceptOld) {
-        const hasMatchingMarker = markers.some(
-            (m) => m.payload.settings_path === settingsPath,
-        );
+        // S2127 (red-team round-7 review followup): marker path match
+        // was exact string equality. macOS `/Volumes/Kindle` is HFS+
+        // case-insensitive AND can be symlinked under /private; a
+        // marker stored as `/Volumes/Kindle/koreader/settings.reader.lua`
+        // won't string-match a runtime resolve as
+        // `/private/var/folders/.../koreader/settings.reader.lua` or
+        // `/volumes/kindle/koreader/...`. That false negative defeats
+        // S2126 cold-install protection on the actual deployment
+        // substrate. Compare canonicalized paths instead.
+        const canonical = canonicalizePath(settingsPath);
+        const hasMatchingMarker = markers.some((m) => {
+            const mp = m.payload.settings_path;
+            if (typeof mp !== "string") return false;
+            return canonicalizePath(mp) === canonical;
+        });
         if (!hasMatchingMarker) {
             throw new KindlyError(
                 ErrorCodes.DOCTOR_REPAIR_REJECTED,

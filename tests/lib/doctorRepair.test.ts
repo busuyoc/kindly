@@ -440,4 +440,51 @@ describe("round 6 GG: doctor --repair hardening", () => {
             expect(r.sweptTmps).toContain(p);
         }
     });
+
+    // S2127 (red-team round-7 review followup): marker path comparison
+    // was exact string equality. macOS /Volumes/Kindle is HFS+
+    // case-insensitive AND can be reached via symlink (/Volumes/Kindle
+    // → /private/var/...). A marker stored when the mount was reached
+    // one way wouldn't string-match a runtime resolve through another,
+    // defeating S2126 cold-install protection on the actual deployment
+    // substrate. Both paths now go through realpathSync.
+    test("S2127: symlinked mount path matches marker after canonicalization", () => {
+        induceStep4Interruption(fakeKindle);
+
+        // Build a symlink that points at the real Kindle root. Tests
+        // run on macOS or Linux; both support fs.symlink. The marker
+        // records the canonical (realpath) settings path; the mount
+        // is resolved through the symlink.
+        const { symlinkSync } = require("node:fs");
+        const linkRoot = mkdtempSync(join(tmpdir(), "kindly-s2127-link-"));
+        const linkedKindle = join(linkRoot, "linked-kindle");
+        symlinkSync(fakeKindle, linkedKindle);
+
+        // Marker references the symlinked path representation. Pre-S2127,
+        // doctorRepair compared this exact string against settingsPath
+        // resolved through the same mountOverride — but if the *marker
+        // writer* used a different but equivalent path (e.g., resolved
+        // through a different symlink), the strings wouldn't match.
+        const linkedSettings = join(linkedKindle, "koreader", "settings.reader.lua");
+        const markerDir = join(workdir, ".kindly", "in-progress");
+        mkdirSync(markerDir, { recursive: true });
+        writeFileSync(join(markerDir, "apply-77777-s2127.json"), JSON.stringify({
+            cmd: "apply",
+            started_at: "2026-04-27T11:59:00Z",
+            pid: 77777,
+            settings_path: linkedSettings,  // marker uses the symlink form
+        }));
+
+        // Operate against the canonical (non-symlinked) mount path. Pre-S2127,
+        // the marker's symlinked-form settings_path wouldn't match the
+        // canonical settingsPath via string equality → cold-install gate
+        // fires → DOCTOR_REPAIR_REJECTED. Post-S2127, both paths
+        // canonicalize through realpath → match → repair proceeds.
+        const r = executeDoctorRepair({}, env);
+        expect(r.mode).toBe("repaired");
+        expect(r.settingsRecovery).toBe("restored-old");
+        expect(existsSync(settingsPath)).toBe(true);
+
+        rmSync(linkRoot, { recursive: true, force: true });
+    });
 });
